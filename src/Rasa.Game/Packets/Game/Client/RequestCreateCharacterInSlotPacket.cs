@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace Rasa.Packets.Game.Client
@@ -12,6 +13,9 @@ namespace Rasa.Packets.Game.Client
     {
         public const double MinHeight = 0.90000000000000002;
         public const double MaxHeight = 1.0600000000000001;
+
+        /// <summary>Slack for a single-precision float that meant exactly the bound.</summary>
+        public const double HeightTolerance = 1e-6;
 
         public override GameOpcode Opcode { get; } = GameOpcode.RequestCreateCharacterInSlot;
 
@@ -66,8 +70,14 @@ namespace Rasa.Packets.Game.Client
             if (familyName != CreateCharacterResult.Success)
                 return familyName;
 
-            if (Scale < MinHeight || Scale > MaxHeight)
+            // The client sends the height as a single-precision float, and 0.9f widened to
+            // double is 0.89999997..., below MinHeight: the slider at its leftmost stop was
+            // "Invalid value entered for character height". Anything within float rounding of
+            // the range is accepted and snapped to it, so the stored scale is exact.
+            if (Scale < MinHeight - HeightTolerance || Scale > MaxHeight + HeightTolerance)
                 return CreateCharacterResult.InvalidCharacterHeight;
+
+            Scale = Math.Clamp(Scale, MinHeight, MaxHeight);
 
             if (RaceId < Race.Human || RaceId > Race.Thrax)
                 return CreateCharacterResult.CharacterCreationInvalidRace;

@@ -1,4 +1,5 @@
-﻿using Rasa.Structures.Char;
+﻿using System.Collections.Generic;
+using Rasa.Structures.Char;
 
 namespace Rasa.Repositories.Char.Items
 {
@@ -6,6 +7,7 @@ namespace Rasa.Repositories.Char.Items
     {
         uint CreateItem(IItemChange item);
         void DeleteItem(uint itemId);
+        void DeleteItems(IEnumerable<uint> itemIds);
         ItemEntry GetItem(uint itemId);
         void UpdateAmmo(IItemChange item);
         void UpdateBoundCharacter(IItemChange item);

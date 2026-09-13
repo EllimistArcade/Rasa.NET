@@ -62,6 +62,23 @@ namespace Rasa.Repositories.Char.CharacterInventory
             _charContext.SaveChanges();
         }
 
+        /// <summary>
+        /// Removes every inventory row of one character - personal, equipped and weapon drawer;
+        /// the home lockbox is the account's and carries character id 0 - and returns the item
+        /// ids those rows pointed at, so the caller can delete the items too. Staged on the
+        /// context, not saved: the caller commits with the character row.
+        /// </summary>
+        public List<uint> DeleteForCharacter(uint accountId, uint characterId)
+        {
+            var rows = _charContext.CreateTrackingQuery(_charContext.CharacterInventoryEntries)
+                .Where(e => e.AccountId == accountId && e.CharacterId == characterId)
+                .ToList();
+
+            _charContext.CharacterInventoryEntries.RemoveRange(rows);
+
+            return rows.Select(r => r.ItemId).ToList();
+        }
+
         public List<CharacterInventoryEntry> GetItems(uint accountId)
         {
             var query = _charContext.CreateNoTrackingQuery(_charContext.CharacterInventoryEntries);

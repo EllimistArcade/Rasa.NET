@@ -666,6 +666,14 @@ namespace Rasa.Managers
                     // SaveChanges as the character row, so the two cannot come apart.
                     listings = unitOfWork.Auctions.DeleteAuctionsBySeller(charactersBySlot.Id);
 
+                    // The character's items go with it: its personal, equipped and weapon
+                    // drawer rows and the item rows they point at. The home lockbox is the
+                    // account's and is kept. These rows used to be left behind with the dead
+                    // character's id, where the next character on the account to log in with
+                    // the slot free inherited them.
+                    var itemIds = unitOfWork.CharacterInventories.DeleteForCharacter(client.AccountEntry.Id, charactersBySlot.Id);
+                    unitOfWork.Items.DeleteItems(itemIds);
+
                     // TODO delete ClanMember entry
                     unitOfWork.Characters.Delete(charactersBySlot.Id);
                     unitOfWork.Complete();

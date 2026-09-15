@@ -766,6 +766,12 @@
             InventoryManager.Instance.RequestTakeItemFromHomeInventory(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.RequestUnstick)]
+        private void RequestUnstick(RequestUnstickPacket packet)
+        {
+            ManifestationManager.Instance.RequestUnstick(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestTakeItemFromInboxInventory)]
         private void RequestTakeItemFromInboxInventory(RequestTakeItemFromInboxInventoryPacket packet)
         {

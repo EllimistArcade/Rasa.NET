@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
@@ -31,6 +31,9 @@ namespace Rasa.Managers
         /// a bridge must not be pulled down to the road beneath, nor one under it lifted up.
         /// </summary>
         public const float SnapTolerance = 3.0f;
+
+        /// <summary>Compass directions probed per ring when looking for a way out for a stuck player.</summary>
+        public const int RingSamples = 8;
 
         public static NavMeshManager Instance
         {
@@ -135,6 +138,61 @@ namespace Rasa.Managers
         public static Vector3? RandomPointAround(MapChannel mapChannel, Vector3 centre, float radius)
         {
             return mapChannel?.NavMesh?.RandomPointAround(centre, radius);
+        }
+
+        /// <summary>
+        /// Somewhere walkable to put a player who is stuck. Tries the point itself first, which
+        /// answers for anyone wedged against geometry; a player buried deeper than the query's
+        /// own search extents is looked for from further out, in rings, and the candidate nearest
+        /// to where they actually are wins. Null when the map has no navmesh, or when nothing
+        /// walkable is within <paramref name="maxRadius"/>.
+        /// </summary>
+        public static Vector3? NearestWalkable(MapChannel mapChannel, Vector3 position, float maxRadius = 32f)
+        {
+            var navMesh = mapChannel?.NavMesh;
+
+            if (navMesh == null)
+                return null;
+
+            var here = navMesh.Nearest(position);
+
+            if (here != null)
+                return here;
+
+            Vector3? best = null;
+            var bestDistance = float.MaxValue;
+
+            for (var radius = 8f; radius <= maxRadius; radius *= 2f)
+            {
+                for (var step = 0; step < RingSamples; step++)
+                {
+                    var angle = step * 2.0 * Math.PI / RingSamples;
+                    var probe = new Vector3(
+                        position.X + (float)(Math.Cos(angle) * radius),
+                        position.Y,
+                        position.Z + (float)(Math.Sin(angle) * radius));
+
+                    var candidate = navMesh.Nearest(probe);
+
+                    if (candidate == null)
+                        continue;
+
+                    var distance = Vector3.Distance(position, candidate.Value);
+
+                    if (distance >= bestDistance)
+                        continue;
+
+                    bestDistance = distance;
+                    best = candidate;
+                }
+
+                // The first ring that finds anything is already the closest one that can, so
+                // there is no reason to search further out.
+                if (best != null)
+                    return best;
+            }
+
+            return best;
         }
 
         /// <summary>

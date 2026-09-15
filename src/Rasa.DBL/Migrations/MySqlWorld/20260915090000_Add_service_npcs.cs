@@ -10,18 +10,22 @@ namespace Rasa.Migrations.MySqlWorld
     using Structures.World;
 
     /// <summary>
-    /// The service NPCs the client's map markers place: 419 vendors, trainers, auctioneers and
+    /// The service NPCs the client's map markers place: 325 vendors, trainers, auctioneers and
     /// medics across 69 maps. Data only - no schema changes - so the model is unchanged from
     /// 20260913180000_Add_map_link.
     ///
     /// Down deletes by id rather than emptying the tables, because these rows share them with
-    /// the hand-seeded world data.
+    /// the hand-seeded world data. The range is closed at both ends, not "id > base": creature,
+    /// spawnpool and vendor are identity columns, so a row inserted at runtime is allocated
+    /// past 500325, and an open-ended delete would take that - and any later seed block parked
+    /// above the base - down with these rows.
     /// </summary>
     // ReSharper disable once InconsistentNaming
     [UsedImplicitly]
     public partial class Add_service_npcs : Migration
     {
-        private const uint IdBase = 500000;
+        private const uint IdMin = 500001;
+        private const uint IdMax = 500325;
 
         private readonly ICollection<IPreloader> _preloaders = new List<IPreloader>
         {
@@ -51,7 +55,7 @@ namespace Rasa.Migrations.MySqlWorld
                 CreatureEntry.TableName
             })
             {
-                migrationBuilder.Sql($"delete from {table} where id > {IdBase};");
+                migrationBuilder.Sql($"delete from {table} where id between {IdMin} and {IdMax};");
             }
         }
     }

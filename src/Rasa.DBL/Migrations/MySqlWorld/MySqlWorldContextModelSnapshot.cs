@@ -981,6 +981,62 @@ namespace Rasa.Migrations.MySqlWorld
                     b.ToTable("player_random_name");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.World.RecipeEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("EnergyCost")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("energy_cost");
+
+                    b.Property<uint>("KraftwerksSeconds")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("kraftwerks_seconds");
+
+                    b.Property<uint>("MinLevel")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("min_level");
+
+                    b.Property<uint>("ResultAmount")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("result_amount");
+
+                    b.Property<uint>("ResultTemplateId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("result_template_id");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("recipe");
+                });
+
+            modelBuilder.Entity("Rasa.Structures.World.RecipeInputEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("InputClassId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("input_class_id");
+
+                    b.Property<uint>("Quantity")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("quantity");
+
+                    b.Property<uint>("RecipeId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("recipe_id");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("recipe_input");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.SpawnPoolEntry", b =>
                 {
                     b.Property<uint>("Id")

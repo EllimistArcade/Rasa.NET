@@ -13,6 +13,7 @@
         IMapLinkRepository MapLinks { get; }
         IKraftwerksRepository Kraftwerks { get; }
         IMapRegionRepository MapRegions { get; }
+        IRecipeRepository Recipes { get; }
         INpcMissionRepository NpcMissions { get; }
         INpcMissionRewardRepository NpcMissionRewards { get; }
         INpcPackageRepository NpcPackages { get; }

@@ -7,6 +7,8 @@ namespace Rasa.Managers
     using Data;
     using Game;
     using Packets.Communicator.Server;
+    using Packets.Clan.Client;
+    using Packets.Clan.Server;
     using Packets.Inventory.Client;
     using Packets.Inventory.Server;
     using Packets.MapChannel.Client;
@@ -503,7 +505,10 @@ namespace Rasa.Managers
             if (packet.SrcSlot < 0 || packet.SrcSlot >= 250)
                 return;
 
-            if (packet.DestSlot < 0 || packet.DestSlot >= 500)
+            if (packet.DestSlot < 0 || packet.DestSlot >= ClanLockboxTab.TotalSlots)
+                return;
+
+            if (!ClanSlotIsUnlocked(client, (uint)packet.DestSlot))
                 return;
 
             var entityId = client.Player.Inventory.PersonalInventory[(int)packet.SrcSlot];
@@ -535,6 +540,9 @@ namespace Rasa.Managers
                 return;
 
             RefreshClanLockbox(client.Player.ClanId, entityId, client.Player.Id, item.OwnerSlotId, ref client.Player.Inventory.ClanInventory, true);
+
+            RecordClanLockboxLog(client, ClanLockboxLogEntry.ForItem(client.Player.ClanId, InventoryTransactionType.Deposit,
+                client.Player.Id, client.Player.Name, client.Player.FamilyName, item.ItemTemplate.ItemTemplateId, item.StackSize));
         }
 
         public void ClanLockbox_MoveItem(Client client, ClanLockbox_MoveItemPacket packet)
@@ -578,7 +586,7 @@ namespace Rasa.Managers
 
             // Only the leader and the rank below them can withdraw items from the clan lockbox.
             ClanMemberEntry member = ClanManager.Instance.GetClanMember(client.Player.ClanId, client.Player.Id);
-            if (member.Rank < 2)
+            if (member == null || member.Rank < ClanRank.MinRankToWithdrawFromLockbox)
             {
                 client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmClanInsufficientPermissions, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
                 return;
@@ -662,6 +670,9 @@ namespace Rasa.Managers
             unitOfWork.ClanInventories.DeleteInvItem(client.Player.ClanId, tempItem.OwnerSlotId);
 
             RefreshClanLockbox(client.Player.ClanId, packet.EntityId, client.Player.Id, 0, ref client.Player.Inventory.ClanInventory, false);
+
+            RecordClanLockboxLog(client, ClanLockboxLogEntry.ForItem(client.Player.ClanId, InventoryTransactionType.Deletion,
+                client.Player.Id, client.Player.Name, client.Player.FamilyName, tempItem.ItemTemplate.ItemTemplateId, packet.Quantity));
         }
 
         public void RequestTakeItemFromHomeInventory(Client client, RequestTakeItemFromHomeInventoryPacket packet)
@@ -845,6 +856,143 @@ namespace Rasa.Managers
 
         }
 
+        /// <summary>
+        /// Unlocks the next clan lockbox tab, paid for out of the clan's prestige.
+        ///
+        /// Not the buyer's: the confirmation the window puts up says "spend %(price)s of your
+        /// clan's prestige to unlock tab %(tabId)s for your clan", and the funds it checks before
+        /// sending are the prestige figure on the lockbox window, which is the clan's balance.
+        ///
+        /// Same shape as the personal lockbox tabs after 1.15 - the tab has to exist, has to be
+        /// the next one up, and is paid for once - because the client applies the same sequential
+        /// rule in ClanLockboxTabCanBePurchased and the same quote-then-check before sending.
+        /// Held to the withdraw rank: spending the clan's prestige is a withdrawal in everything
+        /// but name, and the window gates withdrawing while leaving this button open to anyone.
+        /// </summary>
+        public void PurchaseClanLockboxTab(Client client, PurchaseClanLockboxTabPacket packet)
+        {
+            var clanId = client.Player?.ClanId ?? 0;
+
+            if (clanId == 0)
+                return;
+
+            var member = ClanManager.Instance.GetClanMember(clanId, client.Player.Id);
+
+            if (member == null || member.Rank < ClanRank.MinRankToWithdrawFromLockbox)
+            {
+                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmClanInsufficientPermissions, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                return;
+            }
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var clan = unitOfWork.Clans.GetClanById(clanId);
+
+            if (clan == null)
+                return;
+
+            var owned = Math.Max(clan.PurashedTabs, ClanLockboxTab.FreeTab);
+            var tabId = packet.TabId < 0 ? 0u : (uint)packet.TabId;
+
+            if (!ClanLockboxTab.Exists(tabId) || tabId != owned + 1)
+            {
+                Logger.WriteLog(LogType.Security, $"{client.AccountEntry.FamilyName} asked to buy clan lockbox tab {packet.TabId} while clan {clanId} holds {owned}.");
+                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmClanlockboxPurchaseTabCannotBuy, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                return;
+            }
+
+            var price = ClanLockboxTab.Price(tabId);
+
+            if (clan.Prestige < price)
+            {
+                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmInsufficientFundsToPurchaseClanLockboxTab, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                return;
+            }
+
+            var prestigeLeft = clan.Prestige - price;
+
+            // The tab is recorded first and the prestige taken second only if that worked, so a
+            // clan can never be charged for a tab it did not get.
+            if (!unitOfWork.Clans.UpdatePurashedTabs(clanId, tabId))
+            {
+                Logger.WriteLog(LogType.Error, $"PurchaseClanLockboxTab: could not record tab {tabId} for clan {clanId}; nothing charged.");
+                return;
+            }
+
+            unitOfWork.Clans.UpdatePrestige(clanId, prestigeLeft);
+
+            clan.PurashedTabs = tabId;
+            clan.Prestige = prestigeLeft;
+
+            if (ClanManager.Instance.Clans.ContainsKey(clanId))
+                ClanManager.Instance.Clans[clanId] = new Lazy<ClanEntry>(() => clan);
+
+            ClanManager.Instance.CallMethodForOnlineMembers(clanId, (uint)SysEntity.ClientInventoryManagerId, new UpdateClanLockboxTabCountPacket(tabId));
+
+            RecordClanLockboxLog(client, ClanLockboxLogEntry.ForCredits(clanId, InventoryTransactionType.TabPurchase,
+                client.Player.Id, client.Player.Name, client.Player.FamilyName, (byte)CurencyType.Prestige, price));
+        }
+
+        /// <summary>
+        /// Whether the clan may put something in that lockbox slot. All 500 were addressable
+        /// whatever the clan had unlocked, so the tabs bought nothing; the client hides the
+        /// locked ones and never sends a slot inside them.
+        /// </summary>
+        private static bool ClanSlotIsUnlocked(Client client, uint slot)
+        {
+            var clan = ClanManager.Instance.Clans.GetValueOrDefault(client.Player.ClanId)?.Value;
+            var unlocked = ClanLockboxTab.UnlockedSlots(clan?.PurashedTabs ?? ClanLockboxTab.FreeTab);
+
+            if (slot < unlocked)
+                return true;
+
+            Logger.WriteLog(LogType.Security, $"{client.AccountEntry.FamilyName} tried clan lockbox slot {slot} with {unlocked} slots unlocked.");
+            return false;
+        }
+
+        /// <summary>
+        /// Writes one line of the clan's lockbox history and hands it to whoever is online to see
+        /// it. Best effort: the transaction it describes has already happened, so a log that
+        /// cannot be written is logged here rather than undoing it.
+        /// </summary>
+        private void RecordClanLockboxLog(Client client, ClanLockboxLogEntry entry)
+        {
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var stored = unitOfWork.ClanLockboxLogs.Add(entry);
+
+            if (stored == null)
+                return;
+
+            ClanManager.Instance.CallMethodForOnlineMembers(entry.ClanId, (uint)SysEntity.ClientClanManagerId,
+                ClanLockboxLogsPacket.Update(new List<ClanLockboxLogEntry> { stored }));
+        }
+
+        /// <summary>
+        /// The clan's lockbox history and tab count, sent when a member enters the world. Nothing
+        /// in the client asks for either - the window draws whatever it was last told - so this is
+        /// the only chance to fill it.
+        /// </summary>
+        public void SendClanLockboxState(Client client)
+        {
+            var clanId = client.Player?.ClanId ?? 0;
+
+            if (clanId == 0)
+                return;
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var clan = unitOfWork.Clans.GetClanById(clanId);
+
+            client.CallMethod(SysEntity.ClientInventoryManagerId,
+                new UpdateClanLockboxTabCountPacket(Math.Max(clan?.PurashedTabs ?? 0, ClanLockboxTab.FreeTab)));
+
+            // The client keeps CLAN_LOCKBOX_LOGS_DISPLAY_LIMIT of them and throws the rest away
+            // as they arrive, so sending more than that is work nobody sees.
+            client.CallMethod(SysEntity.ClientClanManagerId,
+                ClanLockboxLogsPacket.Load(unitOfWork.ClanLockboxLogs.Get(clanId, ClanLockboxLogDisplayLimit)));
+        }
+
+        /// <summary>CLAN_LOCKBOX_LOGS_DISPLAY_LIMIT.</summary>
+        private const int ClanLockboxLogDisplayLimit = 100;
+
         public void ClanCreditTransfer(Client client, long amount, uint creditType)
         {
             // amount > 0 deposits into the lockbox, amount < 0 withdraws from it.
@@ -915,6 +1063,13 @@ namespace Rasa.Managers
                 if (dynamicObject.EntityClassId == EntityClasses.UsableClanLockboxV01)
                     ClanManager.Instance.CallMethodForOnlineMembers(client.Player.ClanId, dynamicObject.EntityId, new UpdateClanLockboxCreditsPacket(lockboxCredits, lockboxPrestige));
             }
+
+            // Logged by which way the money went, with the amount as a positive number: the
+            // client prints the transaction type as its own word and the amount beside it, so a
+            // withdrawal of -5,000 would read as "withdrew -5000 credits".
+            RecordClanLockboxLog(client, ClanLockboxLogEntry.ForCredits(client.Player.ClanId,
+                amount > 0 ? InventoryTransactionType.Deposit : InventoryTransactionType.Withdrawal,
+                client.Player.Id, client.Player.Name, client.Player.FamilyName, (byte)currency, Math.Abs(amount)));
         }
 
         public void WeaponDrawerInventory_MoveItem(Client client, WeaponDrawerInventory_MoveItemPacket packet)

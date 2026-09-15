@@ -10,6 +10,7 @@ namespace Rasa.Managers
     using Packets.Communicator.Client;
     using Packets.ClientMethod.Server;
     using Packets.Protocol;
+    using Packets.Clan.Server;
     using Packets.Communicator.Server;
     using Packets.MapChannel.Server;
     using Rasa.Models;
@@ -133,6 +134,51 @@ namespace Rasa.Managers
 
             foreach(var member in clanMembers)
                 member.CallMethod(SysEntity.CommunicatorId, new ClanChatPacket(client.Player.FamilyName, packet.Message));
+        }
+
+        /// <summary>
+        /// /cl and /clanleader: the clan's officer channel, which reaches the ranks that run the
+        /// clan rather than all of it.
+        ///
+        /// The client checks the sender's rank before it will send, and refuses with
+        /// PmClanInsufficientLeaderChannelPermission - but that is the sender's own copy of their
+        /// rank, and a demotion they have not been told about yet would still let it through.
+        /// The rank that decides is the one in the clan roster here. The same check picks the
+        /// recipients: the point of the channel is that the rest of the clan cannot read it.
+        /// </summary>
+        internal void ClanLeadersChat(Client client, ClanLeadersChatPacket packet)
+        {
+            // The clan id in the packet is the client's word; the sender's clan is the server's.
+            var clanId = client.Player.ClanId;
+
+            if (clanId == 0 || packet.ClanId != clanId)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry.Id} sent clan leaders chat for clan {packet.ClanId} while in clan {clanId}.");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(packet.Message))
+                return;
+
+            var sender = ClanManager.Instance.GetClanMember(clanId, client.Player.Id);
+
+            if (sender == null || sender.Rank < ClanRank.MinRankToSpeakInLeadersChannel)
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId,
+                    new DisplayClanMessagePacket((int)PlayerMessage.PmClanInsufficientLeaderChannelPermission, new Dictionary<string, string>()));
+                return;
+            }
+
+            foreach (var member in Server.Clients.FindAll(c => c.State == ClientState.Ingame && c.Player.ClanId == clanId))
+            {
+                var listener = ClanManager.Instance.GetClanMember(clanId, member.Player.Id);
+
+                if (listener == null || listener.Rank < ClanRank.MinRankToSpeakInLeadersChannel)
+                    continue;
+
+                member.CallMethod(SysEntity.CommunicatorId, new ClanLeadersChatPacket(client.Player.FamilyName, packet.Message));
+            }
         }
 
         /// <summary>

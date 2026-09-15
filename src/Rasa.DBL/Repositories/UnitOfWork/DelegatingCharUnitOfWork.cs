@@ -8,6 +8,7 @@ namespace Rasa.Repositories.UnitOfWork
     using Char.CharacterAppearance;
     using Char.Clan;
     using Char.ClanInventory;
+    using Char.ClanLockboxLog;
     using Char.ClanMember;
     using Char.GameAccount;
     using Char.CensorWord;
@@ -67,6 +68,7 @@ namespace Rasa.Repositories.UnitOfWork
         public IClanInventoryRepository ClanInventories => _parent.ClanInventories;
 
         public IClanMemberRepository ClanMembers => _parent.ClanMembers;
+        public IClanLockboxLogRepository ClanLockboxLogs => _parent.ClanLockboxLogs;
 
         public IFriendRepository Friends => _parent.Friends;
 

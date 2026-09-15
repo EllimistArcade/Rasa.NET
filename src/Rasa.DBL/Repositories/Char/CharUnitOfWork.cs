@@ -7,6 +7,7 @@ namespace Rasa.Repositories.Char
     using CharacterAppearance;
     using Clan;
     using ClanInventory;
+    using ClanLockboxLog;
     using ClanMember;
     using Context.Char;
     using GameAccount;
@@ -48,6 +49,7 @@ namespace Rasa.Repositories.Char
             IClanRepository clans,
             IClanInventoryRepository clanInventories,
             IClanMemberRepository clanMembers,
+            IClanLockboxLogRepository clanLockboxLogs,
             IFriendRepository friends,
             IIgnoredRepository ignoreds,
             IItemRepository items,
@@ -72,6 +74,7 @@ namespace Rasa.Repositories.Char
             Auctions = auctions;
             ClanInventories = clanInventories;
             ClanMembers = clanMembers;
+            ClanLockboxLogs = clanLockboxLogs;
             Friends = friends;
             Ignoreds = ignoreds;
             Items = items;
@@ -95,6 +98,7 @@ namespace Rasa.Repositories.Char
         public IClanRepository Clans { get; }
         public IClanInventoryRepository ClanInventories { get; }
         public IClanMemberRepository ClanMembers { get; }
+        public IClanLockboxLogRepository ClanLockboxLogs { get; }
         public IFriendRepository Friends { get; }
         public IGameAccountRepository GameAccounts { get; }
         public IIgnoredRepository Ignoreds { get; }

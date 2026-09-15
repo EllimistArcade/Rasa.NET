@@ -31,6 +31,7 @@ namespace Rasa
     using Repositories.Char.CharacterTeleporter;
     using Repositories.Char.CharacterTitle;
     using Repositories.Char.Clan;
+    using Repositories.Char.ClanLockboxLog;
     using Repositories.Char.ClanInventory;
     using Repositories.Char.ClanMember;
     using Repositories.Char.Friend;
@@ -109,6 +110,7 @@ namespace Rasa
             services.AddScoped<ICharacterTeleporterRepository, CharacterTeleporterRepository>();
             services.AddScoped<ICharacterTitleRepository, CharacterTitleRepository>();
             services.AddScoped<IClanRepository, ClanRepository>();
+            services.AddScoped<IClanLockboxLogRepository, ClanLockboxLogRepository>();
             services.AddScoped<IAuctionRepository, AuctionRepository>();
             services.AddScoped<IClanInventoryRepository, ClanInventoryRepository>();
             services.AddScoped<IClanMemberRepository, ClanMemberRepository>();

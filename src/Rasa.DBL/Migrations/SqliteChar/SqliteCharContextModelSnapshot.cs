@@ -489,6 +489,63 @@ namespace Rasa.Migrations.SqliteChar
                     b.ToTable("clan");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.Char.ClanLockboxLogEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("amount");
+
+                    b.Property<uint>("CharacterId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("character_id");
+
+                    b.Property<string>("CharacterName")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("character_name");
+
+                    b.Property<uint>("ClanId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("clan_id");
+
+                    b.Property<byte>("CreditType")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("credit_type");
+
+                    b.Property<uint>("ItemTemplateId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("item_template_id");
+
+                    b.Property<uint>("Quantity")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("quantity");
+
+                    b.Property<long>("TransactionTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("transaction_time");
+
+                    b.Property<byte>("TransactionType")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("transaction_type");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("user_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClanId", "TransactionTime")
+                        .HasDatabaseName("clan_lockbox_log_index_clan_id_time");
+
+                    b.ToTable("clan_lockbox_log");
+                });
+
             modelBuilder.Entity("Rasa.Structures.Char.ClanInventoryEntry", b =>
                 {
                     b.Property<uint>("ItemId")

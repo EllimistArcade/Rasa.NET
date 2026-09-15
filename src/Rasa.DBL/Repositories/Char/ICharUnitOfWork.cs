@@ -6,6 +6,7 @@
     using CharacterSkills;
     using Clan;
     using ClanInventory;
+    using ClanLockboxLog;
     using ClanMember;
     using GameAccount;
     using CharacterAbilityDrawer;
@@ -42,6 +43,7 @@
         IClanRepository Clans { get; }
         IClanInventoryRepository ClanInventories { get; }
         IClanMemberRepository ClanMembers { get; }
+        IClanLockboxLogRepository ClanLockboxLogs { get; }
         IFriendRepository Friends { get; }
         IGameAccountRepository GameAccounts { get; }
         IIgnoredRepository Ignoreds { get; }

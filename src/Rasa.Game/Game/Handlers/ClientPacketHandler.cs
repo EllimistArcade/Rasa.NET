@@ -539,7 +539,7 @@
         [PacketHandler(GameOpcode.ChangeClanName)]
         private void ChangeClanName(ChangeClanNamePacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ChangeClanNamePacket");
+            ClanManager.Instance.ChangeClanName(Client, packet);
         }
 
         [PacketHandler(GameOpcode.ChangeFirstName)]
@@ -569,7 +569,7 @@
         [PacketHandler(GameOpcode.ClanLeadersChat)]
         private void ClanLeadersChat(ClanLeadersChatPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ClanLeadersChatPacket");
+            CommunicatorManager.Instance.ClanLeadersChat(Client, packet);
         }
 
         [PacketHandler(GameOpcode.Emote)]
@@ -728,7 +728,11 @@
             InventoryManager.Instance.PersonalInventory_MoveItem(Client, packet);
         }
 
-        // ToDo: PurchaseClanLockboxTab(tabId)
+        [PacketHandler(GameOpcode.PurchaseClanLockboxTab)]
+        private void PurchaseClanLockboxTab(PurchaseClanLockboxTabPacket packet)
+        {
+            InventoryManager.Instance.PurchaseClanLockboxTab(Client, packet);
+        }
 
         [PacketHandler(GameOpcode.PurchaseLockboxTab)]
         private void PurchaseLockboxTab(PurchaseLockboxTabPacket packet)

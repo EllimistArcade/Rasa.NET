@@ -9,6 +9,7 @@ namespace Rasa.Managers
     using Game;
     using Packets;
     using Packets.Clan.Client;
+    using Packets.Communicator.Client;
     using Packets.Clan.Server;
     using Packets.MapChannel.Client;
     using Packets.MapChannel.Server;
@@ -131,7 +132,11 @@ namespace Rasa.Managers
                 SetClanMemberData(client, clanData);
 
                 SetClanDataForOnlineMembers(clanData.Id, client.Player.Id);
-                SetMemberDataForOnlineMembers(clanData.Id, client.Player.Id);                
+                SetMemberDataForOnlineMembers(clanData.Id, client.Player.Id);
+
+                // The lockbox window draws whatever it was last told and asks for nothing, so
+                // its tab count and history have to be pushed on the way in.
+                InventoryManager.Instance.SendClanLockboxState(client);
             }
         }
 
@@ -219,6 +224,118 @@ namespace Rasa.Managers
             var remaining = character.LastPvPClan + PvPClanCooldown - DateTime.UtcNow;
 
             return remaining > TimeSpan.Zero ? (uint)Math.Ceiling(remaining.TotalSeconds) : 0;
+        }
+
+        /// <summary>
+        /// /changeclanname: renames the clan the caller leads.
+        ///
+        /// The name is held to exactly what creation holds it to - length, not already taken,
+        /// and past the censor - because a name that could not be created should not be
+        /// reachable by renaming into it either. No fee: creation charges for bringing a clan
+        /// into existence, and there is nothing in the client that quotes a price for this.
+        ///
+        /// Leader only. The client offers the command to anybody who types it, and the roster
+        /// every member holds is its own copy, so this is the only place the rank is real.
+        /// </summary>
+        internal void ChangeClanName(Client client, ChangeClanNamePacket packet)
+        {
+            if (client?.Player == null)
+                return;
+
+            var clanId = client.Player.ClanId;
+
+            if (clanId == 0)
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanNotInAClan, new Dictionary<string, string>()));
+                return;
+            }
+
+            var member = GetClanMember(clanId, client.Player.Id);
+
+            if (member == null || member.Rank != _clankRankLeader)
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanInsufficientPermissions, new Dictionary<string, string>()));
+                return;
+            }
+
+            var newName = packet.ClanName?.Trim();
+
+            if (!IsClanNameAcceptable(client, newName))
+                return;
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var clan = unitOfWork.Clans.GetClanById(clanId);
+
+            if (clan == null)
+                return;
+
+            var oldName = clan.Name;
+
+            // Renaming to the name it already has is not worth an announcement, but it is not an
+            // error either - the uniqueness check would have refused it as taken, by itself.
+            if (string.Equals(oldName, newName, StringComparison.Ordinal))
+                return;
+
+            if (!unitOfWork.Clans.UpdateClanName(clanId, newName))
+            {
+                Logger.WriteLog(LogType.Error, $"ChangeClanName: could not rename clan {clanId} to '{newName}'.");
+                return;
+            }
+
+            clan.Name = newName;
+
+            // The cached entry is what every later SetClanData is built from, so it has to move
+            // with the row or the clan reverts to its old name for anyone who relogs into a
+            // process that has not reloaded.
+            if (Clans.ContainsKey(clanId))
+                Clans[clanId] = new Lazy<ClanEntry>(() => clan);
+
+            // Everyone's client caches the name too, and shows it in the roster, on the clan
+            // window and beside members' names. SetClanData is what refreshes it without a relog.
+            SetClanDataForOnlineMembers(clanId);
+
+            CallMethodForOnlineMembers(clanId, (ulong)SysEntity.ClientClanManagerId,
+                new DisplayClanMessagePacket((int)PlayerMessage.PmClanClannameChanged,
+                    new Dictionary<string, string> { { "oldname", oldName }, { "newname", newName } }));
+
+            Logger.WriteLog(LogType.Debug, $"Clan {clanId} renamed from '{oldName}' to '{newName}' by character {client.Player.Id}.");
+        }
+
+        /// <summary>
+        /// The name rules shared by creating a clan and renaming one, each answering with the
+        /// client's own message for that refusal.
+        /// </summary>
+        private bool IsClanNameAcceptable(Client client, string clanName)
+        {
+            if (string.IsNullOrWhiteSpace(clanName) || clanName.Length < _minClanNameLength)
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanNameRequired, new Dictionary<string, string>()));
+                return false;
+            }
+
+            if (clanName.Length > _maxClanNameLength)
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanNameTooLong, new Dictionary<string, string>()));
+                return false;
+            }
+
+            if (ClanNameExists(clanName))
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanNameNotAvailable,
+                    new Dictionary<string, string> { { "clanname", clanName } }));
+                return false;
+            }
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var censor = new Censor(unitOfWork.CensoredWords.GetCensoredWords());
+
+            if (censor.ContainsProfanity(clanName))
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmInappropriateClanName, new Dictionary<string, string>()));
+                return false;
+            }
+
+            return true;
         }
 
         internal void CreateClan(Client client, CreateClanPacket packet)
@@ -824,24 +941,11 @@ namespace Rasa.Managers
 
         private bool CanCreateClan(Client client, CreateClanPacket packet, uint characterId)
         {
-            if (packet.ClanName.Length > _maxClanNameLength)
-            {
-                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanNameTooLong, new Dictionary<string, string>()));
+            // Length, uniqueness and the censor are the same rules a rename is held to, so they
+            // live in one place - a name that cannot be created must not be reachable by
+            // renaming into it either.
+            if (!IsClanNameAcceptable(client, packet.ClanName))
                 return false;
-            }
-
-            if (packet.ClanName.Length < _minClanNameLength)
-            {
-                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanNameRequired, new Dictionary<string, string>()));
-                return false;
-            }
-
-            if (ClanNameExists(packet.ClanName))
-            {
-                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanNameNotAvailable, 
-                    new Dictionary<string, string>() { { "clanname", packet.ClanName } }));
-                return false;
-            }
 
             if(client.Player.Credits[CurencyType.Credits] < _requiredCreditsForClanCreation)
             {
@@ -850,16 +954,6 @@ namespace Rasa.Managers
             }
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
-
-            // Verify content of clan name: PmInappropriateClanName
-            List<string> censoredWords = unitOfWork.CensoredWords.GetCensoredWords();
-            var censor = new Censor(censoredWords);
-
-            if(censor.ContainsProfanity(packet.ClanName))
-            {
-                client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmInappropriateClanName, new Dictionary<string, string>()));
-                return false;
-            }
 
             if (packet.IsPvP)
             {

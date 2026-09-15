@@ -16,6 +16,8 @@ namespace Rasa.Repositories.Char.Clan
         bool UpdateRankTitleByClanId(uint clanId, uint rank, string title);
         void UpdateLastPvPClanTimeForMembers(uint clanId, DateTime lastPvPClanTimestamp);
         void UpdateLastPvPClanTime(uint characterId, DateTime lastPvPClanTimestamp);
+        bool UpdateClanName(uint clanId, string clanName);
+        bool UpdatePurashedTabs(uint clanId, uint purashedTabs);
         void UpdateCredits(uint clanId, uint remainderOfCredits);
         void UpdatePrestige(uint clanId, uint remainderOfCredits);
     }

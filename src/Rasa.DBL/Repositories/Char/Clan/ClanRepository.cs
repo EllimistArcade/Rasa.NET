@@ -33,7 +33,10 @@ namespace Rasa.Repositories.Char.Clan
                 CreatedAt = DateTime.UtcNow,
                 Credits = 0,
                 Prestige = 0,
-                PurashedTabs = 0
+                // One, not none: the first tab is not bought. A clan created with 0 would be told
+                // every tab was locked, and the client's own purchase rule needs the tab below
+                // the one being bought unlocked - so it could never have bought its way out.
+                PurashedTabs = 1
             };
 
             _charContext.ClanEntries.Add(entry);
@@ -103,6 +106,34 @@ namespace Rasa.Repositories.Char.Clan
                 Logger.WriteLog(LogType.Error, $"Clan {clanId} does not exist; update skipped.");
 
             return entry;
+        }
+
+        /// <summary>Renames a clan. False if there is no such clan, or the write failed.</summary>
+        public bool UpdateClanName(uint clanId, string clanName)
+        {
+            var entry = _charContext.CreateTrackingQuery(_charContext.ClanEntries).FirstOrDefault(e => e.Id == clanId);
+
+            if (entry == null)
+                return false;
+
+            entry.Name = clanName;
+            _charContext.SaveChanges();
+
+            return true;
+        }
+
+        /// <summary>How many lockbox tabs the clan has unlocked.</summary>
+        public bool UpdatePurashedTabs(uint clanId, uint purashedTabs)
+        {
+            var entry = _charContext.CreateTrackingQuery(_charContext.ClanEntries).FirstOrDefault(e => e.Id == clanId);
+
+            if (entry == null)
+                return false;
+
+            entry.PurashedTabs = purashedTabs;
+            _charContext.SaveChanges();
+
+            return true;
         }
 
         public void UpdateCredits(uint clanId, uint credits)

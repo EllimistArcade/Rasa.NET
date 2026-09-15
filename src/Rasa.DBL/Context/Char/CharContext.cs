@@ -43,6 +43,7 @@ namespace Rasa.Context.Char
 
         public DbSet<ClanInventoryEntry> ClanInventoryEntries { get; set; }
         public DbSet<ClanMemberEntry> ClanMemberEntries { get; set; }
+        public DbSet<ClanLockboxLogEntry> ClanLockboxLogEntries { get; set; }
         public DbSet<FriendEntry> FriendEntries { get; set; }
         public DbSet<IgnoredEntry> IgnoredEntries { get; set; }
         public DbSet<ItemEntry> ItemEntries { get; set; }

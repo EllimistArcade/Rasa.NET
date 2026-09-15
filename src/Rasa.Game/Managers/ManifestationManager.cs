@@ -101,6 +101,9 @@ namespace Rasa.Managers
 
         private static List<AutoFireTimer> AutoFire = new List<AutoFireTimer>();
         public static byte MaxPlayerLevel = 50;
+
+        /// <summary>The levels that award a clone credit, per the live game's own rules.</summary>
+        public static readonly byte[] CloneCreditLevels = { 5, 15, 30 };
         public static ManifestationManager Instance
         {
             get
@@ -616,7 +619,16 @@ namespace Rasa.Managers
                     // level up
                     client.Player.Level++;
 
-
+                    // A clone credit at 5, 15 and 30. Targets of Opportunity were the other
+                    // source in the live game; those are not implemented, so these three are the
+                    // whole supply - and without them the clone button at character selection,
+                    // which the client greys out at zero credits, can never be pressed.
+                    if (Array.IndexOf(CloneCreditLevels, client.Player.Level) >= 0)
+                    {
+                        client.Player.CloneCredits++;
+                        CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.CloneCredits);
+                        client.CallMethod(client.Player.EntityId, new CloneCreditsPacket(client.Player.CloneCredits));
+                    }
 
                     // update database
                     CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Level);

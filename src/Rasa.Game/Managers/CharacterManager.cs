@@ -106,83 +106,156 @@ namespace Rasa.Managers
             });
         }
 
+        /// <summary>
+        /// Clone credits: a snapshot of a character in a new pod, so a player can take a second
+        /// run at the class tree without levelling again, or refund the skill points they spent.
+        ///
+        /// What carries over and what does not is the live game's rule, not a guess. Kept:
+        /// attributes, the logos tablet, obtained waypoints, the surname, and the place the
+        /// source was standing when the clone was made - clone somewhere hostile and the clone
+        /// wakes up there. Reset: skills, missions, friends and clan. Level, experience and class
+        /// come across too, because a clone taken at 14.99 exists precisely so both Tier 3
+        /// branches can be tried from the same progress.
+        ///
+        /// The clone arrives with nothing. It does not inherit the source's pack, and unlike a
+        /// new character it gets no starter kit either.
+        /// </summary>
         public void RequestCloneCharacterToSlot(Client client, RequestCloneCharacterToSlotPacket packet)
         {
-            //    var result = packet.Validate();
-            //    if (result != CreateCharacterResult.Success)
-            //    {
-            //        SendCharacterCreateFailed(client, result);
-            //        return;
-            //    }
+            // Same rule as creating: the pod screen is the only place this is safe, because the
+            // account entry is reloaded underneath whatever is loaded.
+            if (client.State != ClientState.CharacterSelection)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry.Id} tried to clone a character while in state {client.State}.");
 
-            //    CharacterEntry entry;
-            //    var clonedCharacter = CharacterTable.GetCharacter(client.AccountEntry.Id, packet.CloneSlotNum);
+                SendCharacterCreateFailed(client, CreateCharacterResult.TechnicalDifficulty);
+                return;
+            }
 
-            //    lock (CreateLock)
-            //    {
-            //        entry = new CharacterEntry
-            //        {
-            //            AccountId = client.AccountEntry.Id,
-            //            Slot = packet.SlotNum,
-            //            Name = packet.CharacterName,
-            //            Race = (byte)packet.RaceId,
-            //            Class = clonedCharacter.Class,
-            //            Scale = packet.Scale,
-            //            Gender = packet.Gender,
-            //            Experience = clonedCharacter.Experience,
-            //            Level = clonedCharacter.Level,
-            //            Body = clonedCharacter.Body,
-            //            Mind = clonedCharacter.Mind,
-            //            Spirit = clonedCharacter.Spirit,
-            //            MapContextId = clonedCharacter.MapContextId,
-            //            CoordX = clonedCharacter.CoordX,
-            //            CoordY = clonedCharacter.CoordY,
-            //            CoordZ = clonedCharacter.CoordZ,
-            //            Orientation = clonedCharacter.Orientation,
-            //        };
+            var result = packet.Validate();
+            if (result != CreateCharacterResult.Success)
+            {
+                SendCharacterCreateFailed(client, result);
+                return;
+            }
 
-            //        if (!CharacterTable.CreateCharacter(entry))
-            //        {
-            //            SendCharacterCreateFailed(client, CreateCharacterResult.TechnicalDifficulty);
-            //            return;
-            //        }
+            if (packet.SlotNum < 1 || packet.SlotNum > MaxSelectionPods
+                || packet.CloneSlotNum < 1 || packet.CloneSlotNum > MaxSelectionPods
+                || packet.SlotNum == packet.CloneSlotNum)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry.Id} tried to clone slot {packet.CloneSlotNum} into slot {packet.SlotNum}.");
 
-            //        // Set character appearance
-            //        CharacterAppearanceTable.AddAppearance(entry.Id, new CharacterAppearanceEntry(entry.Id, (uint)EquipmentData.Shoes, (uint)Data.EntityClass.ArmorRecruitV01CMNBoots, 2139062144));
-            //        CharacterAppearanceTable.AddAppearance(entry.Id, new CharacterAppearanceEntry(entry.Id, (uint)EquipmentData.Torso, (uint)Data.EntityClass.ArmorRecruitV01CMNVest, 2139062144));
-            //        CharacterAppearanceTable.AddAppearance(entry.Id, new CharacterAppearanceEntry(entry.Id, (uint)EquipmentData.Legs, (uint)Data.EntityClass.ArmorRecruitV01CMNLegs, 2139062144));
+                SendCharacterCreateFailed(client, CreateCharacterResult.TechnicalDifficulty);
+                return;
+            }
 
-            //        foreach (var data in packet.AppearanceData)
-            //        {
-            //            data.Value.Class = (Data.EntityClass)StarterItemsTable.GetClassId((uint)data.Value.Class);
-            //            CharacterAppearanceTable.AddAppearance(entry.Id, data.Value.GetDatabaseEntry(entry.Id));
-            //        }
-            //    }
+            if (client.AccountEntry.GetCharacterBySlot(packet.SlotNum) != null)
+            {
+                SendCharacterCreateFailed(client, CreateCharacterResult.CharacterSlotInUse);
+                return;
+            }
 
-            //    // Give character basic items
-            //    CharacterInventoryTable.AddInvItem(client.AccountEntry.Id, packet.SlotNum, (int)InventoryType.Personal, 0, ItemsTable.CreateItem(145, 1, EntityClassManager.Instance.LoadedEntityClasses[ItemManager.Instance.ItemTemplateItemClass[17131]].ItemClassInfo.MaxHitPoints, 2139062144));
-            //    CharacterInventoryTable.AddInvItem(client.AccountEntry.Id, packet.SlotNum, (int)InventoryType.Personal, 50, ItemsTable.CreateItem(28, 100, EntityClassManager.Instance.LoadedEntityClasses[ItemManager.Instance.ItemTemplateItemClass[28]].ItemClassInfo.MaxHitPoints, 2139062144));
-            //    CharacterInventoryTable.AddInvItem(client.AccountEntry.Id, packet.SlotNum, (int)InventoryType.Personal, 1, ItemsTable.CreateItem(13126, 1, EntityClassManager.Instance.LoadedEntityClasses[ItemManager.Instance.ItemTemplateItemClass[13126]].ItemClassInfo.MaxHitPoints, 2139062144));
-            //    CharacterInventoryTable.AddInvItem(client.AccountEntry.Id, packet.SlotNum, (int)InventoryType.Personal, 2, ItemsTable.CreateItem(13066, 1, EntityClassManager.Instance.LoadedEntityClasses[ItemManager.Instance.ItemTemplateItemClass[13066]].ItemClassInfo.MaxHitPoints, 2139062144));
-            //    CharacterInventoryTable.AddInvItem(client.AccountEntry.Id, packet.SlotNum, (int)InventoryType.Personal, 3, ItemsTable.CreateItem(13096, 1, EntityClassManager.Instance.LoadedEntityClasses[ItemManager.Instance.ItemTemplateItemClass[13096]].ItemClassInfo.MaxHitPoints, 2139062144));
-            //    CharacterInventoryTable.AddInvItem(client.AccountEntry.Id, packet.SlotNum, (int)InventoryType.Personal, 4, ItemsTable.CreateItem(13186, 1, EntityClassManager.Instance.LoadedEntityClasses[ItemManager.Instance.ItemTemplateItemClass[13186]].ItemClassInfo.MaxHitPoints, 2139062144));
-            //    CharacterInventoryTable.AddInvItem(client.AccountEntry.Id, packet.SlotNum, (int)InventoryType.Personal, 5, ItemsTable.CreateItem(13156, 1, EntityClassManager.Instance.LoadedEntityClasses[ItemManager.Instance.ItemTemplateItemClass[13156]].ItemClassInfo.MaxHitPoints, 2139062144));
+            var source = client.AccountEntry.GetCharacterBySlot(packet.CloneSlotNum);
 
-            //    // Create default entry in CharacterAbilitiesTable
-            //    for (var i = 0; i < 25; i++)
-            //        CharacterAbilityDrawerTable.SetCharacterAbility(client.AccountEntry.Id, packet.SlotNum, i, 0, 0);
+            if (source == null)
+            {
+                SendCharacterCreateFailed(client, CreateCharacterResult.InvalidCharacterToCloneFrom);
+                return;
+            }
 
-            //    client.CallMethod(SysEntity.ClientMethodId, new CharacterCreateSuccessPacket(packet.SlotNum, client.AccountEntry.FamilyName));
-            //    ++client.AccountEntry.CharacterCount;
+            // The client greys its clone button out at zero, so this only catches a client that
+            // did not - but it is the check that stops a credit going negative on a uint.
+            if (source.CloneCredits == 0)
+            {
+                SendCharacterCreateFailed(client, CreateCharacterResult.NotEnoughCloneCredits);
+                return;
+            }
 
-            //    SendCharacterInfo(client, packet.SlotNum, entry, false);
+            uint characterId;
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
-            //    // reduce cloneCredit on cloned character
-            //    clonedCharacter.CloneCredits--;
-            //    CharacterTable.UpdateCharacterCloneCredits(clonedCharacter.Id, clonedCharacter.CloneCredits);
+            lock (_createLock)
+            {
+                var createdCharacterId = InternalClone(client, packet, unitOfWork);
 
-            //    // update character selection pod
-            //    SendCharacterInfo(client, clonedCharacter.Slot, clonedCharacter, false);
+                if (createdCharacterId == null)
+                {
+                    return;
+                }
+
+                characterId = createdCharacterId.Value;
+            }
+
+            CopyProgressToClone(unitOfWork, source, characterId);
+
+            // Spent last, so a clone that failed anywhere above costs nothing.
+            unitOfWork.Characters.UpdateCharacterCloneCredits(source.Id, source.CloneCredits - 1);
+
+            if (unitOfWork.CharacterLockboxes.Get(client.AccountEntry.Id) == null)
+                unitOfWork.CharacterLockboxes.Add(client.AccountEntry.Id);
+
+            unitOfWork.Complete();
+
+            client.CallMethod(SysEntity.ClientMethodId,
+                new CharacterCreateSuccessPacket(packet.SlotNum, client.AccountEntry.FamilyName));
+
+            client.ReloadGameAccountEntry();
+
+            SendCharacterInfo(client, packet.SlotNum, unitOfWork.Characters.Get(characterId));
+
+            // The source pod shows a credit count, which just went down by one.
+            SendCharacterInfo(client, packet.CloneSlotNum, unitOfWork.Characters.Get(source.Id));
+        }
+
+        /// <summary>
+        /// The row for a clone. Unlike a new character there is no family name to set or check:
+        /// cloning needs a character to clone from, so the account already has one, and the
+        /// surname is the one thing the live game's rules say always carries over.
+        /// </summary>
+        private uint? InternalClone(Client client, RequestCloneCharacterToSlotPacket packet, ICharUnitOfWork unitOfWork)
+        {
+            var characterEntry = unitOfWork.Characters.Create(client.AccountEntry, packet.SlotNum,
+                packet.CharacterName,
+                (byte)packet.RaceId,
+                packet.Scale,
+                packet.Gender);
+
+            if (characterEntry == null)
+            {
+                SendCharacterCreateFailed(client, CreateCharacterResult.TechnicalDifficulty);
+                return null;
+            }
+
+            unitOfWork.CharacterAppearances.Add(characterEntry, CreateCharacterAppearanceEntries(packet.AppearanceData));
+
+            return characterEntry.Id;
+        }
+
+        /// <summary>
+        /// Everything the live game's rules say survives cloning. Skills and the ability drawer
+        /// are deliberately absent - resetting them is what makes a clone a respec - and so are
+        /// missions, friends and clan.
+        /// </summary>
+        private static void CopyProgressToClone(ICharUnitOfWork unitOfWork, CharacterEntry source, uint cloneId)
+        {
+            unitOfWork.Characters.UpdateCharacterLevel(cloneId, source.Level);
+            unitOfWork.Characters.UpdateCharacterExpirience(cloneId, source.Experience);
+            unitOfWork.Characters.UpdateCharacterClass(cloneId, source.Class);
+            unitOfWork.Characters.UpdateCharacterAttributes(cloneId, source.Body, source.Mind, source.Spirit);
+
+            // "Location upon cloning": the clone appears where the source was standing, hostile
+            // ground included.
+            unitOfWork.Characters.UpdateCharacterPosition(cloneId, source.CoordX, source.CoordY, source.CoordZ,
+                source.Rotation, source.MapContextId);
+
+            foreach (var logosId in unitOfWork.CharacterLogoses.GetLogos(source.Id))
+                unitOfWork.CharacterLogoses.SetLogos(cloneId, logosId);
+
+            foreach (var teleporter in unitOfWork.CharacterTeleporters.Get(source.Id))
+                unitOfWork.CharacterTeleporters.Add(
+                    new CharacterTeleporterEntry(cloneId, teleporter.WaypointId, teleporter.WaypointType));
         }
 
         public void RequestCreateCharacterInSlot(Client client, RequestCreateCharacterInSlotPacket packet)
@@ -479,7 +552,7 @@ namespace Rasa.Managers
                 return null;
             }
 
-            var appearances = CreateCharacterAppearanceEntries(packet);
+            var appearances = CreateCharacterAppearanceEntries(packet.AppearanceData);
             unitOfWork.CharacterAppearances.Add(characterEntry, appearances);
 
             if (string.IsNullOrWhiteSpace(client.AccountEntry.FamilyName) || changeFamilyName)
@@ -490,15 +563,16 @@ namespace Rasa.Managers
             return characterEntry.Id;
         }
 
-        private IEnumerable<CharacterAppearanceEntry> CreateCharacterAppearanceEntries(RequestCreateCharacterInSlotPacket packet)
+        private IEnumerable<CharacterAppearanceEntry> CreateCharacterAppearanceEntries(
+            IDictionary<EquipmentData, AppearanceData> appearanceData)
         {
             yield return new CharacterAppearanceEntry((uint)EquipmentData.Shoes, (uint)EntityClasses.ArmorRecruitV01CMNBoots, 2139062144);
             yield return new CharacterAppearanceEntry((uint)EquipmentData.Torso, (uint)EntityClasses.ArmorRecruitV01CMNVest, 2139062144);
             yield return new CharacterAppearanceEntry((uint)EquipmentData.Legs, (uint)EntityClasses.ArmorRecruitV01CMNLegs, 2139062144);
 
             using var worldUnitOfWork = _gameUnitOfWorkFactory.CreateWorld();
-            var appearancesFromPacket = packet.AppearanceData
-                .Select(appearanceData => CreateCharacterAppearanceEntry(appearanceData.Value, worldUnitOfWork))
+            var appearancesFromPacket = appearanceData
+                .Select(appearance => CreateCharacterAppearanceEntry(appearance.Value, worldUnitOfWork))
                 .ToList();
 
             foreach (var characterAppearanceEntry in appearancesFromPacket)

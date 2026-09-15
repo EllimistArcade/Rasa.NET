@@ -38,5 +38,15 @@ namespace Rasa.Structures
 
         /// <summary>The client refuses to list a thirty-first item; the server agrees.</summary>
         public const int MaxAuctionItems = 30;
+
+        /// <summary>
+        /// Items waiting to be collected at an auction house - bought, or returned when an
+        /// auction ran out. Rows of type InboxInventory, so they survive a restart and reach a
+        /// player who was offline when the item arrived.
+        /// </summary>
+        public List<ulong> InboxItems = new List<ulong>();
+
+        /// <summary>shared.gameconstants.MAX_INBOX_ITEMS; the client refuses a thirty-first.</summary>
+        public const int MaxInboxItems = 30;
     }
 }

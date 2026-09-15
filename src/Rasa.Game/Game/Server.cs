@@ -281,6 +281,12 @@ namespace Rasa.Game
                 }
             });
 
+            // Auctions run for 12 to 72 hours, so the exact minute one ends never matters; five
+            // minutes keeps the sweep off the hot path while still returning an expired item
+            // before the seller can wonder where it went. Auctions that ran out while the server
+            // was down are caught by this first pass and by the check at login.
+            Timer.Add("AuctionExpire", 300000, true, () => AuctionHouseManager.Instance.ExpireAuctions());
+
             Timer.Add("QueueManagerUpdate", Config.QueueConfig.UpdateInterval, true, () =>
             {
                 QueueManager.Update(Config.ServerInfoConfig.MaxPlayers - CurrentPlayers);

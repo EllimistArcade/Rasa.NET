@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Rasa.Managers
 {
@@ -8,6 +9,7 @@ namespace Rasa.Managers
     using Packets.MapChannel.Server;
     using Rasa.Game;
     using Rasa.Packets.MapChannel.Client;
+    using Repositories.Char;
     using Repositories.UnitOfWork;
     using Structures;
     using Structures.Char;
@@ -26,24 +28,24 @@ namespace Rasa.Managers
         /*    AuctionHouse Packets:
          *  - AuctionCreationFailed     => done
          *  - AuctionCreationSuccess    => done
-         *  - QuerySuccess
-         *  - QueryFailed
+         *  - QuerySuccess             => done
+         *  - QueryFailed              => done
          *  - AuctionStatusSuccess      => done
          *  - AuctionStatusFailed       => not used by client
-         *  - AuctionBuyoutFailed
-         *  - AuctionBuyoutSuccess
-         *  - AuctionSold
+         *  - AuctionBuyoutFailed      => done
+         *  - AuctionBuyoutSuccess     => done
+         *  - AuctionSold              => done
          *  - CancelAuctionFailed       => done
          *  - CancelAuctionSuccess      => done
-         *  - AuctionExpired
+         *  - AuctionExpired           => done
          *
          *  AuctionHouse Handlers:
-         *  - RequestAuctionBuyout
+         *  - RequestAuctionBuyout      => done
          *  - RequestAuctionStatus      => done
          *  - RequestCancelAuction      => done
          *  - RequestCancelAuctioneer   => done
          *  - RequestCreateAuction      => done
-         *  - RequestQueryAuctions
+         *  - RequestQueryAuctions      => done
          *
          */
 
@@ -88,9 +90,71 @@ namespace Rasa.Managers
 
         #region Handlers
 
+        /// <summary>
+        /// Buys an auction outright. The item goes to the buyer's inbox, not their pack: the
+        /// client has a Pick Up Items tab for exactly this, and it is the only delivery that
+        /// works when the pack is full. The seller is paid into their character row, so the
+        /// money reaches them whether or not they are logged in.
+        /// </summary>
         public void RequestAuctionBuyout(Client client, RequestAuctionBuyoutPacket packet)
         {
-            Logger.WriteLog(LogType.AI, $"ToDo: RequestAuctionBuyout ");
+            var item = EntityManager.Instance.GetItem(packet.ItemId);
+
+            if (item == null)
+            {
+                BuyoutFailed(client, packet.ItemId, PlayerMessage.PmAuctionItemNotFound);
+                return;
+            }
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var auction = unitOfWork.Auctions.GetAuctionByItemId(item.Id);
+
+            if (auction == null)
+            {
+                BuyoutFailed(client, packet.ItemId, PlayerMessage.PmAuctionItemNotFound);
+                return;
+            }
+
+            if (auction.SellerId == client.Player.Id)
+            {
+                BuyoutFailed(client, packet.ItemId, PlayerMessage.PmAuctionCannotPurchaseOwnItem);
+                return;
+            }
+
+            // The price the buyer agreed to, checked against the price on the row: a listing can
+            // only be bought for what it says, however stale the window they clicked in.
+            if (packet.Price != auction.Price)
+            {
+                BuyoutFailed(client, packet.ItemId, PlayerMessage.PmAuctionPendingTransaction);
+                return;
+            }
+
+            if (client.Player.Credits[CurencyType.Credits] < auction.Price)
+            {
+                BuyoutFailed(client, packet.ItemId, PlayerMessage.PmAuctionInsufficientFunds);
+                return;
+            }
+
+            if (client.Player.Inventory.InboxItems.Count >= Inventory.MaxInboxItems)
+            {
+                BuyoutFailed(client, packet.ItemId, PlayerMessage.PmAuctionNoBuyoutInboxFull);
+                return;
+            }
+
+            // Delivered before anyone is charged: if the inbox will not take it, nothing else
+            // has happened yet and the auction is still standing.
+            if (!InventoryManager.Instance.DeliverToInbox(unitOfWork, client.AccountEntry.Id, client.Player.Id, item))
+            {
+                BuyoutFailed(client, packet.ItemId, PlayerMessage.PmAuctionNoBuyoutInboxFull);
+                return;
+            }
+
+            unitOfWork.Auctions.DeleteAuction(item.Id);
+            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Credits, -(int)auction.Price);
+            PaySeller(unitOfWork, auction);
+            RemoveFromSellersAuctionList(auction.SellerId, item.EntityId, auction.Price);
+
+            client.CallMethod(SysEntity.ClientAuctionHouseManagerId, new AuctionBuyoutSuccessPacket(item.EntityId));
         }
 
         /// <summary>
@@ -261,9 +325,112 @@ namespace Rasa.Managers
             client.CallMethod(SysEntity.ClientAuctionHouseManagerId, new AuctionCreationSuccessPacket(item.EntityId));
         }
 
+        /// <summary>
+        /// The browse tab's search. Every query carries a category - the client keeps its search
+        /// button disabled until one is picked - plus a level range and one exact quality, since
+        /// its rarity box has no "any" entry.
+        /// </summary>
         public void RequestQueryAuctions(Client client, RequestQueryAuctionsPacket packet)
         {
-            Logger.WriteLog(LogType.AI, $"ToDo: RequestQueryAuctions");
+            if (!AuctionCategory.Names.TryGetValue(packet.CategoryId, out var category))
+            {
+                QueryFailed(client, PlayerMessage.PmAuctionNoResultsFound);
+                Logger.WriteLog(LogType.Error, $"Auction search for category {packet.CategoryId}, which is not a category the client offers.");
+                return;
+            }
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var now = DateTime.UtcNow;
+            var results = new List<AuctionItem>();
+
+            foreach (var auction in unitOfWork.Auctions.GetAuctions())
+            {
+                if (auction.SellerId == client.Player.Id)
+                    continue;               // the browse tab is for other people's auctions
+
+                var item = FindAuctionedItem(auction);
+
+                if (item?.ItemTemplate == null)
+                    continue;
+
+                if (item.ItemTemplate.QualityId != (int)packet.QualityId)
+                    continue;
+
+                var level = LevelRequirementOf(item);
+
+                if (level < packet.MinLevel || level > packet.MaxLevel)
+                    continue;
+
+                if (!MatchesCategory(item, category))
+                    continue;
+
+                // The buyer has never seen this item, so its entity has to exist on their client
+                // before the row can draw a name, an icon or a tooltip.
+                ItemManager.Instance.SendItemDataToClient(client, item, false);
+
+                var modules = item.ItemTemplate.ItemInfo?.ModuleIds ?? new List<int>();
+
+                results.Add(new AuctionItem
+                {
+                    ItemId = (uint)item.EntityId,
+                    Sellername = auction.SellerName,
+                    BidPrice = 0,
+                    BuyoutPrice = auction.Price,
+                    RemainingDuration = auction.RemainingHours(now),
+                    ItemTemplateId = item.ItemTemplate.ItemTemplateId,
+                    StackSize = item.StackSize,
+                    LootModuleId1 = modules.Count > 0 ? (uint)modules[0] : 0,
+                    LootModuleId2 = modules.Count > 1 ? (uint)modules[1] : 0,
+                    LootModuleId3 = modules.Count > 2 ? (uint)modules[2] : 0,
+                    LootModuleId4 = modules.Count > 3 ? (uint)modules[3] : 0,
+                    QualitiId = (uint)item.ItemTemplate.QualityId,
+                    LevelRequirement = (uint)level
+                });
+            }
+
+            if (results.Count == 0)
+            {
+                QueryFailed(client, PlayerMessage.PmAuctionNoResultsFound);
+                return;
+            }
+
+            var reply = new QuerySuccessPacket();
+            reply.AuctionItemList.AddRange(results);
+            client.CallMethod(SysEntity.ClientAuctionHouseManagerId, reply);
+        }
+
+        /// <summary>
+        /// Returns every auction past its duration to the seller's inbox. Called on a timer and
+        /// again when a character logs in, which is what catches auctions that ran out while the
+        /// server was down.
+        /// </summary>
+        public void ExpireAuctions()
+        {
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var now = DateTime.UtcNow;
+
+            foreach (var auction in unitOfWork.Auctions.GetAuctions())
+            {
+                if (auction.RemainingHours(now) > 0)
+                    continue;
+
+                Expire(unitOfWork, auction);
+            }
+        }
+
+        /// <summary>Expires just this character's auctions, on their way into the world.</summary>
+        public void ExpireAuctionsFor(Client client)
+        {
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var now = DateTime.UtcNow;
+
+            foreach (var auction in unitOfWork.Auctions.GetAuctionsBySeller(client.Player.Id))
+            {
+                if (auction.RemainingHours(now) > 0)
+                    continue;
+
+                Expire(unitOfWork, auction);
+            }
         }
 
         #endregion
@@ -315,6 +482,175 @@ namespace Rasa.Managers
                 return false;
 
             return item.ItemTemplate.ItemInfo == null || !item.ItemTemplate.ItemInfo.Tradable;
+        }
+
+        /// <summary>
+        /// Moves one expired auction's item back to its seller's inbox and deletes the row. An
+        /// inbox that is full leaves the auction standing rather than destroying the item - it
+        /// is simply retried on the next sweep, once the seller has made room.
+        /// </summary>
+        private void Expire(ICharUnitOfWork unitOfWork, AuctionEntry auction)
+        {
+            var item = FindAuctionedItem(auction);
+
+            if (item == null)
+            {
+                Logger.WriteLog(LogType.Error, $"Auction on item {auction.ItemId} has expired but its item is gone; row left in place.");
+                return;
+            }
+
+            var accountId = AccountOf(auction.SellerId, unitOfWork, item);
+
+            if (!InventoryManager.Instance.DeliverToInbox(unitOfWork, accountId, auction.SellerId, item))
+            {
+                Logger.WriteLog(LogType.Debug, $"Auction on item {auction.ItemId} has expired but {auction.SellerName}'s inbox is full; it will be retried.");
+                return;
+            }
+
+            unitOfWork.Auctions.DeleteAuction(auction.ItemId);
+            RemoveFromSellersAuctionList(auction.SellerId, item.EntityId, null);
+        }
+
+        /// <summary>
+        /// Adds the proceeds to the seller's character row. Done through CharacterManager when
+        /// they are online so their purse and their client agree, and straight to the row when
+        /// they are not - the money has to arrive either way.
+        /// </summary>
+        private static void PaySeller(ICharUnitOfWork unitOfWork, AuctionEntry auction)
+        {
+            var seller = OnlineSeller(auction.SellerId);
+
+            if (seller != null)
+            {
+                CharacterManager.Instance.UpdateCharacter(seller, CharacterUpdate.Credits, (int)auction.Price);
+                return;
+            }
+
+            var character = unitOfWork.Characters.Get(auction.SellerId);
+
+            if (character == null)
+            {
+                Logger.WriteLog(LogType.Error, $"Auction on item {auction.ItemId} sold but seller {auction.SellerId} no longer exists; proceeds dropped.");
+                return;
+            }
+
+            unitOfWork.Characters.UpdateCharacterCredits(auction.SellerId, character.Credit + (int)auction.Price);
+        }
+
+        /// <summary>
+        /// Takes the item out of the seller's own auction list and tells their client, so a
+        /// seller who is standing at an auction house sees the listing go. A price means it
+        /// sold; no price means it ran out.
+        /// </summary>
+        private static void RemoveFromSellersAuctionList(uint sellerId, ulong entityId, uint? soldFor)
+        {
+            var seller = OnlineSeller(sellerId);
+
+            if (seller == null)
+                return;
+
+            seller.Player.Inventory.AuctionItems.Remove(entityId);
+            seller.CallMethod(SysEntity.ClientInventoryManagerId, new RemoveAuctionItemPacket(entityId));
+            seller.CallMethod(SysEntity.ClientAuctionHouseManagerId, soldFor.HasValue
+                ? (Rasa.Packets.PythonPacket)new AuctionSoldPacket(entityId, soldFor.Value)
+                : new AuctionExpiredPacket(entityId));
+        }
+
+        private static Client OnlineSeller(uint sellerId) =>
+            Server.Clients.Find(c => c?.Player != null && c.Player.Id == sellerId && c.State == ClientState.Ingame);
+
+        /// <summary>
+        /// The live Item behind an auction row. A seller who is logged in has it in their
+        /// auction list; otherwise it is whichever registered item carries that database id.
+        /// </summary>
+        private static Item FindAuctionedItem(AuctionEntry auction)
+        {
+            var seller = OnlineSeller(auction.SellerId);
+
+            if (seller != null)
+                foreach (var entityId in seller.Player.Inventory.AuctionItems)
+                {
+                    var held = EntityManager.Instance.GetItem(entityId);
+
+                    if (held != null && held.Id == auction.ItemId)
+                        return held;
+                }
+
+            foreach (var entry in EntityManager.Instance.Items)
+                if (entry.Value != null && entry.Value.Id == auction.ItemId)
+                    return entry.Value;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Which account the seller's rows belong to. Their character_inventory rows are keyed by
+        /// account, and an offline seller has no Client to read it from.
+        /// </summary>
+        private static uint AccountOf(uint sellerId, ICharUnitOfWork unitOfWork, Item item)
+        {
+            var seller = OnlineSeller(sellerId);
+
+            if (seller != null)
+                return seller.AccountEntry.Id;
+
+            var character = unitOfWork.Characters.Get(sellerId);
+
+            return character?.AccountId ?? 0;
+        }
+
+        /// <summary>The experience level an item asks for, or zero when it asks for none.</summary>
+        private static int LevelRequirementOf(Item item)
+        {
+            if (item.ItemTemplate?.ItemInfo?.Requirements == null)
+                return 0;
+
+            return item.ItemTemplate.ItemInfo.Requirements.TryGetValue(RequirementsType.ReqXpLevel, out var level)
+                ? level
+                : 0;
+        }
+
+        /// <summary>
+        /// Whether an item belongs to one of the browse tab's categories. The category name is a
+        /// path through the item class naming scheme, so "Weapon_Pistol" wants a class whose
+        /// name starts with Weapon and carries Pistol as one of its underscore-separated words -
+        /// Weapon_Avatar_Pistol_Physical_CMN_01_to_04 and not Weapon_Avatar_Rifle_Physical.
+        /// </summary>
+        public static bool MatchesCategory(Item item, string category)
+        {
+            if (string.IsNullOrEmpty(category) || item?.ItemTemplate == null)
+                return false;
+
+            if (!EntityClassManager.Instance.LoadedEntityClasses.TryGetValue(item.ItemTemplate.Class, out var entityClass))
+                return false;
+
+            var className = entityClass?.ClassName;
+
+            if (string.IsNullOrEmpty(className))
+                return false;
+
+            var parts = category.Split('_');
+            var words = className.Split('_');
+
+            if (words.Length == 0 || !words[0].Equals(parts[0], StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            for (var i = 1; i < parts.Length; i++)
+                if (!words.Any(word => word.Equals(parts[i], StringComparison.OrdinalIgnoreCase)))
+                    return false;
+
+            return true;
+        }
+
+        private static void BuyoutFailed(Client client, ulong itemEntityId, PlayerMessage message)
+        {
+            client.CallMethod(SysEntity.ClientAuctionHouseManagerId,
+                new AuctionBuyoutFailedPacket(itemEntityId, message));
+        }
+
+        private static void QueryFailed(Client client, PlayerMessage message)
+        {
+            client.CallMethod(SysEntity.ClientAuctionHouseManagerId, new QueryFailedPacket(message));
         }
 
         /// <summary>Tells the create window why it could not list the item.</summary>

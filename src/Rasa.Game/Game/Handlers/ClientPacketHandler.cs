@@ -766,7 +766,11 @@
             InventoryManager.Instance.RequestTakeItemFromHomeInventory(Client, packet);
         }
 
-        // ToDo: RequestTakeItemFromInboxInventory(auctioneerId, entityId, destSlot)
+        [PacketHandler(GameOpcode.RequestTakeItemFromInboxInventory)]
+        private void RequestTakeItemFromInboxInventory(RequestTakeItemFromInboxInventoryPacket packet)
+        {
+            InventoryManager.Instance.RequestTakeItemFromInboxInventory(Client, packet);
+        }
 
         [PacketHandler(GameOpcode.TransferCreditToLockbox)]
         private void TransferCreditToLockbox(TransferCreditToLockboxPacket packet)

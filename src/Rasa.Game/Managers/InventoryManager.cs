@@ -63,7 +63,7 @@ namespace Rasa.Managers
          *  - RequestLockboxTabPermissions          => implemented
          *  - RequestMoveItemToHomeInventory        => implemented
          *  - RequestTakeItemFromHomeInventory      => implemented
-         *  - RequestTakeItemFromInboxInventory     => ToDo
+         *  - RequestTakeItemFromInboxInventory     => done
          *  - TransferCreditToLockbox               => implemented
          *  - WeaponDrawerInventory_MoveItem        => implemented
          */
@@ -636,6 +636,111 @@ namespace Rasa.Managers
             AddItemBySlot(client, InventoryType.Personal, entityId, packet.DestSlot, true);
         }
 
+        /// <summary>
+        /// The Pick Up Items tab's Receive button: takes one item out of the inbox and into the
+        /// pack. The inbox is a flat list, not a slotted inventory, so the item is found by its
+        /// entity id rather than by a source slot.
+        /// </summary>
+        public void RequestTakeItemFromInboxInventory(Client client, RequestTakeItemFromInboxInventoryPacket packet)
+        {
+            if (packet.DestSlot >= 250)
+                return;
+
+            if (!client.Player.Inventory.InboxItems.Contains(packet.ItemEntityId))
+            {
+                Logger.WriteLog(LogType.Error, $"Character {client.Player.Id} asked for inbox item {packet.ItemEntityId}, which is not in their inbox.");
+                return;
+            }
+
+            var item = EntityManager.Instance.GetItem(packet.ItemEntityId);
+
+            if (item == null)
+                return;
+
+            // The destination has to be free: the inbox has no slot to swap an item back into,
+            // so a swap here would drop whatever was in the pack.
+            if (client.Player.Inventory.PersonalInventory[(int)packet.DestSlot] != 0)
+            {
+                Logger.WriteLog(LogType.Debug, $"Character {client.Player.Id} asked to take inbox item {packet.ItemEntityId} into occupied slot {packet.DestSlot}.");
+                return;
+            }
+
+            client.Player.Inventory.InboxItems.Remove(packet.ItemEntityId);
+            client.CallMethod(SysEntity.ClientInventoryManagerId, new RemoveInboxItemPacket(packet.ItemEntityId));
+
+            item.OwnerId = client.Player.Id;
+            item.OwnerSlotId = packet.DestSlot;
+
+            // The row exists already - it was written when the item entered the inbox - so this
+            // moves it rather than inserting a second one.
+            AddItemBySlot(client, InventoryType.Personal, packet.ItemEntityId, packet.DestSlot, true);
+        }
+
+        /// <summary>
+        /// Puts an item into a character's inbox, whether or not they are logged in: the row is
+        /// written either way, and a client that is online is told about it so the Pick Up Items
+        /// tab updates without a relog. Returns false when the inbox is full, in which case
+        /// nothing is changed and the caller has to keep the item where it is.
+        /// </summary>
+        public bool DeliverToInbox(ICharUnitOfWork unitOfWork, uint accountId, uint characterId, Item item)
+        {
+            var recipient = Server.Clients.Find(c => c?.Player != null && c.Player.Id == characterId
+                                                     && c.State == ClientState.Ingame);
+            var used = new HashSet<uint>();
+
+            if (recipient != null)
+            {
+                if (recipient.Player.Inventory.InboxItems.Count >= Inventory.MaxInboxItems)
+                    return false;
+
+                foreach (var entityId in recipient.Player.Inventory.InboxItems)
+                {
+                    var held = EntityManager.Instance.GetItem(entityId);
+
+                    if (held != null)
+                        used.Add(held.OwnerSlotId);
+                }
+            }
+            else
+            {
+                var stored = unitOfWork.CharacterInventories.GetItems(accountId)
+                    .Where(row => row.CharacterId == characterId
+                                  && row.InventoryType == (uint)InventoryType.InboxInventory)
+                    .ToList();
+
+                if (stored.Count >= Inventory.MaxInboxItems)
+                    return false;
+
+                foreach (var row in stored)
+                    used.Add(row.SlotId);
+            }
+
+            var slot = 0u;
+
+            while (slot < Inventory.MaxInboxItems && used.Contains(slot))
+                slot++;
+
+            if (slot >= Inventory.MaxInboxItems)
+                return false;
+
+            item.OwnerId = characterId;
+            item.OwnerSlotId = slot;
+
+            unitOfWork.CharacterInventories.MoveInvItem(accountId, characterId,
+                (uint)InventoryType.InboxInventory, slot, item.Id);
+
+            if (recipient != null)
+            {
+                recipient.Player.Inventory.InboxItems.Add(item.EntityId);
+                // A buyer has never seen the item they just bought, so its entity has to exist
+                // on their client before the inbox row can render.
+                ItemManager.Instance.SendItemDataToClient(recipient, item, false);
+                recipient.CallMethod(SysEntity.ClientInventoryManagerId, new AddInboxItemPacket(item.EntityId));
+            }
+
+            return true;
+        }
+
         public void TransferCreditToLockbox(Client client, int amount)
         {
             /*
@@ -1157,6 +1262,10 @@ namespace Rasa.Managers
         {
             InitCharacterInventory(client);
 
+            // Auctions that ran out while this character was away, or while the server was down,
+            // are returned now - before the load below would otherwise show them as still listed.
+            AuctionHouseManager.Instance.ExpireAuctionsFor(client);
+
             // init LockboxTabPermissions
             client.CallMethod(SysEntity.ClientInventoryManagerId, new LockboxTabPermissionsPacket(client.Player.LockboxTabs));
         }
@@ -1304,6 +1413,7 @@ namespace Rasa.Managers
             client.Player.Inventory.PersonalInventory.Clear();
             client.Player.Inventory.WeaponDrawer.Clear();
             client.Player.Inventory.AuctionItems.Clear();
+            client.Player.Inventory.InboxItems.Clear();
 
             for (uint i = 0; i < 22; i++)
                 client.Player.Inventory.EquippedInventory.Add(0);
@@ -1400,6 +1510,17 @@ namespace Rasa.Managers
                         AddItemBySlot(client, InventoryType.WeaponDrawerInventory, newItem.EntityId, newItem.OwnerSlotId, false);
                     }
 
+                    else if ((InventoryType)item.InventoryType == InventoryType.InboxInventory)
+                    {
+                        // Waiting at an auction house. The client's Pick Up Items tab reads a
+                        // list only AddInboxItem and CreateInventory fill, and CreateInventory
+                        // iterates its argument expecting bare entity ids while
+                        // InventoryCreatePacket writes (index, entityId) pairs - so the items go
+                        // over one at a time.
+                        client.Player.Inventory.InboxItems.Add(newItem.EntityId);
+                        client.CallMethod(SysEntity.ClientInventoryManagerId, new AddInboxItemPacket(newItem.EntityId));
+                    }
+
                     else if ((InventoryType)item.InventoryType == InventoryType.AuctionInventory)
                     {
                         // Listed at an auction house. SendItemDataToClient above already created
@@ -1421,15 +1542,18 @@ namespace Rasa.Managers
 
             }
 
-            // character_inventory rows arrive in whatever order the query returns them, and the
-            // auction list is shown to the seller in listing order, so put it back in slot order.
-            client.Player.Inventory.AuctionItems.Sort((left, right) =>
+            // character_inventory rows arrive in whatever order the query returns them, and
+            // both lists are shown in the order things happened, so put them back in slot order.
+            static void SortBySlot(List<ulong> entityIds) => entityIds.Sort((left, right) =>
             {
                 var leftItem = EntityManager.Instance.GetItem(left);
                 var rightItem = EntityManager.Instance.GetItem(right);
 
                 return (leftItem?.OwnerSlotId ?? 0).CompareTo(rightItem?.OwnerSlotId ?? 0);
             });
+
+            SortBySlot(client.Player.Inventory.AuctionItems);
+            SortBySlot(client.Player.Inventory.InboxItems);
         }
 
         /// <summary>How many items of the entity class the player carries in their personal inventory, all stacks together.</summary>

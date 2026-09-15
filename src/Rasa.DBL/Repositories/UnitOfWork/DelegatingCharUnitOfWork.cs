@@ -3,6 +3,7 @@
 namespace Rasa.Repositories.UnitOfWork
 {
     using Char;
+    using Char.Auction;
     using Char.Character;
     using Char.CharacterAppearance;
     using Char.Clan;
@@ -34,6 +35,8 @@ namespace Rasa.Repositories.UnitOfWork
         {
             _parent = parent;
         }
+
+        public IAuctionRepository Auctions => _parent.Auctions;
 
         public ICensoredWordRepository CensoredWords => _parent.CensoredWords;
 

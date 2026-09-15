@@ -39,6 +39,8 @@ namespace Rasa.Context.Char
         public DbSet<CharacterTeleporterEntry> CharacterTeleporterEntries { get; set; }
         public DbSet<CharacterTitleEntry> CharacterTitleEntries { get; set; }
         public DbSet<ClanEntry> ClanEntries { get; set; }
+        public DbSet<AuctionEntry> AuctionEntries { get; set; }
+
         public DbSet<ClanInventoryEntry> ClanInventoryEntries { get; set; }
         public DbSet<ClanMemberEntry> ClanMemberEntries { get; set; }
         public DbSet<FriendEntry> FriendEntries { get; set; }

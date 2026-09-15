@@ -17,6 +17,46 @@ namespace Rasa.Migrations.SqliteChar
             modelBuilder
                 .HasAnnotation("ProductVersion", "5.0.1");
 
+            modelBuilder.Entity("Rasa.Structures.Char.AuctionEntry", b =>
+                {
+                    b.Property<uint>("ItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("item_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<uint>("Deposit")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("deposit");
+
+                    b.Property<uint>("DurationHours")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("duration_hours");
+
+                    b.Property<uint>("Price")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("price");
+
+                    b.Property<uint>("SellerId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("seller_id");
+
+                    b.Property<string>("SellerName")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("seller_name");
+
+                    b.HasKey("ItemId");
+
+                    b.HasIndex("SellerId")
+                        .HasDatabaseName("auction_index_seller_id");
+
+                    b.ToTable("auction");
+                });
+
             modelBuilder.Entity("Rasa.Structures.Char.CensorWordsEntry", b =>
                 {
                     b.Property<uint>("Id")

@@ -2,6 +2,7 @@
 
 namespace Rasa.Repositories.Char
 {
+    using Auction;
     using Character;
     using CharacterAppearance;
     using Clan;
@@ -43,6 +44,7 @@ namespace Rasa.Repositories.Char
             ICharacterSkillsRepository characterSkills,
             ICharacterTeleporterRepository characterTeleporters,
             ICharacterTitleRepository characterTitles,
+            IAuctionRepository auctions,
             IClanRepository clans,
             IClanInventoryRepository clanInventories,
             IClanMemberRepository clanMembers,
@@ -67,6 +69,7 @@ namespace Rasa.Repositories.Char
             CharacterTeleporters = characterTeleporters;
             CharacterTitles = characterTitles;
             Clans = clans;
+            Auctions = auctions;
             ClanInventories = clanInventories;
             ClanMembers = clanMembers;
             Friends = friends;
@@ -88,6 +91,7 @@ namespace Rasa.Repositories.Char
         public ICharacterSkillsRepository CharacterSkills { get; }
         public ICharacterTeleporterRepository CharacterTeleporters { get; }
         public ICharacterTitleRepository CharacterTitles { get; }
+        public IAuctionRepository Auctions { get; }
         public IClanRepository Clans { get; }
         public IClanInventoryRepository ClanInventories { get; }
         public IClanMemberRepository ClanMembers { get; }

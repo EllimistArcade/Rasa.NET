@@ -3,46 +3,47 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Rasa.Context.Char;
 
-namespace Rasa.Migrations.MySqlChar
+namespace Rasa.Migrations.SqliteChar
 {
-    [DbContext(typeof(MySqlCharContext))]
-    partial class MySqlCharContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(SqliteCharContext))]
+    [Migration("20260915140000_Add_auction_table")]
+    partial class Add_auction_table
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("Relational:MaxIdentifierLength", 64)
                 .HasAnnotation("ProductVersion", "5.0.1");
 
             modelBuilder.Entity("Rasa.Structures.Char.AuctionEntry", b =>
                 {
                     b.Property<uint>("ItemId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("item_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<uint>("Deposit")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("deposit");
 
                     b.Property<uint>("DurationHours")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("duration_hours");
 
                     b.Property<uint>("Price")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("price");
 
                     b.Property<uint>("SellerId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("seller_id");
 
                     b.Property<string>("SellerName")
@@ -62,7 +63,7 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
                     b.Property<string>("Word")
@@ -78,19 +79,19 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.CharacterAbilityDrawerEntry", b =>
                 {
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("character_id");
 
                     b.Property<int>("AbilitySlot")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("abilitiy_slot");
 
                     b.Property<int>("AbilityId")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("ability_id");
 
                     b.Property<uint>("AbilityLevel")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("ability_level");
 
                     b.HasKey("CharacterId", "AbilitySlot");
@@ -101,19 +102,19 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.CharacterAppearanceEntry", b =>
                 {
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("character_id");
 
                     b.Property<uint>("Slot")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("slot");
 
                     b.Property<uint>("Class")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasColumnName("class");
 
                     b.Property<uint>("Color")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasColumnName("color");
 
                     b.HasKey("CharacterId", "Slot");
@@ -125,28 +126,28 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
                     b.Property<uint>("AccountId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("account_id");
 
                     b.Property<byte>("ActiveWeapon")
-                        .HasColumnType("tinyint unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("active_weapon");
 
-                    b.Property<uint>("Body")
-                        .HasColumnType("int(11) unsigned")
+                    b.Property<int>("Body")
+                        .HasColumnType("int(11)")
                         .HasColumnName("body");
 
                     b.Property<uint>("Class")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasColumnName("class");
 
                     b.Property<uint>("CloneCredits")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasDefaultValue(0u)
                         .HasColumnName("clone_credits");
 
@@ -164,53 +165,53 @@ namespace Rasa.Migrations.MySqlChar
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasDefaultValueSql("datetime('now')");
 
                     b.Property<int>("Credit")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("credit");
 
                     b.Property<byte>("CrouchState")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasDefaultValue((byte)0)
                         .HasColumnName("crouch_state");
 
                     b.Property<uint>("Experience")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasDefaultValue(0u)
                         .HasColumnName("experience");
 
-                    b.Property<ulong>("Gender")
+                    b.Property<byte>("Gender")
                         .HasColumnType("bit")
                         .HasColumnName("gender");
 
                     b.Property<DateTime?>("LastLogin")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_login")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasDefaultValueSql("datetime('now')");
 
                     b.Property<DateTime>("LastPvPClan")
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_pvp_clan");
 
                     b.Property<byte>("Level")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasDefaultValue((byte)1)
                         .HasColumnName("level");
 
                     b.Property<uint>("MapContextId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasColumnName("map_context_id");
 
-                    b.Property<uint>("Mind")
-                        .HasColumnType("int(11) unsigned")
+                    b.Property<int>("Mind")
+                        .HasColumnType("int(11)")
                         .HasColumnName("mind");
 
                     b.Property<string>("Name")
@@ -220,16 +221,16 @@ namespace Rasa.Migrations.MySqlChar
 
                     b.Property<uint>("NumLogins")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasDefaultValue(0u)
                         .HasColumnName("num_logins");
 
                     b.Property<int>("Prestige")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("prestige");
 
                     b.Property<byte>("Race")
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasColumnName("race");
 
                     b.Property<double>("Rotation")
@@ -238,25 +239,25 @@ namespace Rasa.Migrations.MySqlChar
 
                     b.Property<byte>("RunState")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasDefaultValue((byte)1)
                         .HasColumnName("run_state");
 
                     b.Property<double>("Scale")
-                        .HasColumnType("double unsigned")
+                        .HasColumnType("double")
                         .HasColumnName("scale");
 
                     b.Property<byte>("Slot")
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasColumnName("slot");
 
-                    b.Property<uint>("Spirit")
-                        .HasColumnType("int(11) unsigned")
+                    b.Property<int>("Spirit")
+                        .HasColumnType("int(11)")
                         .HasColumnName("spirit");
 
                     b.Property<uint>("TotalTimePlayed")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasDefaultValue(0u)
                         .HasColumnName("total_time_played");
 
@@ -274,23 +275,23 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("ItemId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("item_id");
 
                     b.Property<uint>("AccountId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("account_id");
 
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("character_id");
 
                     b.Property<uint>("InventoryType")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("invenotry_type");
 
                     b.Property<uint>("SlotId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("slot_id");
 
                     b.HasKey("ItemId");
@@ -302,15 +303,15 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("AccountId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("account_id");
 
                     b.Property<int>("Credits")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("credits");
 
                     b.Property<int>("PurashedTabs")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("purashed_tabs");
 
                     b.HasKey("AccountId");
@@ -321,11 +322,11 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.CharacterLogosEntry", b =>
                 {
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("character_id");
 
                     b.Property<uint>("LogosId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("logos_id");
 
                     b.HasKey("CharacterId", "LogosId");
@@ -337,15 +338,15 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("CharacterId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("character_id");
 
                     b.Property<uint>("MissionId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("mission_id");
 
                     b.Property<uint>("MissionState")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("mission_state");
 
                     b.HasKey("CharacterId");
@@ -356,11 +357,11 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.CharacterOptionEntry", b =>
                 {
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("character_id");
 
                     b.Property<uint>("OptionId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("option_id");
 
                     b.Property<string>("Value")
@@ -376,19 +377,19 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.CharacterSkillsEntry", b =>
                 {
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("character_id");
 
                     b.Property<uint>("SkillId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("skill_id");
 
                     b.Property<int>("AbilityId")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("ability_id");
 
                     b.Property<int>("SkillLevel")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("skill_level");
 
                     b.HasKey("CharacterId", "SkillId");
@@ -399,15 +400,15 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.CharacterTeleporterEntry", b =>
                 {
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("character_id");
 
                     b.Property<uint>("WaypointId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("waypointId");
 
                     b.Property<byte>("WaypointType")
-                        .HasColumnType("tinyint unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("waypoint_type");
 
                     b.HasKey("CharacterId", "WaypointId");
@@ -419,11 +420,11 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("CharacterId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("character_id");
 
                     b.Property<uint>("TitleId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("title_id");
 
                     b.HasKey("CharacterId");
@@ -435,21 +436,21 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasDefaultValueSql("datetime('now')");
 
                     b.Property<uint>("Credits")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("credits");
 
                     b.Property<bool>("IsPvP")
-                        .HasColumnType("tinyint(1)")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("is_pvp");
 
                     b.Property<string>("Name")
@@ -458,11 +459,11 @@ namespace Rasa.Migrations.MySqlChar
                         .HasColumnName("name");
 
                     b.Property<uint>("Prestige")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("prestige");
 
                     b.Property<uint>("PurashedTabs")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("purashed_tabs");
 
                     b.Property<string>("RankTitle0")
@@ -494,15 +495,15 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("ItemId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("item_id");
 
                     b.Property<uint>("ClanId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("clan_id");
 
                     b.Property<uint>("SlotId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("slot_id");
 
                     b.HasKey("ItemId");
@@ -513,11 +514,11 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.ClanMemberEntry", b =>
                 {
                     b.Property<uint>("ClanId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("clan_id");
 
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("character_id");
 
                     b.Property<string>("Note")
@@ -527,7 +528,7 @@ namespace Rasa.Migrations.MySqlChar
 
                     b.Property<byte>("Rank")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasDefaultValue((byte)0)
                         .HasColumnName("rank");
 
@@ -542,11 +543,11 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.FriendEntry", b =>
                 {
                     b.Property<uint>("AccountId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("account_id");
 
                     b.Property<uint>("FriendAccountId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("friend_account_id");
 
                     b.HasKey("AccountId", "FriendAccountId");
@@ -558,21 +559,21 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("id")
                         .HasAnnotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None);
 
-                    b.Property<ulong>("CanSkipBootcamp")
+                    b.Property<bool>("CanSkipBootcamp")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
-                        .HasDefaultValue(0ul)
+                        .HasDefaultValue(false)
                         .HasColumnName("can_skip_bootcamp");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasDefaultValueSql("datetime('now')");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -595,13 +596,13 @@ namespace Rasa.Migrations.MySqlChar
 
                     b.Property<DateTime>("LastLogin")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_login")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasDefaultValueSql("datetime('now')");
 
                     b.Property<byte>("Level")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasDefaultValue((byte)0)
                         .HasColumnName("level");
 
@@ -612,7 +613,7 @@ namespace Rasa.Migrations.MySqlChar
 
                     b.Property<byte>("SelectedSlot")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasDefaultValue((byte)0)
                         .HasColumnName("selected_slot");
 
@@ -624,11 +625,11 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.IgnoredEntry", b =>
                 {
                     b.Property<uint>("AccountId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("account_id");
 
                     b.Property<uint>("IgnoredAccountId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("ignored_account_id");
 
                     b.HasKey("AccountId", "IgnoredAccountId");
@@ -640,15 +641,15 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("ItemId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("item_id");
 
                     b.Property<uint>("AmmoCount")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("ammo_count");
 
                     b.Property<uint>("Color")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("color");
 
                     b.Property<string>("CrafterName")
@@ -657,19 +658,19 @@ namespace Rasa.Migrations.MySqlChar
                         .HasColumnName("crafter_name");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<int>("CurrentHitPoints")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("current_hp");
 
                     b.Property<uint>("ItemTemplateId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("item_template_id");
 
                     b.Property<uint>("StackSize")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("stack_size");
 
                     b.HasKey("ItemId");
@@ -681,11 +682,11 @@ namespace Rasa.Migrations.MySqlChar
                 {
                     b.Property<uint>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
                     b.Property<uint>("AccountId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("account_id");
 
                     b.Property<string>("Body")
@@ -694,15 +695,15 @@ namespace Rasa.Migrations.MySqlChar
                         .HasColumnName("body");
 
                     b.Property<uint>("CharacterId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("integer")
                         .HasColumnName("character_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<uint>("MapContextId")
-                        .HasColumnType("int(11) unsigned")
+                        .HasColumnType("int(11)")
                         .HasColumnName("map_context_id");
 
                     b.Property<double>("PosX")
@@ -726,7 +727,7 @@ namespace Rasa.Migrations.MySqlChar
 
                     b.Property<byte>("Status")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasDefaultValue((byte)0)
                         .HasColumnName("status");
 
@@ -737,7 +738,7 @@ namespace Rasa.Migrations.MySqlChar
 
                     b.Property<byte>("Type")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(3) unsigned")
+                        .HasColumnType("tinyint(3)")
                         .HasDefaultValue((byte)0)
                         .HasColumnName("type");
 
@@ -749,11 +750,11 @@ namespace Rasa.Migrations.MySqlChar
             modelBuilder.Entity("Rasa.Structures.Char.UserOptionEntry", b =>
                 {
                     b.Property<uint>("AccountId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("account_id");
 
                     b.Property<uint>("OptionId")
-                        .HasColumnType("int unsigned")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("option_id");
 
                     b.Property<string>("Value")

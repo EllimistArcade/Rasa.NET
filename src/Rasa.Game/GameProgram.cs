@@ -17,6 +17,7 @@ namespace Rasa
     using Hosting;
     using Initialization;
     using Repositories.Char;
+    using Repositories.Char.Auction;
     using Repositories.Char.CensorWord;
     using Repositories.Char.Character;
     using Repositories.Char.CharacterAbilityDrawer;
@@ -108,6 +109,7 @@ namespace Rasa
             services.AddScoped<ICharacterTeleporterRepository, CharacterTeleporterRepository>();
             services.AddScoped<ICharacterTitleRepository, CharacterTitleRepository>();
             services.AddScoped<IClanRepository, ClanRepository>();
+            services.AddScoped<IAuctionRepository, AuctionRepository>();
             services.AddScoped<IClanInventoryRepository, ClanInventoryRepository>();
             services.AddScoped<IClanMemberRepository, ClanMemberRepository>();
             services.AddScoped<IFriendRepository, FriendRepository>();

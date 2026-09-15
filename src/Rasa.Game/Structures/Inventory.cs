@@ -27,5 +27,16 @@ namespace Rasa.Structures
         public List<ulong> BuybackItems = new List<ulong>();
 
         public const int MaxBuybackItems = 10;
+
+        /// <summary>
+        /// Items this character has listed at an auction house, in the order they were listed.
+        /// Each is still a row in items and in character_inventory - type AuctionInventory - so
+        /// the list is rebuilt from the database at login, and the index into it is the slot id
+        /// that row carries.
+        /// </summary>
+        public List<ulong> AuctionItems = new List<ulong>();
+
+        /// <summary>The client refuses to list a thirty-first item; the server agrees.</summary>
+        public const int MaxAuctionItems = 30;
     }
 }

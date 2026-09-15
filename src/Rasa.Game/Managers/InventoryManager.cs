@@ -1303,6 +1303,7 @@ namespace Rasa.Managers
             client.Player.Inventory.HomeInventory.Clear();
             client.Player.Inventory.PersonalInventory.Clear();
             client.Player.Inventory.WeaponDrawer.Clear();
+            client.Player.Inventory.AuctionItems.Clear();
 
             for (uint i = 0; i < 22; i++)
                 client.Player.Inventory.EquippedInventory.Add(0);
@@ -1398,6 +1399,15 @@ namespace Rasa.Managers
                         // active drawer slot.
                         AddItemBySlot(client, InventoryType.WeaponDrawerInventory, newItem.EntityId, newItem.OwnerSlotId, false);
                     }
+
+                    else if ((InventoryType)item.InventoryType == InventoryType.AuctionInventory)
+                    {
+                        // Listed at an auction house. SendItemDataToClient above already created
+                        // the entity, which is all the client needs to render the row when it
+                        // asks for auction status; it belongs in no inventory list it can move
+                        // items in, so it only goes in the server's own auction list.
+                        client.Player.Inventory.AuctionItems.Add(newItem.EntityId);
+                    }
                 }
                 else if (item.CharacterId == 0)
                 {
@@ -1410,6 +1420,16 @@ namespace Rasa.Managers
                 }
 
             }
+
+            // character_inventory rows arrive in whatever order the query returns them, and the
+            // auction list is shown to the seller in listing order, so put it back in slot order.
+            client.Player.Inventory.AuctionItems.Sort((left, right) =>
+            {
+                var leftItem = EntityManager.Instance.GetItem(left);
+                var rightItem = EntityManager.Instance.GetItem(right);
+
+                return (leftItem?.OwnerSlotId ?? 0).CompareTo(rightItem?.OwnerSlotId ?? 0);
+            });
         }
 
         /// <summary>How many items of the entity class the player carries in their personal inventory, all stacks together.</summary>

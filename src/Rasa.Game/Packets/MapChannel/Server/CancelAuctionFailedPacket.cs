@@ -1,16 +1,16 @@
-﻿namespace Rasa.Packets.MapChannel.Server
+namespace Rasa.Packets.MapChannel.Server
 {
     using Data;
     using Memory;
 
-    public class AuctionCreationFailedPacket : ServerPythonPacket
+    public class CancelAuctionFailedPacket : ServerPythonPacket
     {
-        public override GameOpcode Opcode { get; } = GameOpcode.AuctionCreationFailed;
+        public override GameOpcode Opcode { get; } = GameOpcode.CancelAuctionFailed;
 
         public ulong ItemId { get; set; }
         public PlayerMessage PlayerMessageId { get; set; }
 
-        public AuctionCreationFailedPacket(ulong itemId, PlayerMessage playerMessageId)
+        public CancelAuctionFailedPacket(ulong itemId, PlayerMessage playerMessageId)
         {
             ItemId = itemId;
             PlayerMessageId = playerMessageId;

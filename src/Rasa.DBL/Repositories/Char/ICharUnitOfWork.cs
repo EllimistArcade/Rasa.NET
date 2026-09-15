@@ -1,5 +1,6 @@
 ﻿namespace Rasa.Repositories.Char
 {
+    using Auction;
     using Character;
     using CharacterAppearance;
     using CharacterSkills;
@@ -25,6 +26,7 @@
 
     public interface ICharUnitOfWork : IUnitOfWork
     {
+        IAuctionRepository Auctions { get; }
         ICensoredWordRepository CensoredWords { get; }
         ICharacterRepository Characters { get; }
         ICharacterAbilityDrawerRepository CharacterAbilityDrawers { get; }

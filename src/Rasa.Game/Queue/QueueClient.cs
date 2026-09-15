@@ -14,6 +14,14 @@ namespace Rasa.Queue
     {
         public QueueManager Manager { get; }
         public LengthedSocket Socket { get; }
+
+        /// <summary>
+        /// Read on the main loop by every QueueManager pass and written on the socket threads as
+        /// the handshake advances, so the transitions go through <see cref="_clientLock"/>. They
+        /// are single writes rather than read-modify-writes everywhere except MarkArrived, which
+        /// is the one that has to be atomic: it is the main loop deciding a handed-off client has
+        /// arrived at the world port, against the client's own thread closing the socket.
+        /// </summary>
         public QueueState State { get; private set; }
         public uint UserId { get; set; }
         public uint OneTimeKey { get; set; }
@@ -40,7 +48,7 @@ namespace Rasa.Queue
                 Generator = Manager.Config.Generator
             });
 
-            State = QueueState.Authenticating;
+            SetState(QueueState.Authenticating);
         }
 
         private void OnReceive(BufferData data)
@@ -76,7 +84,7 @@ namespace Rasa.Queue
 
                     Socket.Send(new ClientKeyOkPacket());
 
-                    State = QueueState.Authenticated;
+                    SetState(QueueState.Authenticated);
 
                     break;
 
@@ -90,7 +98,7 @@ namespace Rasa.Queue
 
                     UserId = loginPacket.UserId;
                     OneTimeKey = loginPacket.OneTimeKey;
-                    State = QueueState.InQueue;
+                    SetState(QueueState.InQueue);
 
                     Manager.Enqueue(this);
                     EnqueueTime = DateTime.Now;
@@ -98,6 +106,25 @@ namespace Rasa.Queue
 
                 default:
                     throw new Exception("Received packet in a invalid queue state!");
+            }
+        }
+
+        private readonly object _clientLock = new object();
+
+        /// <summary>
+        /// Advances the handshake, unless this connection has already gone. A socket thread that
+        /// is mid-handshake when the main loop or the communicator closes the connection would
+        /// otherwise put it back into a live state and leave it in the queue holding a slot, with
+        /// a socket nobody can write to.
+        /// </summary>
+        private void SetState(QueueState state)
+        {
+            lock (_clientLock)
+            {
+                if (State == QueueState.Disconnected)
+                    return;
+
+                State = state;
             }
         }
 
@@ -112,11 +139,25 @@ namespace Rasa.Queue
             Close();
         }
 
+        /// <summary>
+        /// Reached from three threads: this connection's own socket threads (OnError, OnDrop and
+        /// the receive handler's catch), the main loop (QueueManager expiring a redirect that
+        /// nobody arrived for), and the auth communicator's thread (an account locked while it
+        /// was waiting). Nothing used to stop two of them running the whole teardown, and the
+        /// socket was closed before the state said so, leaving a window in which the main loop's
+        /// next pass would write a position update to a socket that had already gone.
+        /// </summary>
         public void Close()
         {
-            Socket.Close();
+            lock (_clientLock)
+            {
+                if (State == QueueState.Disconnected)
+                    return;
 
-            State = QueueState.Disconnected;
+                State = QueueState.Disconnected;
+            }
+
+            Socket.Close();
 
             Manager.Disconnect(this);
         }
@@ -130,13 +171,14 @@ namespace Rasa.Queue
         /// </summary>
         internal void MarkArrived()
         {
-            if (State == QueueState.Redirecting)
-                State = QueueState.Arrived;
+            lock (_clientLock)
+                if (State == QueueState.Redirecting)
+                    State = QueueState.Arrived;
         }
 
         public void Redirect(IPAddress ip, int port)
         {
-            State = QueueState.Redirecting;
+            SetState(QueueState.Redirecting);
             RedirectTime = DateTime.Now;
 
             Socket.Send(new HandoffToGamePacket

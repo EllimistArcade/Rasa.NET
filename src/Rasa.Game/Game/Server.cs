@@ -210,7 +210,20 @@ namespace Rasa.Game
                     lock (_clientsToRemove)
                     {
                         foreach (var client in _clientsToRemove)
+                        {
                             Clients.Remove(client);
+
+                            // Nothing else reaches this client now, and this is the MainLoop,
+                            // which is the thread its inbound stream belongs to.
+                            try
+                            {
+                                client.ReleaseInboundBuffers();
+                            }
+                            catch (Exception e)
+                            {
+                                Logger.WriteLog(LogType.Error, $"Failed to release inbound buffers for a disconnected client: {e}");
+                            }
+                        }
 
                         _clientsToRemove.Clear();
                     }
@@ -501,8 +514,16 @@ namespace Rasa.Game
                 return;
             }
 
-            AuthCommunicator?.Close();
+            // Taken once: MsgGameInfoRequest and MsgRedirectRequest are dispatched from this
+            // same frame loop and used to reach straight through this field, so a rejected login
+            // followed by a buffered server-info request in the same read nulled it between the
+            // two and the second handler threw. The link was then half-dead with nothing to
+            // bring it back - only a socket error schedules a reconnect, and no socket error
+            // had happened.
+            var communicator = AuthCommunicator;
+
             AuthCommunicator = null;
+            communicator?.Close();
 
             Logger.WriteLog(LogType.Error, "Could not authenticate with the Auth server! Shutting down internal communication!");
         }
@@ -512,7 +533,8 @@ namespace Rasa.Game
         [PacketHandler(CommOpcode.ServerInfoRequest)]
         private void MsgGameInfoRequest(ServerInfoRequestPacket packet)
         {
-            AuthCommunicator.Send(new ServerInfoResponsePacket
+            // Nulled by MsgLoginResponse on this same thread, from the same read.
+            AuthCommunicator?.Send(new ServerInfoResponsePacket
             {
                 AgeLimit = Config.ServerInfoConfig.AgeLimit,
                 PKFlag = Config.ServerInfoConfig.PKFlag,
@@ -574,7 +596,7 @@ namespace Rasa.Game
                 IncomingClients.Add(packet.AccountId, new LoginAccountEntry(packet));
             }
 
-            AuthCommunicator.Send(new RedirectResponsePacket
+            AuthCommunicator?.Send(new RedirectResponsePacket
             {
                 AccountId = packet.AccountId,
                 Response = RedirectResult.Success
@@ -633,7 +655,16 @@ namespace Rasa.Game
 
             unitOfWork.GameAccounts.UpdateAccountLevel(account.Id, level);
 
-            var online = Clients.FirstOrDefault(c => c.AccountEntry?.Id == account.Id);
+            // The console runs on its own thread; every other walk of this list is under the
+            // lock, and this one was not. The main loop removes disconnected clients from it on
+            // every tick, so a gm command timed against one threw "Collection was modified" out
+            // of the enumerator - caught by the command processor, so the level silently failed
+            // to reach the player who was already logged in.
+            Client online;
+
+            lock (Clients)
+                online = Clients.FirstOrDefault(c => c.AccountEntry?.Id == account.Id);
+
             if (online?.AccountEntry != null)
                 online.AccountEntry.Level = level;
 
@@ -808,8 +839,13 @@ namespace Rasa.Game
             lock (Clients)
                 players = Clients.Count(c => c != null && c.State == ClientState.Ingame);
 
+            int connections;
+
+            lock (Clients)
+                connections = Clients.Count;
+
             Logger.WriteLog(LogType.Command,
-                $"{players} player(s) in the world, {Clients.Count} connection(s), "
+                $"{players} player(s) in the world, {connections} connection(s), "
                 + $"metrics going to GMs every {Config.GameConfig.PerformanceMetricsInterval} ms.");
         }
 

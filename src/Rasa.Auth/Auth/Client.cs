@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net.Sockets;
+using System.Threading;
 
 namespace Rasa.Auth
 {
@@ -35,6 +36,20 @@ namespace Rasa.Auth
         public Timer Timer { get; }
 
         private PacketQueue _packetQueue = new();
+
+        /// <summary>
+        /// Close() is reached from the socket completion threads (OnError, OnDrop, and OnReceive's
+        /// own catch) and from the main loop (the timeout timer, and Update's catch blocks), so
+        /// two threads can be in it at once. The game server's client has had this guard for a
+        /// while; this one had only the unsynchronized read of State at the top, which both
+        /// threads pass before either writes it - and both then log the disconnect, remove the
+        /// timer, shut the socket and queue the client for removal twice.
+        /// </summary>
+        private readonly object _clientLock = new object();
+
+        /// <summary>Packets read off the socket but not yet handled by the main loop.</summary>
+        private int _queuedPackets;
+        private const int MaxQueuedPackets = 64;
 
         public Client(LengthedSocket socket, Server server, IAuthUnitOfWorkFactory authUnitOfWorkFactory)
         {
@@ -97,6 +112,17 @@ namespace Rasa.Auth
             // exception out of a handler used to end the process. Now it ends the connection.
             while ((packet = _packetQueue.PopIncoming()) != null)
             {
+                // Re-checked each time round, not just before the loop: a handler can close the
+                // connection, and the packets queued behind it were handled anyway. A client
+                // that pipelines a bad login and a server-list request in one segment got the
+                // login refused and closed, then had the second packet rejected as unexpected
+                // and closed again - one connection driving any number of teardowns and
+                // Security log lines.
+                if (State == ClientState.Disconnected)
+                    return;
+
+                Interlocked.Decrement(ref _queuedPackets);
+
                 try
                 {
                     HandlePacket(packet);
@@ -129,15 +155,25 @@ namespace Rasa.Auth
             if (State == ClientState.Disconnected)
                 return;
 
-            Logger.WriteLog(LogType.Network, "*** Client disconnected! Ip: {0}", Socket.RemoteAddress);
+            lock (_clientLock)
+            {
+                // The check above is the cheap one; this is the one that decides. Without it
+                // both threads get past the first and run the whole teardown.
+                if (State == ClientState.Disconnected)
+                    return;
 
-            Timer.Remove("timeout");
+                Logger.WriteLog(LogType.Network, "*** Client disconnected! Ip: {0}", Socket.RemoteAddress);
 
-            State = ClientState.Disconnected;
+                Timer.Remove("timeout");
 
-            Socket.Close();
+                // Written before anything else in here, so a handler still running on the other
+                // thread stops rather than carrying on against a socket that is about to go.
+                State = ClientState.Disconnected;
 
-            Server.Disconnect(this);
+                Socket.Close();
+
+                Server.Disconnect(this);
+            }
         }
 
         public void SendPacket(IBasePacket packet)
@@ -283,6 +319,19 @@ namespace Rasa.Auth
                 var packet = CreatePacket(opcode.Value);
 
                 packet.Read(br);
+
+                // Bounded, for the same reason the game client bounds its undrained input: this
+                // runs at line speed on a socket thread while the main loop drains one packet
+                // per handler per tick, and MsgLogin's handler is a synchronous database call.
+                // A client that pipelines logins would otherwise queue them faster than they can
+                // ever be answered. Nothing legitimate gets near this - the auth conversation is
+                // a handful of packets - so the limit doubles as the flood check.
+                if (Interlocked.Increment(ref _queuedPackets) > MaxQueuedPackets)
+                {
+                    Logger.WriteLog(LogType.Security, $"Client {Socket.RemoteAddress} has {_queuedPackets} unanswered packets queued (limit {MaxQueuedPackets}), disconnecting.");
+                    Close();
+                    return;
+                }
 
                 _packetQueue.EnqueueIncoming(packet);
             }

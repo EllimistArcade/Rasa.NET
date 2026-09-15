@@ -102,8 +102,19 @@ namespace Rasa.Auth
         [PacketHandler(CommOpcode.LoginRequest)]
         private void MsgLoginRequest(LoginRequestPacket packet)
         {
+            // Set before the slot is claimed, not after. DisconnectCommunicator gives the slot
+            // back only when ServerId is non-zero, and this used to be assigned four statements
+            // and two sends later - so a game server whose socket died in that window left its
+            // entry in GameServers forever, pointing at a dead connection. It could then never
+            // reconnect (the slot reads as in use) and the auth server went on asking that dead
+            // socket for its player counts once a second until it was restarted.
+            ServerId = packet.ServerId;
+            PublicAddress = packet.PublicAddress;
+
             if (!Server.AuthenticateGameServer(packet, this))
             {
+                ServerId = 0;
+
                 Socket.Send(new LoginResponsePacket
                 {
                     Response = CommLoginReason.Failure
@@ -115,9 +126,6 @@ namespace Rasa.Auth
             {
                 Response = CommLoginReason.Success
             });
-
-            ServerId = packet.ServerId;
-            PublicAddress = packet.PublicAddress;
 
             RequestServerInfo();
         }

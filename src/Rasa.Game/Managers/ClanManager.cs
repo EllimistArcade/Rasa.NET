@@ -335,6 +335,58 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// /clankick and /kickclan. The clan window kicks by character id; the slash command has
+        /// only what the player typed, which in every by-name command here is the family name -
+        /// the same thing InviteToClanByName resolves.
+        ///
+        /// Resolving it is all this adds: the kick itself, and every permission check on it, is
+        /// the by-id path, so the two routes cannot drift apart.
+        /// </summary>
+        internal void KickPlayerFromClanByName(Client client, KickPlayerFromClanByNamePacket packet)
+        {
+            if (client?.Player == null || packet == null)
+                return;
+
+            if (string.IsNullOrWhiteSpace(packet.Name))
+                return;
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var account = unitOfWork.GameAccounts.Get(packet.Name);
+
+            if (account == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(client, $"{packet.Name} do not exist");
+                return;
+            }
+
+            var character = unitOfWork.Characters.GetByAccountId(account.Id, account.SelectedSlot);
+
+            if (character == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(client, $"{packet.Name} do not exist");
+                return;
+            }
+
+            // Both ends have to be in the clan before the by-id path runs: it reads the kicker's
+            // member row and the target's without checking either, so a stale ClanId on the
+            // client - kicked while their window still showed the clan - threw out of the packet
+            // handler. The clan window cannot reach that state, which is why it went unnoticed.
+            if (GetClanMember(packet.ClanId, client.Player.Id) == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(client, "You are not in that clan");
+                return;
+            }
+
+            if (GetClanMember(packet.ClanId, character.Id) == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(client, $"{packet.Name} is not in your clan");
+                return;
+            }
+
+            KickPlayerFromClan(client, new KickPlayerFromClanPacket(character.Id, packet.ClanId));
+        }
+
         internal void ClanInvitationResponse(Client client, ClanInvitationResponsePacket packet)
         {
             var invitee = Server.Clients.Find(c => c.Player.EntityId == packet.InvitedCharacterEntityId);

@@ -512,7 +512,7 @@
         [PacketHandler(GameOpcode.KickPlayerFromClanByName)]
         private void KickPlayerFromClanByName(KickPlayerFromClanByNamePacket packet)
         {
-            Logger.WriteLog(LogType.Debug, $"KickPlayerFromClanByNamePacket => ToDo");
+            ClanManager.Instance.KickPlayerFromClanByName(Client, packet);
         }
 
         [PacketHandler(GameOpcode.LeaveClan)]

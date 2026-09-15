@@ -84,6 +84,9 @@ namespace Rasa.Managers
         private static readonly object InstanceLock = new object();
         public static Dictionary<int, ChatChannel> ChannelsBySeed = new Dictionary<int, ChatChannel>();
 
+        /// <summary>Manifestation.ChannelHashes is this long; joining past it would run off the end.</summary>
+        public const int ChannelHashesPerPlayer = 14;
+
         public static CommunicatorManager Instance
         {
             get
@@ -132,9 +135,61 @@ namespace Rasa.Managers
                 member.CallMethod(SysEntity.CommunicatorId, new ClanChatPacket(client.Player.FamilyName, packet.Message));
         }
 
+        /// <summary>
+        /// A message on one of the numbered channels - /t is MAP_TRADE. This used to call back
+        /// only the sender, so a player saw their own message and nobody else did.
+        ///
+        /// The channel is resolved from the server's own record of where the player is rather
+        /// than from the ids in the packet: a client is free to name any channel and map, and
+        /// following it would let someone talk on a channel they never joined, on a map they are
+        /// not standing on.
+        /// </summary>
         internal void ChannelChat(Client client, ChannelChatPacket packet)
         {
-            client.CallMethod(SysEntity.CommunicatorId, new ChannelChatPacket(client.Player.FamilyName, packet.ChannelId, packet.MapEntityId, packet.MapContextId, packet.Message));
+            if (client.Player == null || string.IsNullOrEmpty(packet.Message))
+                return;
+
+            var chatChannel = ChannelOf(client, packet.ChannelId);
+
+            if (chatChannel == null)
+            {
+                Logger.WriteLog(LogType.Debug, $"Character {client.Player.Id} sent chat on channel {packet.ChannelId}, which they are not in.");
+                return;
+            }
+
+            var outgoing = new ChannelChatPacket(client.Player.FamilyName, chatChannel.ChannelId,
+                client.Player.EntityId, chatChannel.MapContextId, packet.Message);
+
+            foreach (var entityId in chatChannel.Players)
+            {
+                var listener = Server.Clients.Find(c => c?.Player != null && c.Player.EntityId == entityId
+                                                        && c.State == ClientState.Ingame);
+
+                if (listener == null)
+                    continue;
+
+                // A player who has this one ignored does not hear them, the same rule the other
+                // chat paths follow.
+                if (listener != client && listener.Player.IgnoredPlayers.Contains(client.AccountEntry.Id))
+                    continue;
+
+                listener.CallMethod(SysEntity.CommunicatorId, outgoing);
+            }
+        }
+
+        /// <summary>
+        /// The channel this player is in with that id, or null when they are not in one. Looked up
+        /// through the hashes recorded when they joined, so it cannot name a channel they never
+        /// entered.
+        /// </summary>
+        private static ChatChannel ChannelOf(Client client, uint channelId)
+        {
+            for (var i = 0; i < client.Player.JoinedChannels; i++)
+                if (ChannelsBySeed.TryGetValue(client.Player.ChannelHashes[i], out var chatChannel)
+                    && chatChannel.ChannelId == channelId)
+                    return chatChannel;
+
+            return null;
         }
 
         internal void Emote(Client client, EmotePacket packet)
@@ -324,34 +379,14 @@ namespace Rasa.Managers
 
         #endregion
 
+        /// <summary>Puts a player in a channel, once.</summary>
         public void AddClientToChannel(Client client, int cHash)
         {
-            if (ChannelsBySeed.TryGetValue(cHash, out ChatChannel chatChannel))
-            {
-                var newLink = new ChatChannelPlayerLink
-                {
-                    Next = null,
-                    EntityId = client.Player.EntityId,
-                    Previous = null
-                };
+            if (!ChannelsBySeed.TryGetValue(cHash, out var chatChannel))
+                return;
 
-                if (chatChannel.FirstPlayer != null)
-                {
-                    // append
-                    var currentLink = new ChatChannelPlayerLink();
-
-                    while (currentLink.Next != null)
-                        currentLink = currentLink.Next;
-
-                    newLink.Previous = currentLink;
-                    currentLink.Next = newLink;
-                }
-                else
-                {
-                    // set as first
-                    chatChannel.FirstPlayer = newLink;
-                }
-            }
+            if (!chatChannel.Players.Contains(client.Player.EntityId))
+                chatChannel.Players.Add(client.Player.EntityId);
         }
 
         internal void AddFriendAck(Client client, string familyName, bool succsess)
@@ -383,36 +418,65 @@ namespace Rasa.Managers
             return v;
         }
 
+        /// <summary>
+        /// The channels a player is put in when they arrive on a map. The client's own
+        /// chatchannel table sorts these into global ones and per-map ones, and /t is MAP_TRADE,
+        /// which is why it did nothing before: only GENERAL was ever joined, so the client's
+        /// IsValidChannelId said the player was not in channel 6 and refused to send.
+        ///
+        /// NEW_PLAYER and the language and trial channels are left out - there is nothing here to
+        /// decide who belongs in them - and clan chat has its own path.
+        /// </summary>
+        public static readonly uint[] GlobalChannels = { ChatChannelId.General, ChatChannelId.LookingForGroup };
+
+        public static readonly uint[] MapChannels = { ChatChannelId.MapGeneral, ChatChannelId.MapTrade, ChatChannelId.MapDefense };
+
+        /// <summary>
+        /// A channel that spans the world. Hashed with map context zero so every map resolves to
+        /// the same channel, which is what makes it global.
+        /// </summary>
+        public void JoinGlobalChannel(Client client, uint channelId)
+        {
+            Join(client, channelId, 0);
+        }
+
+        /// <summary>A channel that exists separately on each map: local chat, trade, defense.</summary>
         public void JoinDefaultLocalChannel(Client client, uint channelId)
         {
-            if (client.Player.JoinedChannels >= 14)
-                return; // todo, send error to client
-            // generate channel hash
-            var cHash = GenerateDefaultChannelHash((int)channelId, (int)client.Player.MapChannel.MapInfo.MapContextId, 0);
-            // find channel
-            ChatChannel chatChannel;
-            if (ChannelsBySeed.TryGetValue(cHash, out chatChannel))
+            Join(client, channelId, client.Player.MapChannel.MapInfo.MapContextId);
+        }
+
+        private void Join(Client client, uint channelId, uint mapContextId)
+        {
+            if (client.Player.JoinedChannels >= ChannelHashesPerPlayer)
             {
+                Logger.WriteLog(LogType.Error, $"Character {client.Player.Id} is already in {client.Player.JoinedChannels} channels; {channelId} not joined.");
+                return;
             }
-            else
+
+            var cHash = GenerateDefaultChannelHash((int)channelId, (int)mapContextId, 0);
+
+            if (!ChannelsBySeed.TryGetValue(cHash, out var chatChannel))
             {
-                // channel does not exist, create it
-                chatChannel = new ChatChannel();
+                chatChannel = new ChatChannel
+                {
+                    InstanceId = 0,
+                    ChannelId = channelId,
+                    MapContextId = mapContextId,
+                    IsDefaultChannel = true
+                };
                 chatChannel.Name[0] = '\0';
-                chatChannel.InstanceId = 0;
-                chatChannel.ChannelId = channelId;
-                chatChannel.MapContextId = client.Player.MapChannel.MapInfo.MapContextId;
-                chatChannel.IsDefaultChannel = true;
-                chatChannel.FirstPlayer = null;
-                // register it
+
                 ChannelsBySeed.Add(cHash, chatChannel);
             }
-            // add channel entry to player
+
             client.Player.ChannelHashes[client.Player.JoinedChannels] = cHash;
             client.Player.JoinedChannels++;
-            // add client to channel
+
             AddClientToChannel(client, cHash);
-            client.CallMethod(SysEntity.CommunicatorId, new ChatChannelJoinedPacket(channelId, client.Player.MapChannel.MapInfo.MapContextId, client.Player.EntityId));
+
+            client.CallMethod(SysEntity.CommunicatorId,
+                new ChatChannelJoinedPacket(channelId, mapContextId, client.Player.EntityId));
         }
 
         public void LoginOk(Client client)
@@ -427,7 +491,11 @@ namespace Rasa.Managers
 
         public void PlayerEnterMap(Client client)
         {
-            JoinDefaultLocalChannel(client, 1); // join general
+            foreach (var channelId in GlobalChannels)
+                JoinGlobalChannel(client, channelId);
+
+            foreach (var channelId in MapChannels)
+                JoinDefaultLocalChannel(client, channelId);
 
             SocialManager.Instance.FriendLoggedIn(client);
         }
@@ -451,38 +519,9 @@ namespace Rasa.Managers
         /// </summary>
         public void LeaveMapChannels(Client client)
         {
-            // remove client from all channels
             for (var i = 0; i < client.Player.JoinedChannels; i++)
-            {
-                var chatChannel = ChannelsBySeed[client.Player.ChannelHashes[i]];
-                if (chatChannel != null)
-                {
-                    // remove client link from channel
-                    var currentLink = chatChannel.FirstPlayer;
-                    while (currentLink != null)
-                    {
-                        if (currentLink.EntityId == client.Player.EntityId)
-                        {
-                            // do removing
-                            if (currentLink.Previous == null)
-                            {
-                                chatChannel.FirstPlayer = currentLink.Next;
-                                if (currentLink.Next != null)
-                                    currentLink.Next.Previous = null;
-                            }
-                            else
-                            {
-                                currentLink.Previous.Next = currentLink.Next;
-                                if (currentLink.Next != null)
-                                    currentLink.Next.Previous = currentLink.Previous;
-                            }
-                            break;
-                        }
-                        // next
-                        currentLink = currentLink.Next;
-                    }
-                }
-            }
+                if (ChannelsBySeed.TryGetValue(client.Player.ChannelHashes[i], out var chatChannel))
+                    chatChannel.Players.Remove(client.Player.EntityId);
 
             client.Player.JoinedChannels = 0;
         }

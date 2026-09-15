@@ -118,10 +118,16 @@ namespace Rasa.Managers
             if (packet.SrcSlot == packet.DestSlot)
                 return;
 
-            if (packet.SrcSlot < 0 || packet.SrcSlot >= 480)
+            if (packet.SrcSlot < 0 || packet.SrcSlot >= LockboxTab.TotalSlots)
                 return;
 
-            if (packet.DestSlot < 0 || packet.DestSlot >= 480)
+            if (packet.DestSlot < 0 || packet.DestSlot >= LockboxTab.TotalSlots)
+                return;
+
+            // The source may sit in a tab that is no longer unlocked - nothing takes items out of
+            // a tab, so moving them down out of one has to keep working. Only the destination is
+            // gated.
+            if (!HomeSlotIsUnlocked(client, packet.DestSlot))
                 return;
 
             var entityId = client.Player.Inventory.HomeInventory[(int)packet.SrcSlot];
@@ -135,6 +141,25 @@ namespace Rasa.Managers
                 AddItemBySlot(client, InventoryType.HomeInventory, client.Player.Inventory.HomeInventory[(int)packet.DestSlot], packet.SrcSlot, true);
 
             AddItemBySlot(client, InventoryType.HomeInventory, entityId, packet.DestSlot, true);
+        }
+
+        /// <summary>
+        /// Whether the character may put something in that home inventory slot. All 480 slots were
+        /// addressable whatever the player had paid for, so the tabs bought nothing at all: the
+        /// client hides the locked ones and the server believed whatever slot arrived.
+        /// The client never sends one of these - it resolves the slot inside the tab itself and
+        /// answers PmYourFootlockerIsFull when it cannot - so a refusal here is logged, not
+        /// explained.
+        /// </summary>
+        private static bool HomeSlotIsUnlocked(Client client, uint slot)
+        {
+            var unlocked = LockboxTab.UnlockedSlots(client.Player.LockboxTabs);
+
+            if (slot < unlocked)
+                return true;
+
+            Logger.WriteLog(LogType.Security, $"{client.AccountEntry.FamilyName} tried home inventory slot {slot} holding {client.Player.LockboxTabs} lockbox tab(s) ({unlocked} slots).");
+            return false;
         }
 
         public void PersonalInventory_DestroyItem(Client client, PersonalInventory_DestroyItemPacket packet)
@@ -186,21 +211,43 @@ namespace Rasa.Managers
             AddItemBySlot(client, InventoryType.Personal, entityId, (uint)packet.DestSlot, true);
         }
 
+        /// <summary>
+        /// Unlocks the next home lockbox tab, at the price the client quoted for it.
+        ///
+        /// Everything here was taken on trust: the tab id went straight into the character's tab
+        /// count, the funds were checked only by the client, and the charge was
+        /// <c>LossCredits(client, 100000)</c> - which, before that method's sign meant anything,
+        /// *paid* the player. Tabs 2 to 5 handed out 100 K, 1 M, 10 M and 100 M credits, and the
+        /// client's own affordability check was the only thing standing in front of it.
+        /// </summary>
         public void PurchaseLockboxTab(Client client, PurchaseLockboxTabPacket packet)
         {
-            /* ToDo
-             * player credits are checked on client side
-             * should we add server side check too?
-             */
+            var owned = Math.Max(client.Player.LockboxTabs, LockboxTab.FreeTab);
 
-            if (packet.TabId == 2)  // price is 100 000
-                ManifestationManager.Instance.LossCredits(client, 100000);
-            if (packet.TabId == 3)  // price is 1 000 000
-                ManifestationManager.Instance.LossCredits(client, 1000000);
-            if (packet.TabId == 4)  // price is 10 000 000
-                ManifestationManager.Instance.LossCredits(client, 10000000);
-            if (packet.TabId == 5)  // price is 100 000 000
-                ManifestationManager.Instance.LossCredits(client, 100000000);
+            // Tabs are bought one at a time, in order, and never twice: the client's own
+            // LockboxTabCanBePurchased wants this tab locked and the one below it unlocked, so
+            // anything else is a client that has been made to say something it would not say.
+            // Without this, tab 5 could be bought for 100 M instead of the 111.1 M the four cost
+            // together - or a tab already owned re-bought, or a lower one set to lose the rest.
+            if (!LockboxTab.Exists(packet.TabId) || packet.TabId != owned + 1)
+            {
+                Logger.WriteLog(LogType.Security, $"{client.AccountEntry.FamilyName} asked to buy lockbox tab {packet.TabId} while holding {owned}.");
+                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmFootlockerPurchaseTabCannotBuy, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                return;
+            }
+
+            // Checked here as well as in LossCredits so the player is told why, rather than the
+            // purchase just not happening.
+            var price = LockboxTab.Price(packet.TabId);
+
+            if (client.Player.Credits[CurencyType.Credits] < price)
+            {
+                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmInsufficientFunds, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                return;
+            }
+
+            if (!ManifestationManager.Instance.LossCredits(client, price))
+                return;
 
             // update Player
             client.Player.LockboxTabs = packet.TabId;
@@ -382,7 +429,10 @@ namespace Rasa.Managers
             if (packet.SrcSlot < 0 || packet.SrcSlot >= 250)
                 return;
 
-            if (packet.DestSlot < 0 || packet.DestSlot >= 480)
+            if (packet.DestSlot < 0 || packet.DestSlot >= LockboxTab.TotalSlots)
+                return;
+
+            if (!HomeSlotIsUnlocked(client, packet.DestSlot))
                 return;
 
             var entityId = client.Player.Inventory.PersonalInventory[(int)packet.SrcSlot];
@@ -760,7 +810,11 @@ namespace Rasa.Managers
                 {
                     var deposit = client.Player.LockboxCredits + amount;
 
-                    ManifestationManager.Instance.LossCredits(client, -amount);
+                    // The lockbox is credited only if the purse was actually debited. The check
+                    // above already covers it, but the two halves are written separately here and
+                    // a lockbox that gains what nobody lost is credits made out of nothing.
+                    if (!ManifestationManager.Instance.LossCredits(client, amount))
+                        return;
 
                     client.CallMethod(client.Player.EntityId, new LockboxFundsPacket(deposit));
 
@@ -1418,7 +1472,7 @@ namespace Rasa.Managers
             for (uint i = 0; i < 22; i++)
                 client.Player.Inventory.EquippedInventory.Add(0);
 
-            for (uint i = 0; i < 480; i++)
+            for (uint i = 0; i < LockboxTab.TotalSlots; i++)
                 client.Player.Inventory.HomeInventory.Add(0);
 
             for (uint i = 0; i < 250; i++)

@@ -758,7 +758,11 @@ namespace Rasa.Managers
                 ClanName = clan?.Name,
                 GainedWaypoints = unitOfWork.CharacterTeleporters.Get(character.Id),
                 LockboxCredits = lockboxInfo?.Credits ?? 0,
-                LockboxTabs = lockboxInfo?.PurashedTabs ?? 0,
+                // Floored: the free tab is not bought, so a missing or zeroed lockbox row must
+                // not cost it. Sending 0 tells the client every tab is locked, including that
+                // one - and its own purchase check needs the tab below unlocked, so the player
+                // would have had no lockbox at all and no way to buy one.
+                LockboxTabs = Math.Max(lockboxInfo?.PurashedTabs ?? 0, LockboxTab.FreeTab),
                 Skills = MapChannelManager.Instance.GetPlayerSkills(character.Id),
                 Titles = unitOfWork.CharacterTitles.Get(character.Id),
                 Abilities = MapChannelManager.Instance.GetPlayerAbilities(character.Id),
@@ -768,6 +772,30 @@ namespace Rasa.Managers
             };
 
             return newCharacter;
+        }
+
+        /// <summary>
+        /// Applies a signed change to one of the player's balances and keeps it inside what the
+        /// column can hold: never below zero, never past int.MaxValue. A clamp firing means some
+        /// caller charged without checking funds first, so it is logged rather than swallowed.
+        /// </summary>
+        private static int ClampCurrency(Client client, CurencyType type, int change)
+        {
+            var balance = (long)client.Player.Credits[type] + change;
+
+            if (balance < 0)
+            {
+                Logger.WriteLog(LogType.Error, $"{client.Player.FamilyName}: {type} change of {change} would leave {balance}; clamped to 0.");
+                return 0;
+            }
+
+            if (balance > int.MaxValue)
+            {
+                Logger.WriteLog(LogType.Error, $"{client.Player.FamilyName}: {type} change of {change} would leave {balance}; clamped to {int.MaxValue}.");
+                return int.MaxValue;
+            }
+
+            return (int)balance;
         }
 
         public void UpdateCharacter(Client client, CharacterUpdate job, object value = null)
@@ -788,12 +816,13 @@ namespace Rasa.Managers
                     break;
 
                 case CharacterUpdate.Credits:
-                    var ammount = (int)value;
-
-                    if (ammount < 0)
-                        client.Player.Credits[CurencyType.Credits] -= Math.Abs(ammount);
-                    else
-                        client.Player.Credits[CurencyType.Credits] += ammount;
+                    // The value is a signed change, and it goes straight into the purse and the
+                    // row. Nothing used to stop it landing below zero, so a charge that skipped
+                    // its own funds check left the player in debt rather than being refused; the
+                    // sum is widened because two large gains in a row would otherwise wrap
+                    // negative and look exactly like that.
+                    client.Player.Credits[CurencyType.Credits] =
+                        ClampCurrency(client, CurencyType.Credits, (int)value);
 
                     // inform owner
                     client.CallMethod(client.Player.EntityId, new UpdateCreditsPacket(CurencyType.Credits, client.Player.Credits[CurencyType.Credits], 0));
@@ -848,11 +877,10 @@ namespace Rasa.Managers
                     break;
 
                 case CharacterUpdate.Prestige:
-                    // Same shape as Credits: value is the signed change. Prestige was loaded
-                    // into Player.Credits at login but never written back.
-                    var prestigeChange = (int)value;
-
-                    client.Player.Credits[CurencyType.Prestige] += prestigeChange;
+                    // Same shape as Credits: value is the signed change, clamped the same way.
+                    // Prestige was loaded into Player.Credits at login but never written back.
+                    client.Player.Credits[CurencyType.Prestige] =
+                        ClampCurrency(client, CurencyType.Prestige, (int)value);
 
                     client.CallMethod(client.Player.EntityId, new UpdateCreditsPacket(CurencyType.Prestige, client.Player.Credits[CurencyType.Prestige], 0));
                     unitOfWork.Characters.UpdateCharacterPrestige(client.Player.Id, client.Player.Credits[CurencyType.Prestige]);

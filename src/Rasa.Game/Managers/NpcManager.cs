@@ -507,7 +507,7 @@ namespace Rasa.Managers
             }
 
             // remove credits
-            ManifestationManager.Instance.LossCredits(client, -(int) price);
+            ManifestationManager.Instance.LossCredits(client, (int) price);
         }
 
         public void RequestVendorPurchase(Client client, RequestVendorPurchasePacket packet)
@@ -606,7 +606,7 @@ namespace Rasa.Managers
             client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmGotLootFromUnknown, new Dictionary<string, string> { { "quantity", quantity.ToString() }, { "loot", vendorItem.ItemTemplate.Class.ToString() } }, MsgFilterId.LootObtained));
 
             // remove credits
-            ManifestationManager.Instance.LossCredits(client, -(int) total);
+            ManifestationManager.Instance.LossCredits(client, (int) total);
         }
 
         /// <summary>
@@ -716,7 +716,7 @@ namespace Rasa.Managers
             }
 
             item.CurrentHitPoints = maxHitPoints;
-            ManifestationManager.Instance.LossCredits(client, -cost);
+            ManifestationManager.Instance.LossCredits(client, cost);
             ItemManager.Instance.SendItemDataToClient(client, item, true);
 
             // The condition change itself. SendItemDataToClient carries the new hit points in

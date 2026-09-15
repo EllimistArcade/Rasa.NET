@@ -335,7 +335,12 @@ namespace Rasa.Managers
                 return;
             }
 
-            ManifestationManager.Instance.GainCredits(target, amount);
+            // The command takes a signed amount; the two primitives do not. Positive is a gain,
+            // negative is a charge of that size, already clamped to what they have above.
+            if (amount > 0)
+                ManifestationManager.Instance.GainCredits(target, amount);
+            else
+                ManifestationManager.Instance.LossCredits(target, -amount);
 
             var after = target.Player.Credits[CurencyType.Credits];
             var who = target == _client ? "You" : target.Player.FamilyName;

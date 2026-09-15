@@ -674,16 +674,51 @@ namespace Rasa.Managers
             PartyManager.Instance.MemberInfoChanged(client);
         }
 
+        /// <summary>
+        /// Puts <paramref name="credits"/> into the player's purse and tells them they received it.
+        /// The amount is positive and is added.
+        /// </summary>
+        /// <remarks>
+        /// These two were the same unsigned update under different names - neither looked at the
+        /// sign, so the direction was decided entirely at the call site and every charge had to
+        /// remember to negate. <see cref="InventoryManager.PurchaseLockboxTab"/> believed the name
+        /// instead, so the four lockbox tabs paid the player 100 K to 100 M credits each.
+        /// The names mean what they say now, and the sign is not the caller's to choose.
+        /// </remarks>
         public void GainCredits(Client client, int credits)
         {
+            if (credits <= 0)
+            {
+                Logger.WriteLog(LogType.Error, $"GainCredits({credits}) for {client.Player?.FamilyName}: credits are gained in positive amounts. Nothing moved.");
+                return;
+            }
+
             CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Credits, credits);
             // send player message
             client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmGotMoneyLootFromUnknown, new Dictionary<string, string> { { "amount", credits.ToString() } }, MsgFilterId.LootObtained));
         }
 
-        public void LossCredits(Client client, int credits)
+        /// <summary>
+        /// Takes <paramref name="credits"/> out of the player's purse. The amount is positive and
+        /// is subtracted. Returns false, having moved nothing, if they cannot pay - so a caller
+        /// that forgets its own funds check refuses the purchase rather than running up a debt.
+        /// </summary>
+        public bool LossCredits(Client client, int credits)
         {
-            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Credits, credits);
+            if (credits < 0)
+            {
+                Logger.WriteLog(LogType.Error, $"LossCredits({credits}) for {client.Player?.FamilyName}: charges are positive amounts. Nothing moved.");
+                return false;
+            }
+
+            if (credits == 0)
+                return true;
+
+            if (client.Player.Credits[CurencyType.Credits] < credits)
+                return false;
+
+            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Credits, -credits);
+            return true;
         }
 
         public int GetAvailableAttributePoints(Manifestation player)

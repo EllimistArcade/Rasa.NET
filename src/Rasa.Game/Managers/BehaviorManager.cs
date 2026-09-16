@@ -42,6 +42,12 @@ namespace Rasa.Managers
         public const byte BehaviorActionWander = 3;
         public const byte BehaviorActionPatrol = 4;
 
+        /// <summary>
+        /// Trailing a master, or holding an anchor point. Only minions are ever in this state;
+        /// an ordinary creature has a spawn point to wander around instead.
+        /// </summary>
+        public const byte BehaviorActionFollow = 5;
+
         public const byte WanderIdle = 0;
         public const byte WanderMoving = 1;
 
@@ -256,7 +262,7 @@ namespace Rasa.Managers
             if (creature.Controller.CurrentAction == BehaviorActionWander)
             {
                 // scan for enemy
-                if (creature.LastAgression >= AggroScanDelayMs)
+                if (creature.LastAgression >= AggroScanDelayMs && ScansForEnemies(creature))
                     if (CheckForAttackableEntityInRange(mapChannel, creature, creature.AggroRange))
                     {
                         // enemy found!
@@ -306,11 +312,79 @@ namespace Rasa.Managers
                     }
                 }
             }
+            else if (creature.Controller.CurrentAction == BehaviorActionFollow)
+            {
+                // A minion, either trailing someone or holding an anchor point.
+                if (ScansForEnemies(creature) && creature.LastAgression >= AggroScanDelayMs)
+                    if (CheckForAttackableEntityInRange(mapChannel, creature, creature.AggroRange))
+                        return;
+
+                // Assist: copy whatever the assisted player is shooting at. "For subordinates that
+                // are primarily offensive, assist mode will automatically issue a Target command
+                // whenever the player attacks an enemy so that the subordinate is targeting the
+                // same enemy."
+                if (creature.Controller.ActionFollow.AssistTargetId != 0 && creature.Stance != MinionStance.Passive)
+                {
+                    var assisted = EntityManager.Instance.GetActor(creature.Controller.ActionFollow.AssistTargetId);
+
+                    if (assisted != null && assisted.Target != 0 && assisted.Target != creature.EntityId)
+                    {
+                        creature.Target = assisted.Target;
+                        SetActionFighting(creature, assisted.Target);
+                        return;
+                    }
+                }
+
+                var destination = creature.Controller.ActionFollow.Anchor;
+
+                if (!creature.Controller.ActionFollow.HasAnchor)
+                {
+                    var followed = EntityManager.Instance.GetActor(creature.Controller.ActionFollow.FollowTargetId);
+
+                    // Nothing left to follow - the master logged out, or the followed player has
+                    // gone. Stand still rather than walking to the origin; MinionManager's worker
+                    // is what decides whether this minion should still exist at all.
+                    if (followed == null)
+                        return;
+
+                    destination = followed.Position;
+                }
+
+                var gap = Vector3.Distance(creature.Position, destination);
+
+                if (gap <= MinionManager.FollowDistance)
+                {
+                    creature.Controller.Path.Clear();
+                    creature.Controller.PathIndex = 0;
+                    return;
+                }
+
+                // A followed player moves, so the path goes stale. Rebuild it on a timer rather
+                // than every frame, the same way chasing does.
+                creature.Controller.ActionFollow.PathUpdateTime -= delta;
+
+                if (creature.Controller.ActionFollow.PathUpdateTime <= 0)
+                {
+                    creature.Controller.ActionFollow.PathUpdateTime = ChasePathUpdateMs;
+
+                    if (creature.Controller.Path.Count == 0 || !creature.Controller.ActionFollow.HasAnchor)
+                    {
+                        creature.Controller.Path.Clear();
+                        creature.Controller.PathIndex = 0;
+                        BuildPath(mapChannel, creature, destination);
+                    }
+                }
+
+                // Run when it has fallen a long way behind, walk when it is just catching up.
+                var speed = gap > MinionManager.MaxFollowTargetDistance ? creature.RunSpeed : creature.WalkSpeed;
+
+                FollowPath(mapChannel, creature, speed, delta);
+            }
             else if (creature.Controller.CurrentAction == BehaviorActionFollowingPath)
             {
                 // following predefined path (long path)
                 // scan for enemy
-                if (CheckForAttackableEntityInRange(mapChannel, creature, creature.AggroRange))
+                if (ScansForEnemies(creature) && CheckForAttackableEntityInRange(mapChannel, creature, creature.AggroRange))
                 {
                     // enemy found!
                     return;
@@ -735,6 +809,12 @@ namespace Rasa.Managers
         
         public void SetActionFighting(Creature creature, ulong targetEntityId)
         {
+            // A passive minion does not fight, and this is the one place worth saying so: it
+            // covers both the aggro scan and being shot at (MissileManager calls straight in
+            // here), so there is no second path where passive quietly stops meaning passive.
+            if (creature.MasterEntityId != 0 && creature.Stance == MinionStance.Passive)
+                return;
+
             creature.Controller.CurrentAction = BehaviorActionFighting;
             // Whatever the creature was walking towards is not where the fight is: without this
             // it chased its last wander node before ever heading for its target.
@@ -764,6 +844,44 @@ namespace Rasa.Managers
             creature.Controller.ActionWander.State = WanderIdle;
             creature.Controller.Path.Clear();
             creature.Controller.PathIndex = 0;
+        }
+
+        /// <summary>
+        /// Trails an entity - normally the minion's master, or another player after a Follow
+        /// Target order. Clears any anchor, which is what Follow Me is for.
+        /// </summary>
+        public void SetActionFollow(Creature creature, ulong followTargetId)
+        {
+            creature.Controller.CurrentAction = BehaviorActionFollow;
+            creature.Controller.ActionFollow.FollowTargetId = followTargetId;
+            creature.Controller.ActionFollow.HasAnchor = false;
+            creature.Controller.ActionFollow.PathUpdateTime = 0;
+            creature.Controller.Path.Clear();
+            creature.Controller.PathIndex = 0;
+        }
+
+        /// <summary>
+        /// Plants the minion at a spot and leaves it there: Go sets the picked location, Stay the
+        /// minion's own. It may still leave to act, and returns here when it is done.
+        /// </summary>
+        public void SetActionAnchor(Creature creature, Vector3 anchor)
+        {
+            creature.Controller.CurrentAction = BehaviorActionFollow;
+            creature.Controller.ActionFollow.HasAnchor = true;
+            creature.Controller.ActionFollow.Anchor = anchor;
+            creature.Controller.ActionFollow.PathUpdateTime = 0;
+            creature.Controller.Path.Clear();
+            creature.Controller.PathIndex = 0;
+        }
+
+        /// <summary>
+        /// Whether this creature goes looking for a fight. An ordinary creature always does; a
+        /// minion does only when its master has set it Aggressive. Defensive still fights back,
+        /// because retaliation comes through SetActionFighting rather than through a scan.
+        /// </summary>
+        private static bool ScansForEnemies(Creature creature)
+        {
+            return creature.MasterEntityId == 0 || creature.Stance == MinionStance.Aggressive;
         }
 
         private void UpdateCreatureTimers(Creature creature, long delta)

@@ -143,6 +143,7 @@ namespace Rasa.Managers
             RegisterCommand(".forcestate", GmLevel.GameMaster, ForceStateCommand);
             RegisterCommand(".heal", GmLevel.GameMaster, HealCommand);
             RegisterCommand(".link", GmLevel.GameMaster, LinkCommand);
+            RegisterCommand(".minion", GmLevel.GameMaster, MinionCommand);
             RegisterCommand(".linkhere", GmLevel.GameMaster, LinkHereCommand);
             RegisterCommand(".kraftwerks", GmLevel.GameMaster, KraftwerksCommand);
             RegisterCommand(".region", GmLevel.GameMaster, RegionCommand);
@@ -729,6 +730,83 @@ namespace Rasa.Managers
             }
 
             return;
+        }
+
+        /// <summary>
+        /// Spawns a creature and adopts it as the caller's minion, so the minion command system
+        /// can be exercised before there is an ability framework to summon one properly.
+        ///
+        /// The four bots the Engineer's Bot Construction ability builds are seeded at
+        /// 600001..600004 - Flame, Rocket, Shield, Repair - and any other creature dbId works
+        /// just as well; nothing here is specific to bots.
+        ///
+        /// This is a GM tool standing in for a game system, not the game system. It applies none
+        /// of the ability's rules: no pump level, no duration, no level scaling, and no
+        /// one-at-a-time limit, since that limit belongs to the ability rather than to the
+        /// command layer. <c>.minion</c> twice gives you two, and commands go to the newer.
+        /// </summary>
+        private void MinionCommand(string[] parts)
+        {
+            if (_client?.Player?.MapChannel == null)
+                return;
+
+            if (parts.Length < 2)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "usage: .minion <creatureDbId> | .minion list | .minion clear");
+                CommunicatorManager.Instance.SystemMessage(_client, "seeded bots: 600001 Flame, 600002 Rocket, 600003 Shield, 600004 Repair");
+                return;
+            }
+
+            switch (parts[1])
+            {
+                case "list":
+                {
+                    var minions = MinionManager.Instance.MinionsOf(_client);
+
+                    if (minions.Count == 0)
+                    {
+                        CommunicatorManager.Instance.SystemMessage(_client, "No minions.");
+                        return;
+                    }
+
+                    foreach (var minion in minions)
+                        CommunicatorManager.Instance.SystemMessage(_client,
+                            $"{minion.EntityId} {minion.Name} stance={minion.Stance} action={minion.Controller.CurrentAction} hp={minion.Attributes[Attributes.Health].Current}");
+
+                    return;
+                }
+
+                case "clear":
+                    MinionManager.Instance.DismissAll(_client);
+                    CommunicatorManager.Instance.SystemMessage(_client, "Minions dismissed.");
+                    return;
+            }
+
+            if (!uint.TryParse(parts[1], out var dbId))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "usage: .minion <creatureDbId> | .minion list | .minion clear");
+                return;
+            }
+
+            var creature = CreatureManager.Instance.CreateCreature(dbId, null);
+
+            if (creature == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"Creature with dbId={dbId} isn't in database");
+                return;
+            }
+
+            // On the player's side whatever the row says, or the thing they just summoned shoots
+            // them. The seeded bots are already AFS; this covers spawning anything else.
+            creature.Faction = Factions.AFS;
+
+            CreatureManager.Instance.SetLocation(creature, _client.Movement.Position, _client.Movement.ViewDirection.X, _client.Player.MapContextId);
+            CellManager.Instance.AddToWorld(_client.Player.MapChannel, creature);
+
+            MinionManager.Instance.Adopt(_client, creature);
+
+            CommunicatorManager.Instance.SystemMessage(_client,
+                $"Minion {creature.Name} spawned as EntityId {creature.EntityId}. Commands need the MinionCommands server flag.");
         }
 
         private void CreateObjectCommand(string[] parts)

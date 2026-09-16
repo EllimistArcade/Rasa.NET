@@ -87,6 +87,19 @@ namespace Rasa.Structures
         /// <summary>Set by RequestLogout, cleared by CancelLogoutRequest.</summary>
         public bool LogoutActive { get; set; }
 
+        /// <summary>
+        /// Whether this player is in a fight, as the server counts it: they have dealt or taken
+        /// damage within the last <see cref="Data.CombatRegen.CombatTimeoutMs"/>.
+        ///
+        /// Distinct from <c>InCombatMode</c> on Actor, which is the visual weapon stance the
+        /// client asks for with RequestVisualCombatMode and which says nothing about whether
+        /// anyone is actually fighting.
+        /// </summary>
+        public bool InCombat { get; set; }
+
+        /// <summary>Environment.TickCount64 at which combat lapses, refreshed by every hit.</summary>
+        public long CombatExpiresAt { get; set; }
+
         /// <summary>Environment.TickCount64 when the pending logout was requested.</summary>
         public long LogoutRequestedTick { get; set; }
         public bool RemoveFromMap { get; set; }

@@ -57,12 +57,36 @@ namespace Rasa.Managers
             return actor != null && actor.MapContextId == mapChannel.MapInfo.MapContextId;
         }
 
+        /// <summary>
+        /// Marks an actor as being in a fight, if it is a player. Creatures have their own notion
+        /// of it in BehaviorManager and are not touched here.
+        ///
+        /// Looked up through the actor's own map rather than Server.Clients: damage is a hot path
+        /// and one map's client list is a great deal shorter than every client on the server.
+        /// </summary>
+        private static void EnterCombat(Actor actor)
+        {
+            if (!(actor is Manifestation player) || player.MapChannel == null)
+                return;
+
+            foreach (var client in player.MapChannel.ClientList)
+                if (client.Player == player)
+                {
+                    ManifestationManager.Instance.EnterCombat(client);
+                    return;
+                }
+        }
+
         private void DoDamageToCreature(MapChannel mapChannel, Missile missile)
         {
             var creature = EntityManager.Instance.GetCreature(missile.TargetEntityId);
 
             if (creature.State == CharacterState.Dead)
                 return;
+
+            // Shooting something is being in a fight, not only being shot at - otherwise a player
+            // who opens fire and wins never enters combat at all.
+            EnterCombat(missile.Source);
 
             // decrease armor first
             var armorDecrease = Math.Min(missile.DamageA, creature.Attributes[Attributes.Armor].Current);
@@ -99,9 +123,13 @@ namespace Rasa.Managers
         private void DoDamageToPlayer(MapChannel mapChannel, Missile missile)
         {
             var actor = EntityManager.Instance.GetActor(missile.TargetEntityId);
-            
+
             if (actor.State == CharacterState.Dead)
                 return;
+
+            // Both ends: whoever was hit, and whoever hit them if that was a player too.
+            EnterCombat(actor);
+            EnterCombat(missile.Source);
 
             // decrease armor first
             var armorDecrease = Math.Min(missile.DamageA, actor.Attributes[Attributes.Armor].Current);

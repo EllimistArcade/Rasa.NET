@@ -371,6 +371,95 @@ namespace Rasa.Managers
             return 100.0 * item.CurrentHitPoints / max;
         }
 
+        // ------------------------------------------------------------------ combat state
+
+        /// <summary>
+        /// Puts the player in combat, or extends the time they stay there. Called from both ends
+        /// of a damage event - dealing it and taking it - because either is being in a fight.
+        /// </summary>
+        public void EnterCombat(Client client)
+        {
+            if (client?.Player == null || client.State != ClientState.Ingame)
+                return;
+
+            client.Player.CombatExpiresAt = Environment.TickCount64 + CombatRegen.CombatTimeoutMs;
+
+            if (client.Player.InCombat)
+                return;
+
+            client.Player.InCombat = true;
+
+            ApplyRegenPeriod(client.Player);
+
+            client.CallMethod(client.Player.EntityId, new PlayerEnteredCombatPacket());
+
+            // The rate change is not in that packet - it carries nothing - so the attributes go
+            // too. AttributeInfo rather than UpdateAttributes because only AttributeInfo carries
+            // refreshPeriod, which is the field the modifier moves.
+            client.CallMethod(client.Player.EntityId, new AttributeInfoPacket(client.Player.Attributes));
+        }
+
+        /// <summary>Takes the player out of combat and restores their regeneration.</summary>
+        public void ExitCombat(Client client)
+        {
+            if (client?.Player == null || !client.Player.InCombat)
+                return;
+
+            client.Player.InCombat = false;
+            client.Player.CombatExpiresAt = 0;
+
+            ApplyRegenPeriod(client.Player);
+
+            if (client.State != ClientState.Ingame)
+                return;
+
+            client.CallMethod(client.Player.EntityId, new PlayerExitedCombatPacket());
+            client.CallMethod(client.Player.EntityId, new AttributeInfoPacket(client.Player.Attributes));
+        }
+
+        /// <summary>
+        /// Sets the health and armour refresh periods for the player's current combat state.
+        ///
+        /// The period rather than the amount, because both are integers on the wire and a base
+        /// amount of 2 scaled by 0.2 truncates to nothing. See <see cref="CombatRegen"/>.
+        ///
+        /// This is the only place either period is set, including the out-of-combat value, so
+        /// that there is one answer to what the period is rather than two that have to agree. It
+        /// is called at the end of UpdateStatsValues for that reason and for a second one:
+        /// UpdateStatsValues recomputes the rates from scratch, so without it, changing a piece
+        /// of armour mid-fight would quietly restore full regeneration.
+        ///
+        /// A period of zero would stop regeneration entirely - the client's
+        /// _EvaluatePredictedRefresh returns early on one - so neither branch may yield it.
+        /// </summary>
+        public void ApplyRegenPeriod(Manifestation player)
+        {
+            if (player == null)
+                return;
+
+            var period = player.InCombat
+                ? CombatRegen.InCombatRegenPeriodSeconds
+                : CombatRegen.RegenPeriodSeconds;
+
+            player.Attributes[Attributes.Health].RefreshPeriod = period;
+            player.Attributes[Attributes.Armor].RefreshPeriod = period;
+        }
+
+        /// <summary>Drops players out of combat once their timer has run out.</summary>
+        public void CombatWorker(MapChannel mapChannel)
+        {
+            var now = Environment.TickCount64;
+
+            foreach (var client in mapChannel.ClientList)
+            {
+                if (client?.Player == null || !client.Player.InCombat)
+                    continue;
+
+                if (now >= client.Player.CombatExpiresAt)
+                    ExitCombat(client);
+            }
+        }
+
         public void RequestArmAbility(Client client, int abilityDrawerSlot)
         {
             client.Player.CurrentAbilityDrawer = abilityDrawerSlot;
@@ -1592,7 +1681,14 @@ namespace Rasa.Managers
             // update regen rate: 2.0 per second at 100% regen, scaled by the rate as a
             // percentage. CurrentMax / 100 was int division, so any rate below 200% rounded
             // to the base 2 and the rate only mattered in whole multiples of 100.
-            attribute[Attributes.Regen].RefreshAmount = (int)Math.Round(2D * attribute[Attributes.Regen].CurrentMax / 100, 0);
+            //
+            // It goes on Health, not on Regen. Regen is a derived stat the attributes window
+            // displays; nothing regenerates from it. The client heals from Health's own
+            // refreshAmount and refreshPeriod, and Manifestation initialises both to 0, so
+            // computing the rate and storing it on the wrong attribute meant no player has ever
+            // regenerated health at all. The period has to be non-zero as well:
+            // _EvaluatePredictedRefresh returns early on a period of 0.
+            attribute[Attributes.Health].RefreshAmount = (int)Math.Round(2D * attribute[Attributes.Regen].CurrentMax / 100, 0);
             // 2.0 per second is the base regeneration for health
             // calculate armor max
             var armorMax = 0.0d;
@@ -1630,7 +1726,12 @@ namespace Rasa.Managers
                 // what about damage absorbed? Was it used at all?
             }
             armorMax = armorMax * (1.0d + armorBonusPct);
-            attribute[Attributes.Armor].Current = armorRegenRate;
+
+            // The regen rate summed off the equipped armour goes on RefreshAmount. It used to be
+            // assigned to Current, which the fullreset branch a few lines below overwrites
+            // unconditionally - so it was computed, discarded, and armour never regenerated
+            // either.
+            attribute[Attributes.Armor].RefreshAmount = armorRegenRate;
             attribute[Attributes.Armor].NormalMax = (int)Math.Round(armorMax, 0);
             attribute[Attributes.Armor].CurrentMax = attribute[Attributes.Armor].NormalMax;
             if (fullreset)
@@ -1646,6 +1747,10 @@ namespace Rasa.Managers
                 attribute[Attributes.Power].Current = attribute[Attributes.Power].CurrentMax;
             else
                 attribute[Attributes.Power].Current = Math.Min(attribute[Attributes.Power].Current, attribute[Attributes.Power].CurrentMax);
+
+            // The rates above are the out-of-combat ones. A player recomputing their stats while
+            // in a fight - equipping something, levelling - keeps the penalty.
+            ApplyRegenPeriod(player);
         }
 
         public void WeaponReady(Client client, bool isReady)

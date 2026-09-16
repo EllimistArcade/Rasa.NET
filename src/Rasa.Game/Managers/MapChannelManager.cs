@@ -202,6 +202,9 @@ namespace Rasa.Managers
                     // despawn timers, and minions whose master has gone
                     MinionManager.Instance.Worker(mapChannel, delta);
 
+                    // players whose combat timer has run out
+                    ManifestationManager.Instance.CombatWorker(mapChannel);
+
                     // CellManager worker
                     if (Timer.IsTriggered("CellUpdateVisibility"))
                         CellManager.Instance.DoWork(mapChannel);

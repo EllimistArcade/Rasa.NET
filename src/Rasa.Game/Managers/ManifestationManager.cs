@@ -208,12 +208,21 @@ namespace Rasa.Managers
             if (client.Player == null || client.State != ClientState.Ingame)
                 return false;
 
+            var weapon = InventoryManager.Instance.CurrentWeapon(client);
+
+            // Nothing in hand fires nothing. Tested before the draw below, because an empty
+            // hand and a stowed weapon look the same from WeaponReady: arming an empty drawer
+            // slot clears both the weapon and WeaponReady, so a player still holding the
+            // trigger reached the draw with no weapon to describe it, and the auto-fire list
+            // is walked at the top of the map channel worker - the dereference took the whole
+            // tick with it, on every map, for as long as the client kept the fire alive.
+            if (weapon == null)
+                return false;
+
             // A jammed weapon does nothing until it is reloaded. Checked before WeaponReady so
             // that a jam does not get mistaken for a weapon that is merely stowed and silently
             // drawn instead.
-            var armed = InventoryManager.Instance.CurrentWeapon(client);
-
-            if (armed != null && armed.IsJammed)
+            if (weapon.IsJammed)
             {
                 // Once per trigger pull would be once per tick while auto-fire is held, so the
                 // message is not repeated - the client already showed it when the jam arrived,
@@ -227,11 +236,6 @@ namespace Rasa.Managers
                 RequestWeaponDraw(client);
                 return false;
             }
-
-            var weapon = InventoryManager.Instance.CurrentWeapon(client);
-
-            if (weapon == null)
-                return false;
 
             var weaponClassInfo = EntityClassManager.Instance.GetWeaponClassInfo(weapon);
 
@@ -753,7 +757,15 @@ namespace Rasa.Managers
                 // we dont want to server keep fireing if client crash 
                 timer.MaxAliveTime -= delta;
 
-                if (timer.MaxAliveTime <= 0 || timer.Client.Player == null || timer.Client.State != ClientState.Ingame)
+                // Nothing in hand ends the fire here rather than in each of the several places
+                // that can empty it - arming an empty drawer slot, moving the weapon out of the
+                // armed slot, dropping or selling it. The trigger is still held, but there is no
+                // longer a weapon to pull it on, and a timer kept for one cannot be fired
+                // without asking what it is.
+                if (timer.MaxAliveTime <= 0
+                    || timer.Client.Player == null
+                    || timer.Client.State != ClientState.Ingame
+                    || InventoryManager.Instance.CurrentWeapon(timer.Client) == null)
                 {
                     AutoFire.RemoveAt(i);
                     continue;
@@ -763,7 +775,25 @@ namespace Rasa.Managers
 
                 if (timer.Delay <= 0)
                 {
-                    PlayerTryFireWeapon(timer.Client);
+                    // This list is walked at the top of the map channel worker, before any map
+                    // is touched. A shot that throws used to abandon the whole tick - every
+                    // map's queued actions, missiles, creature behaviour and visibility - and
+                    // the delay below never being reached meant the same client threw again on
+                    // the very next tick, so one player could hold the world still. The timer
+                    // that could not be fired is dropped instead, and costs only itself.
+                    try
+                    {
+                        PlayerTryFireWeapon(timer.Client);
+                    }
+                    catch (Exception e)
+                    {
+                        AutoFire.RemoveAt(i);
+
+                        Logger.WriteLog(LogType.Error, $"Auto-fire for entity {timer.Client.Player?.EntityId} threw and was stopped: {e}");
+
+                        continue;
+                    }
+
                     timer.Delay = timer.RefireTime;
                 }
             }
@@ -1349,12 +1379,24 @@ namespace Rasa.Managers
             PartyManager.Instance.MemberInfoChanged(client);
         }
 
+        /// <summary>
+        /// Also a handler: the client asks to draw, and can ask with an empty weapon drawer
+        /// slot armed. There is then no weapon to name a draw animation, so there is nothing
+        /// to perform and nothing to be ready with.
+        /// </summary>
         public void RequestWeaponDraw(Client client)
         {
-            var weapon = InventoryManager.Instance.CurrentWeapon(client);
-            var weaponClassInfo = EntityClassManager.Instance.GetWeaponClassInfo(weapon);
+            var mapChannel = client.Player?.MapChannel;
 
-            client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponDraw, weaponClassInfo.DrawActionId, 500));
+            if (mapChannel == null)
+                return;
+
+            var weaponClassInfo = EntityClassManager.Instance.GetWeaponClassInfo(InventoryManager.Instance.CurrentWeapon(client));
+
+            if (weaponClassInfo == null)
+                return;
+
+            mapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponDraw, weaponClassInfo.DrawActionId, 500));
 
             WeaponReady(client, true);
         }
@@ -1464,12 +1506,22 @@ namespace Rasa.Managers
             client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponReload, (uint)weaponClassInfo.ReloadActionId, foundAmmo, weapon.ItemTemplate.WeaponInfo.ReloadTime));
         }
 
+        /// <summary>
+        /// Also a handler, and reachable with an empty weapon drawer slot armed, same as
+        /// RequestWeaponDraw. An empty hand is already stowed: there is no animation to
+        /// perform, but the flag is still cleared, because that is the truth either way.
+        /// </summary>
         public void RequestWeaponStow(Client client)
         {
-            var weapon = InventoryManager.Instance.CurrentWeapon(client);
-            var weaponClassInfo = EntityClassManager.Instance.GetWeaponClassInfo(weapon);
+            var mapChannel = client.Player?.MapChannel;
 
-            client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponStow, (uint)weaponClassInfo.StowActionId, 500));
+            if (mapChannel == null)
+                return;
+
+            var weaponClassInfo = EntityClassManager.Instance.GetWeaponClassInfo(InventoryManager.Instance.CurrentWeapon(client));
+
+            if (weaponClassInfo != null)
+                mapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponStow, (uint)weaponClassInfo.StowActionId, 500));
 
             WeaponReady(client, false);
         }

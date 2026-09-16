@@ -120,9 +120,23 @@ namespace Rasa.Managers
             return LoadedEntityClasses[item.ItemTemplate.Class].ItemClassInfo;
         }
 
+        /// <summary>
+        /// The weapon class of an item, or null for no item and for a class that was never
+        /// loaded. Every live caller already tests the result for null, and used to get a
+        /// NullReferenceException or a KeyNotFoundException in place of that null - thrown on
+        /// the world loop, where it costs the tick rather than the shot.
+        /// </summary>
         public WeaponClassInfo GetWeaponClassInfo(Item weapon)
         {
-            return LoadedEntityClasses[weapon.ItemTemplate.Class].WeaponClassInfo;
+            if (weapon?.ItemTemplate == null)
+                return null;
+
+            if (LoadedEntityClasses.TryGetValue(weapon.ItemTemplate.Class, out var entityClass))
+                return entityClass.WeaponClassInfo;
+
+            Logger.WriteLog(LogType.Error, $"entityClassId  {weapon.ItemTemplate.Class} is not present in LoadedEntityClasses");
+
+            return null;
         }
     }
 }

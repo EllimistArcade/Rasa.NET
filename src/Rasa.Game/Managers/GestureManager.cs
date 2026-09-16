@@ -160,8 +160,8 @@ namespace Rasa.Managers
         /// <summary>CellManager.CellCallMethod without the actor's own client.</summary>
         private static void SendToOthers(MapChannel mapChannel, Actor actor, PythonPacket packet)
         {
-            foreach (var cellSeed in actor.Cells)
-                foreach (var client in mapChannel.MapCellInfo.Cells[cellSeed].ClientList)
+            foreach (var cell in CellManager.CellsIn(mapChannel, actor.Cells))
+                foreach (var client in cell.ClientList)
                     if (client.Player != actor)
                         client.CallMethod(actor.EntityId, packet);
         }

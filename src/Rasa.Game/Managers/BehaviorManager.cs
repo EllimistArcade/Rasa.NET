@@ -108,9 +108,9 @@ namespace Rasa.Managers
             // AFS do not attack AFS
             var attacksPlayers = creature.Faction != Factions.AFS;
 
-            foreach (var cellSeed in creature.Cells)
+            foreach (var cell in CellManager.CellsIn(mapChannel, creature.Cells))
             {
-                foreach (var client in mapChannel.MapCellInfo.Cells[cellSeed].ClientList)
+                foreach (var client in cell.ClientList)
                 {
                     // Cell lists can hold a client whose character is already gone.
                     if (!attacksPlayers || client.Player == null)
@@ -136,7 +136,7 @@ namespace Rasa.Managers
                     }
                 }
 
-                foreach (var tCreature in mapChannel.MapCellInfo.Cells[cellSeed].CreatureList)
+                foreach (var tCreature in cell.CreatureList)
                 {
                     if (tCreature.Attributes[Attributes.Health].Current <= 0)
                         continue;

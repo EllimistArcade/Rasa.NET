@@ -70,7 +70,11 @@ namespace Rasa.Managers
                 if (client.Player.Disconected || client.Player == null || client.State == ClientState.Loading)
                     continue;
 
-                var cell = mapChannel.MapCellInfo.Cells[client.Player.Cells[2, 2]];
+                // A matrix that names no cell of this map is a player who is not standing in it
+                // yet, not a reason to throw out of the worker and cost every map after this one
+                // its tick.
+                if (!mapChannel.MapCellInfo.Cells.TryGetValue(client.Player.Cells[2, 2], out var cell))
+                    continue;
 
                 foreach (var mapTrigger in cell.MapTriggers)
                 {

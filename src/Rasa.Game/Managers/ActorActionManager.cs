@@ -80,10 +80,28 @@ namespace Rasa.Managers
 
                     if (action.WaitTime <= action.PassedTime)
                     {
-                        // perform action
-                        PerformRecovery(mapChannel, action);
-                        // remove action
+                        // Off the list first, then performed.
+                        //
+                        // A recovery that threw used to leave its action where it was: the list
+                        // is walked again on the very next tick, the same action is still first
+                        // in line and still due, so it throws again - and again - while the
+                        // exception escaping here abandons the rest of this map's worker and
+                        // every map iterated after it. One action that cannot be performed cost
+                        // the world its simulation from then until a restart.
+                        //
+                        // Nothing ever re-queues an action, so taking it off before performing it
+                        // loses nothing, and a recovery that fails now costs only itself.
                         mapChannel.PerformRecovery.Remove(action);
+
+                        try
+                        {
+                            PerformRecovery(mapChannel, action);
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.WriteLog(LogType.Error,
+                                $"Recovery {action.ActionId}/{action.ActionArgId} for entity {action.Actor?.EntityId} on map {mapChannel.MapInfo.MapContextId} threw and was dropped: {e}");
+                        }
                     }
                 }
             }

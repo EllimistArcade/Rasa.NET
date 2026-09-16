@@ -125,8 +125,8 @@ namespace Rasa.Managers
             Client client = null;
 
             // get client if it's killed by player
-            foreach (var cellSeed in killedBy.Cells)
-                foreach (var tempClient in mapChannel.MapCellInfo.Cells[cellSeed].ClientList)
+            foreach (var cell in CellManager.CellsIn(mapChannel, killedBy.Cells))
+                foreach (var tempClient in cell.ClientList)
                     if (tempClient.Player == killedBy)
                     {
                         client = tempClient;

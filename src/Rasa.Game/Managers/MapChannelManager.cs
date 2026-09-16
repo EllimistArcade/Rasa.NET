@@ -389,6 +389,13 @@ namespace Rasa.Managers
             // managers that track it, and the old ClientList.
             RemovePlayer(client, false);
 
+            // The old map's cells go with the old map. RemovePlayer takes the player out of
+            // them but leaves the matrix naming them, and the next line points the player at a
+            // map that has no such cells - so anything broadcast over the matrix in between was
+            // indexing the new map's table with the old map's seeds. AddToWorld builds a fresh
+            // one when the client answers with MapLoaded.
+            client.Player.Cells = new uint[5, 5];
+
             // What MapLoaded reads back when the client is ready: the map channel it adds the
             // player to, and the position the cell matrix is built from.
             client.Player.MapChannel = mapChannel;

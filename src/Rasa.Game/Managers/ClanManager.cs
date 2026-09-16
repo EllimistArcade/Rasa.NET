@@ -412,43 +412,55 @@ namespace Rasa.Managers
             if (packet == null)
                 throw new ArgumentNullException(nameof(packet));
 
-            ClanMemberEntry member = GetClanMember(client.Player.ClanId, client.Player.Id);
-            ClanMemberEntry memberToBeKicked = GetClanMember(packet.ClanId, packet.CharacterId);
+            if (!TryResolveRankChange(client, packet.ClanId, packet.CharacterId, out var member, out var memberToBeKicked))
+                return;
+
+            // The leader and the rank below them can kick - but only somebody below themselves.
+            // The rank of the one being kicked was never looked at, so an officer could kick the
+            // leader and leave the clan with none.
+            if (member.Rank < ClanRank.Leader - 1 || memberToBeKicked.Rank >= member.Rank)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
+                return;
+            }
+
             ClanEntry clan = GetClan(member.ClanId);
+
+            if (clan == null)
+                return;
+
+            // Built after the checks, not before them: it reads the target's character and
+            // account rows, which for an id that named nobody dereferenced the null it got back.
             ClanMemberData memberToBeKickedData = CreateClanMemberData(new ClanData(clan), memberToBeKicked.CharacterId, memberToBeKicked.Rank, memberToBeKicked.Note);
 
-            // The leader and the rank below them can kick players
-            if (member.Rank >= _clankRankLeader - 1 && client.Player.ClanId == packet.ClanId)
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+
+            if (clan.IsPvP)
             {
-                using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+                // Start the 7 day cooldown for the one being kicked. This used to stamp
+                // every member of the clan, so a kick put the whole clan on cooldown.
+                unitOfWork.Clans.UpdateLastPvPClanTime(memberToBeKicked.CharacterId, DateTime.UtcNow);
+            }
 
-                if (clan.IsPvP)
-                {
-                    // Start the 7 day cooldown for the one being kicked. This used to stamp
-                    // every member of the clan, so a kick put the whole clan on cooldown.
-                    unitOfWork.Clans.UpdateLastPvPClanTime(memberToBeKicked.CharacterId, DateTime.UtcNow);
-                }
+            if (!unitOfWork.ClanMembers.DeleteClanMember(memberToBeKicked))
+                return;
 
-                if (unitOfWork.ClanMembers.DeleteClanMember(memberToBeKicked))
-                {                    
-                    UnregisterClanMember(memberToBeKicked);
+            UnregisterClanMember(memberToBeKicked);
 
-                    SetMemberDataForOnlineMembers(member.ClanId, packet.CharacterId);
+            SetMemberDataForOnlineMembers(member.ClanId, packet.CharacterId);
 
-                    CallMethodForOnlineMembers(member.ClanId, (uint)SysEntity.ClientClanManagerId,
-                        new PlayerLeftClanPacket(memberToBeKickedData.CharacterId, memberToBeKickedData.CharacterName, memberToBeKickedData.FamilyName, memberToBeKickedData.ClanId, true),
-                        packet.CharacterId);
+            CallMethodForOnlineMembers(member.ClanId, (uint)SysEntity.ClientClanManagerId,
+                new PlayerLeftClanPacket(memberToBeKickedData.CharacterId, memberToBeKickedData.CharacterName, memberToBeKickedData.FamilyName, memberToBeKickedData.ClanId, true),
+                packet.CharacterId);
 
-                    // Notfies the kicked client that they were kicked and clears out the clan data
-                    // The client expects the characterId to be the entityId for this message
-                    var memberClient = Server.Clients.Find(c => c.Player.Id == memberToBeKicked.CharacterId);
+            // Notfies the kicked client that they were kicked and clears out the clan data
+            // The client expects the characterId to be the entityId for this message
+            var memberClient = Server.Clients.Find(c => c.Player.Id == memberToBeKicked.CharacterId);
 
-                    if (memberClient != null)
-                    {
-                        memberClient.CallMethod(SysEntity.ClientClanManagerId, new PlayerLeftClanPacket(memberClient.Player.EntityId, memberClient.Player.Name, memberClient.Player.FamilyName, packet.ClanId, true));
-                        memberClient.CallMethod(memberClient.Player.EntityId, new ClanIdPacket(0));
-                    }
-                }
+            if (memberClient != null)
+            {
+                memberClient.CallMethod(SysEntity.ClientClanManagerId, new PlayerLeftClanPacket(memberClient.Player.EntityId, memberClient.Player.Name, memberClient.Player.FamilyName, packet.ClanId, true));
+                memberClient.CallMethod(memberClient.Player.EntityId, new ClanIdPacket(0));
             }
         }
 
@@ -717,6 +729,22 @@ namespace Rasa.Managers
             ClanMemberEntry member = GetClanMember(packet.ClanId, client.Player.Id);
             ClanEntry clan = GetClan(packet.ClanId);
 
+            if (member == null || clan == null)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanNotInAClan);
+                return;
+            }
+
+            // The leader cannot simply walk out. Nothing promotes anyone behind them, and a clan
+            // with nobody at Leader can never be renamed, disbanded, or have its leadership
+            // handed on - so the clan, its name and its lockbox are stranded for good. Hand over
+            // or disband instead, both of which the clan window already offers a leader.
+            if (member.Rank == ClanRank.Leader)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
+                return;
+            }
+
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             if (clan.IsPvP)
@@ -750,43 +778,52 @@ namespace Rasa.Managers
                 throw new ArgumentNullException(nameof(packet));
 
             ClanEntry clan = GetClan(packet.ClanId);
+
+            if (clan == null)
+                return;
+
+            // GetClanMember answers for this clan only, so a caller who is in another clan - or
+            // in none - gets null here rather than a row that would pass the rank test below.
             ClanMemberEntry member = GetClanMember(clan.Id, client.Player.Id);
+
+            if (member == null || member.Rank != ClanRank.Leader)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
+                return;
+            }
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
-            if(member.Rank == _clankRankLeader)
+            if (clan.IsPvP)
             {
-                if (clan.IsPvP)
-                {
-                    // Save the time they were last in a PvP clan to start the 7 day cooldown.
-                    // Prevents PvP clans from disbanding and creating another clan to workaround the cooldown.
-                    unitOfWork.Clans.UpdateLastPvPClanTimeForMembers(clan.Id, DateTime.UtcNow);
-                }
-
-                List<ClanMemberEntry> members = GetClanMembers(clan.Id);                
-
-                foreach (ClanMemberEntry m in members)
-                {
-                    var memberClient = Server.Clients.Find(c => c.Player.Id == m.CharacterId);
-
-                    if (memberClient != null)
-                    {
-                        // 0 Clears the overhead frame next to the player name
-                        memberClient.CallMethod(memberClient.Player.EntityId, new ClanIdPacket(0));
-
-                        // Shows a message in the players chat and updates the clan UI
-                        memberClient.CallMethod(SysEntity.ClientClanManagerId, new ClanDisbandedPacket(clan.Id));
-                    }
-                }
-
-                unitOfWork.ClanMembers.DeleteClanMembers(clan.Id);
-                unitOfWork.Clans.DeleteClan(packet.ClanId);
-
-                UnregisterClan(clan);
-                UnregisterClanMembers(clan.Id);
-
-                //TODO: Clear clan lockbox db inventory?
+                // Save the time they were last in a PvP clan to start the 7 day cooldown.
+                // Prevents PvP clans from disbanding and creating another clan to workaround the cooldown.
+                unitOfWork.Clans.UpdateLastPvPClanTimeForMembers(clan.Id, DateTime.UtcNow);
             }
+
+            List<ClanMemberEntry> members = GetClanMembers(clan.Id);
+
+            foreach (ClanMemberEntry m in members)
+            {
+                var memberClient = Server.Clients.Find(c => c.Player.Id == m.CharacterId);
+
+                if (memberClient != null)
+                {
+                    // 0 Clears the overhead frame next to the player name
+                    memberClient.CallMethod(memberClient.Player.EntityId, new ClanIdPacket(0));
+
+                    // Shows a message in the players chat and updates the clan UI
+                    memberClient.CallMethod(SysEntity.ClientClanManagerId, new ClanDisbandedPacket(clan.Id));
+                }
+            }
+
+            unitOfWork.ClanMembers.DeleteClanMembers(clan.Id);
+            unitOfWork.Clans.DeleteClan(packet.ClanId);
+
+            UnregisterClan(clan);
+            UnregisterClanMembers(clan.Id);
+
+            //TODO: Clear clan lockbox db inventory?
         }
 
         internal void RemovePlayer(Client client)
@@ -804,39 +841,121 @@ namespace Rasa.Managers
 
         internal void ClanPromotePlayer(Client client, ClanPromotePlayerPacket packet)
         {
-            ClanMemberEntry member = GetClanMember(client.Player.ClanId, packet.CharacterId);
+            if (!TryResolveRankChange(client, client.Player.ClanId, packet.CharacterId, out var actor, out var member))
+                return;
 
-            if (member?.Rank < _clankRankLeader)
+            // Only the leader promotes, and only into the rank below their own. Leadership moves
+            // through MakePlayerClanLeader, which hands it over; promoting into it would mint a
+            // second leader. This read the target's row and never the caller's, so a rank 0
+            // member could promote themselves 0 - 1 - 2 - 3 and own the clan.
+            if (actor.Rank != ClanRank.Leader || member.Rank >= ClanRank.Leader - 1)
             {
-                UpdateClanMemberRank(member, (byte)(member.Rank + 1));
+                RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
+                return;
             }
+
+            UpdateClanMemberRank(member, (byte)(member.Rank + 1));
         }
 
         internal void ClanDemotePlayer(Client client, ClanDemotePlayerPacket packet)
         {
-            ClanMemberEntry member = GetClanMember(client.Player.ClanId, packet.CharacterId);
+            if (!TryResolveRankChange(client, client.Player.ClanId, packet.CharacterId, out var actor, out var member))
+                return;
 
-            if (member?.Rank - 1 >= 0)
+            // Same the other way: any member could demote the leader, and a clan with nobody at
+            // Leader can never be renamed, disbanded, or have its leadership handed on again.
+            if (actor.Rank != ClanRank.Leader || member.Rank <= ClanRank.Member)
             {
-                UpdateClanMemberRank(member, (byte)(member.Rank - 1));
+                RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
+                return;
             }
+
+            UpdateClanMemberRank(member, (byte)(member.Rank - 1));
         }
 
         internal void MakePlayerClanLeader(Client client, MakePlayerClanLeaderPacket packet)
         {
-            ClanMemberEntry leader = GetClanMembers(client.Player.ClanId).FirstOrDefault(x => x.Rank == _clankRankLeader);
+            if (!TryResolveRankChange(client, client.Player.ClanId, packet.CharacterId, out var actor, out var member))
+                return;
 
-            // Only the leader can assign a new leader
-            if(leader?.CharacterId == client.Player.Id)
+            if (actor.Rank != ClanRank.Leader)
             {
-                ClanMemberEntry member = GetClanMember(client.Player.ClanId, packet.CharacterId);
-                UpdateClanLeader(member, leader);                
+                RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
+                return;
             }
+
+            // The caller's own row is the outgoing leader. This used to scan the roster for
+            // whoever held Leader, which for a leader naming themselves handed UpdateClanLeader
+            // the same cached row twice: it wrote Leader and then Leader - 1 over the top of it,
+            // and the clan came out with nobody at Leader at all.
+            UpdateClanLeader(member, actor);
         }
 
         #endregion
 
         #region Helper Functions
+
+        /// <summary>
+        /// Everything a rank change depends on before any rank is compared: the caller is in a
+        /// clan, it is the clan the packet names, the target is in that same clan, and the target
+        /// is not the caller. Answers false and tells the client why otherwise.
+        ///
+        /// None of the rank handlers used to establish any of it. They read the row of whoever
+        /// the packet named and acted on it, so the rank a member held decided nothing at all -
+        /// promote, demote and the leadership handover were open to every member of the clan,
+        /// and kick only ever asked about the caller.
+        /// </summary>
+        private bool TryResolveRankChange(Client client, uint clanId, uint targetCharacterId,
+            out ClanMemberEntry actor, out ClanMemberEntry target)
+        {
+            actor = null;
+            target = null;
+
+            if (client?.Player == null)
+                return false;
+
+            // The clan the caller is actually in is the one that counts; the id in the packet
+            // only gets to agree with it.
+            if (client.Player.ClanId == 0 || clanId != client.Player.ClanId)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanNotInAClan);
+                return false;
+            }
+
+            actor = GetClanMember(client.Player.ClanId, client.Player.Id);
+
+            if (actor == null)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanNotInAClan);
+                return false;
+            }
+
+            target = GetClanMember(client.Player.ClanId, targetCharacterId);
+
+            if (target == null)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanPlayerNotInClan);
+                return false;
+            }
+
+            if (target.CharacterId == actor.CharacterId)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanRankChangeFailed);
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Tells the client the clan window why nothing happened.</summary>
+        private static void RefuseClanAction(Client client, PlayerMessage reason)
+        {
+            Logger.WriteLog(LogType.Security,
+                $"{client.Player.FamilyName} (character {client.Player.Id}, clan {client.Player.ClanId}) was refused a clan action: {reason}.");
+
+            client.CallMethod(SysEntity.ClientClanManagerId,
+                new DisplayClanMessagePacket((int)reason, new Dictionary<string, string>()));
+        }
 
         private ClanMemberData CreateClanMemberData(ClanData clanData, uint characterId, byte rank = 0, string note = "")
         {
@@ -1047,7 +1166,13 @@ namespace Rasa.Managers
 
             unitOfWork.ClanMembers.UpdateRankByCharacterId(newRank, member.CharacterId);
             CharacterEntry character = unitOfWork.Characters.Get(member.CharacterId);
-            GameAccountEntry account = unitOfWork.GameAccounts.Get(member.CharacterId);
+
+            // By the character's account, not by the character id. GameAccounts.Get throws when
+            // nothing carries that id, and character ids run past account ids as soon as one
+            // account has a second character - so a promotion wrote the new rank to the database,
+            // threw here, and disconnected the leader with the cached rank never brought up to
+            // date behind it.
+            GameAccountEntry account = unitOfWork.GameAccounts.Get(character.AccountId);
 
             // AddOrUpdate the game clients 
             SetMemberDataForOnlineMembers(member.ClanId);
@@ -1084,7 +1209,7 @@ namespace Rasa.Managers
             unitOfWork.ClanMembers.UpdateRankByCharacterId(_clankRankLeader, member.CharacterId);
             unitOfWork.ClanMembers.UpdateRankByCharacterId((byte)(_clankRankLeader - 1), leaderMember.CharacterId);
             CharacterEntry memberCharacter = unitOfWork.Characters.Get(member.CharacterId);
-            GameAccountEntry account = unitOfWork.GameAccounts.Get(member.CharacterId);
+            GameAccountEntry account = unitOfWork.GameAccounts.Get(memberCharacter.AccountId);
 
             // AddOrUpdate the game clients 
             SetMemberDataForOnlineMembers(member.ClanId);
@@ -1141,14 +1266,23 @@ namespace Rasa.Managers
             Clans.Remove(clan.Id, out _);
         }
 
+        /// <summary>
+        /// A clan by id, from the cache or from the database behind it. The fallback used to be
+        /// written as <c>clan.Value ?? …</c>, which dereferences the null it is guarding against:
+        /// every one of these lookups takes an id off the wire, and an id for a clan that is not
+        /// cached threw rather than answering null.
+        /// </summary>
         private ClanEntry GetClan(uint clanId)
         {
-            Lazy<ClanEntry> clan = Clans.GetValueOrDefault(clanId);
+            ClanEntry cached = Clans.GetValueOrDefault(clanId)?.Value;
+
+            if (cached != null)
+                return cached;
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
-            return clan.Value ?? unitOfWork.Clans.GetClanById(clanId);
-        }        
+            return unitOfWork.Clans.GetClanById(clanId);
+        }
 
         private void RegisterClanMember(uint clanId, ClanMemberEntry member)
         {
@@ -1188,20 +1322,42 @@ namespace Rasa.Managers
             _ = ClanMembers.Remove(clanId, out _);        
         }
 
+        /// <summary>The clan's roster, from the cache or from the database behind it.</summary>
         private List<ClanMemberEntry> GetClanMembers(uint clanId)
         {
-            Lazy<List<ClanMemberEntry>> clanMembers = ClanMembers.GetValueOrDefault(clanId);
+            List<ClanMemberEntry> cached = ClanMembers.GetValueOrDefault(clanId)?.Value;
+
+            if (cached != null)
+                return cached;
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
-            return clanMembers.Value ?? unitOfWork.ClanMembers.GetAllClanMembersByClanId(clanId);
+            return unitOfWork.ClanMembers.GetAllClanMembersByClanId(clanId);
         }
 
+        /// <summary>
+        /// One character's membership of one clan, or null if they are not in it.
+        ///
+        /// The cache holds every clan's whole roster at startup, but RemovePlayer drops a member
+        /// from it as they log out, so by the time a leader gets round to kicking or promoting
+        /// somebody who is not online the row is only in the database. Reading through to it
+        /// means a rank can be established for an offline member instead of the lookup answering
+        /// null - which every caller then dereferenced.
+        /// </summary>
         public ClanMemberEntry GetClanMember(uint clanId, uint characterId)
         {
-            Lazy<List<ClanMemberEntry>> clanMembers = ClanMembers.GetValueOrDefault(clanId);
+            ClanMemberEntry cached = ClanMembers.GetValueOrDefault(clanId)?.Value?.FirstOrDefault(x => x.CharacterId == characterId);
 
-            return clanMembers?.Value?.FirstOrDefault(x => x.CharacterId == characterId);
+            if (cached != null)
+                return cached;
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+
+            ClanMemberEntry stored = unitOfWork.ClanMembers.GetClanMemberByCharacterId(characterId);
+
+            // A character is in one clan at a time, so a row for another clan is not a member of
+            // this one.
+            return stored != null && stored.ClanId == clanId ? stored : null;
         }
 
         #endregion

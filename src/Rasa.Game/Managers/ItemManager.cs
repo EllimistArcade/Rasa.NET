@@ -208,19 +208,43 @@ namespace Rasa.Managers
             foreach (var resistance in itemTemplateResistance)
                 LoadedItemTemplates[resistance.Id].EquipableInfo.ResistList.Add(new ResistanceData((DamageType)resistance.ResistanceType, resistance.ResistanceValue));
 
-            // add item requirements to itemTemplate
+            // Index the templates by class for the requirement table below, which is keyed by class.
+            var templatesByClass = new Dictionary<EntityClasses, List<ItemTemplate>>();
+
+            foreach (var itemTemplate in LoadedItemTemplates.Values)
+            {
+                if (!templatesByClass.TryGetValue(itemTemplate.Class, out var classTemplates))
+                {
+                    classTemplates = new List<ItemTemplate>();
+                    templatesByClass.Add(itemTemplate.Class, classTemplates);
+                }
+
+                classTemplates.Add(itemTemplate);
+            }
+
+            // Add item requirements to itemTemplate. itemtemplate_requirement is a copy of the
+            // client's generated.client.itemclass.reqData, whose key is the item CLASS, not the
+            // template: the client looks it up as reqData.get(self.classId) in
+            // client/augmentations/item.py. Reading the key as a template id dropped the 4095 rows
+            // whose class id is not also a template id, and silently attached most of the rest to
+            // unrelated items, because the two id spaces overlap. A requirement therefore applies
+            // to every template of the class.
             var itemReqs = unitOfWork.Equipment.GetRequirementsGeneric();
+            var requirementTemplates = 0;
 
             foreach (var itemReq in itemReqs)
             {
-
-                if (LoadedItemTemplates.ContainsKey(itemReq.Id))
+                if (!templatesByClass.TryGetValue((EntityClasses)itemReq.Id, out var classTemplates))
                 {
-                    LoadedItemTemplates[itemReq.Id].ItemInfo.Requirements.Add((RequirementsType)itemReq.RequirementType, itemReq.RequirementValue);
-                    loaded++;
-                }
-                else
                     skipped++;
+                    continue;
+                }
+
+                foreach (var itemTemplate in classTemplates)
+                    itemTemplate.ItemInfo.Requirements[(RequirementsType)itemReq.RequirementType] = itemReq.RequirementValue;
+
+                requirementTemplates += classTemplates.Count;
+                loaded++;
             }
 
             var weaponTemplates = unitOfWork.Equipment.GetWeaponItems();
@@ -272,7 +296,7 @@ namespace Rasa.Managers
             Logger.WriteLog(LogType.Initialize, $"Inventory category taken from the class for {defaultedCategories} ItemTemplates without item_template data.");
 
             Logger.WriteLog(LogType.Initialize, $"Loaded {weaponTemplates.Count} WeaponTemplates.");
-            Logger.WriteLog(LogType.Initialize, $"ItemReqs = {itemReqs.Count}, loaded = {loaded}, skipped = {skipped}");
+            Logger.WriteLog(LogType.Initialize, $"ItemReqs = {itemReqs.Count}, classes matched = {loaded}, classes with no template = {skipped}, templates given a requirement = {requirementTemplates}.");
         }
         
         /// <summary>

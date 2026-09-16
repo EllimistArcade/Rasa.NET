@@ -96,6 +96,28 @@ namespace Rasa.Managers
         
         public ConcurrentDictionary<uint, Lazy<List<ClanMemberEntry>>> ClanMembers { get; set; } = new ConcurrentDictionary<uint, Lazy<List<ClanMemberEntry>>>();
 
+        /// <summary>
+        /// Open clan invitations, keyed by the invitee's character id - membership is per
+        /// character, not per account. One at a time, like the party invitations next door: the
+        /// client shows a single invitation dialog, so a second invitation replaces nothing and
+        /// is refused.
+        ///
+        /// There was no record of an invitation at all. ClanInvitationResponse took the character
+        /// and the clan straight out of the packet and acted on them, so a modified client could
+        /// answer an invitation that was never sent - putting itself, or any other online player,
+        /// into any clan on the server.
+        ///
+        /// Touched only by the packet handlers, which run on the main loop.
+        /// </summary>
+        private readonly Dictionary<uint, PendingClanInvite> _invites = new Dictionary<uint, PendingClanInvite>();
+
+        private sealed class PendingClanInvite
+        {
+            public uint ClanId;
+            public uint InviterCharacterId;
+            public string InviterName;
+        }
+
         #endregion
 
         internal void ClansInit()
@@ -523,40 +545,87 @@ namespace Rasa.Managers
 
         internal void ClanInvitationResponse(Client client, ClanInvitationResponsePacket packet)
         {
-            var invitee = Server.Clients.Find(c => c.Player.EntityId == packet.InvitedCharacterEntityId);
-
-            if (invitee == null)
+            if (client?.Player == null)
                 return;
-
-            if (client == null)
-                throw new ArgumentNullException(nameof(client));
 
             if (packet == null)
                 throw new ArgumentNullException(nameof(packet));
 
+            // A client answers its own invitation and nobody else's. The entity id in this packet
+            // used to name whoever the sender chose, and the clan id any clan at all - so the
+            // answer was really an instruction to put that character into that clan, which is
+            // what it did.
+            if (packet.InvitedCharacterEntityId != client.Player.EntityId)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{client.Player.FamilyName} (character {client.Player.Id}) answered a clan invitation addressed to entity {packet.InvitedCharacterEntityId}; ignored.");
+                return;
+            }
+
+            // Answered, either way: the invitation is spent whether they take it or not.
+            if (!_invites.Remove(client.Player.Id, out var invite))
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanNotInvited);
+                return;
+            }
+
             // We don't do anything right now when the invitation is declined
             if (!packet.Accepted) return;
 
-            var clan = GetClan(packet.ClanId);
+            // The clan they were invited to, not the one the packet names.
+            if (invite.ClanId != packet.ClanId)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{client.Player.FamilyName} (character {client.Player.Id}) was invited to clan {invite.ClanId} and answered for clan {packet.ClanId}; ignored.");
+                RefuseClanAction(client, PlayerMessage.PmClanNotInvited);
+                return;
+            }
+
+            var clan = GetClan(invite.ClanId);
 
             if (clan == null)
-                return;
-
-            // The cooldown applies to joining a PvP clan as well as founding one.
-            if (clan.IsPvP)
             {
-                using var cooldownUnitOfWork = _gameUnitOfWorkFactory.CreateChar();
-                var character = cooldownUnitOfWork.Characters.Get(client.Player.Id);
+                // Disbanded while the dialog was open.
+                RefuseClanAction(client, PlayerMessage.PmClanAcceptClanDne);
+                return;
+            }
 
-                if (character != null && PvPCooldownRemainingSeconds(character) > 0)
+            // Everything the invitation was checked for when it went out is checked again here,
+            // because a dialog sits open for as long as the player leaves it open.
+            using (var validation = _gameUnitOfWorkFactory.CreateChar())
+            {
+                // Re-read rather than trusting Player.ClanId: they may have accepted another
+                // invitation or founded a clan in the meantime, and clan_member holds one row per
+                // character - a second insert throws out of the handler and costs them the
+                // connection.
+                if (validation.Clans.GetClanByCharacterId(client.Player.Id) != null)
                 {
-                    client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanAcceptInPvpTimeout, new Dictionary<string, string>()));
+                    RefuseClanAction(client, PlayerMessage.PmClanAcceptAlreadyInAClan);
                     return;
+                }
+
+                // The clan may have filled up since the invitation went out.
+                if (validation.ClanMembers.GetAllClanMembersByClanId(clan.Id).Count >= _maxClanMembers)
+                {
+                    RefuseClanAction(client, PlayerMessage.PmClanSizeLimitViolation);
+                    return;
+                }
+
+                // The cooldown applies to joining a PvP clan as well as founding one.
+                if (clan.IsPvP)
+                {
+                    var character = validation.Characters.Get(client.Player.Id);
+
+                    if (character != null && PvPCooldownRemainingSeconds(character) > 0)
+                    {
+                        client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanAcceptInPvpTimeout, new Dictionary<string, string>()));
+                        return;
+                    }
                 }
             }
 
             var clanData = new ClanData(clan);
-            ClanMemberData memberData = CreateClanMemberData(clanData, invitee);
+            ClanMemberData memberData = CreateClanMemberData(clanData, client);
 
             // The player accepted so they must be online
             memberData.IsOnline = true;
@@ -564,13 +633,17 @@ namespace Rasa.Managers
             // AddOrUpdate the database for the invitee to be in the clan
             AddMemberToClan(memberData);
 
+            // Who let them in, for the operator reading back how somebody came to be in a clan.
+            Logger.WriteLog(LogType.Network,
+                $"{client.Player.Name} {client.Player.FamilyName} (character {client.Player.Id}) joined clan {clan.Name} ({clan.Id}) on an invitation from {invite.InviterName} (character {invite.InviterCharacterId}).");
+
             // Membership changed, update all clan members game clients
             // Include a message for the player joined message to update the clan chat
-            SetMemberDataForOnlineMembers(packet.ClanId, invitee.Player.Id);
+            SetMemberDataForOnlineMembers(clan.Id, client.Player.Id);
 
-            CallMethodForOnlineMembers(packet.ClanId, (uint)SysEntity.ClientClanManagerId,
+            CallMethodForOnlineMembers(clan.Id, (uint)SysEntity.ClientClanManagerId,
                 new PlayerJoinedClanPacket(SetClanMemberDataPacket.NameKey, memberData),
-                invitee.Player.Id);
+                client.Player.Id);
 
             // AddOrUpdate the joined players clan window
             SetClanData(client, clanData);
@@ -604,6 +677,10 @@ namespace Rasa.Managers
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             ClanEntry inviterClan = unitOfWork.Clans.GetClanByCharacterId(client.Player.Id);
+
+            if (!CanInviteToClan(client, inviterClan))
+                return;
+
             List<ClanMemberEntry> members = unitOfWork.ClanMembers.GetAllClanMembersByClanId(inviterClan.Id);
             GameAccountEntry inviteeAccount = unitOfWork.GameAccounts.Get(packet.FamilyName);
 
@@ -671,6 +748,10 @@ namespace Rasa.Managers
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             ClanEntry inviterClan = unitOfWork.Clans.GetClanByCharacterId(client.Player.Id);
+
+            if (!CanInviteToClan(client, inviterClan))
+                return;
+
             ClanEntry existingClan = unitOfWork.Clans.GetClanByCharacterId(invitee.Player.Id);
 
             var messageArgs = CreatePlayerMessageArgs("playername", $"{invitee.Player.Name} {invitee.Player.FamilyName}");
@@ -836,6 +917,11 @@ namespace Rasa.Managers
 
         internal void RemovePlayer(Client client)
         {
+            // An invitation they never answered goes with them, so it cannot be answered by
+            // whoever inherits the entity id, and cannot be waiting for them as a stale refusal
+            // of the next invitation they are sent.
+            _invites.Remove(client.Player.Id);
+
             var clanId = client.Player.ClanId;
             if (clanId > 0)
             {
@@ -970,6 +1056,33 @@ namespace Rasa.Managers
             return true;
         }
 
+        /// <summary>
+        /// Whether this client may invite anyone into <paramref name="inviterClan"/>: they have
+        /// to be in it, and at the rank the client's own invite button is gated on.
+        ///
+        /// Both invite handlers used to read the clan of whoever sent the packet and go straight
+        /// on to <c>inviterClan.Id</c>, so a player in no clan dereferenced the null; and neither
+        /// looked at the inviter's rank, which ClanRank says is checked here.
+        /// </summary>
+        private bool CanInviteToClan(Client client, ClanEntry inviterClan)
+        {
+            if (inviterClan == null)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanNotInAClan);
+                return false;
+            }
+
+            ClanMemberEntry inviter = GetClanMember(inviterClan.Id, client.Player.Id);
+
+            if (inviter == null || inviter.Rank < ClanRank.MinRankToInvite)
+            {
+                RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
+                return false;
+            }
+
+            return true;
+        }
+
         /// <summary>Tells the client the clan window why nothing happened.</summary>
         private static void RefuseClanAction(Client client, PlayerMessage reason)
         {
@@ -1049,9 +1162,32 @@ namespace Rasa.Managers
             RegisterClanMember(clanMember.ClanId, members.FirstOrDefault(x => x.CharacterId == clanMember.CharacterId));
         }
 
+        /// <summary>
+        /// Records the invitation and puts it on the invitee's screen. The record is what
+        /// ClanInvitationResponse answers against; without one, an answer is refused.
+        /// </summary>
         private void SendInviteToCharacter(Client client, ulong characterEntityId, ClanEntry clan)
         {
             Client inviteeClient = Server.Clients.Find(c => c.Player.EntityId == characterEntityId);
+
+            if (inviteeClient?.Player == null)
+                return;
+
+            // One open invitation per character, as the client shows one dialog.
+            if (_invites.ContainsKey(inviteeClient.Player.Id))
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId,
+                    new DisplayClanMessagePacket((int)PlayerMessage.PmClanPlayerAlreadyInvitedToYourClan,
+                        CreatePlayerMessageArgs("playername", $"{inviteeClient.Player.Name} {inviteeClient.Player.FamilyName}")));
+                return;
+            }
+
+            _invites[inviteeClient.Player.Id] = new PendingClanInvite
+            {
+                ClanId = clan.Id,
+                InviterCharacterId = client.Player.Id,
+                InviterName = client.Player.FamilyName
+            };
 
             var inviteData = new ClanInviteData
             {

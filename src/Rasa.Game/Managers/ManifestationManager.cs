@@ -207,7 +207,20 @@ namespace Rasa.Managers
             if (client.Player == null || client.State != ClientState.Ingame)
                 return false;
 
-            // ToDo: isOverheated, isJammed, and some other checks
+            // A jammed weapon does nothing until it is reloaded. Checked before WeaponReady so
+            // that a jam does not get mistaken for a weapon that is merely stowed and silently
+            // drawn instead.
+            var armed = InventoryManager.Instance.CurrentWeapon(client);
+
+            if (armed != null && armed.IsJammed)
+            {
+                // Once per trigger pull would be once per tick while auto-fire is held, so the
+                // message is not repeated - the client already showed it when the jam arrived,
+                // and its ammo readout still says "Jammed".
+                return false;
+            }
+
+            // ToDo: isOverheated, and some other checks
             if (!client.Player.WeaponReady)
             {
                 RequestWeaponDraw(client);
@@ -239,6 +252,11 @@ namespace Rasa.Managers
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             unitOfWork.Items.UpdateAmmo(weapon);
 
+            // The barrel gets hotter. Done after the shot has been paid for in ammo, so a shot
+            // that did not happen does not heat anything, and before the missile, so a shot that
+            // reaches capacity is still fired - the jam stops the next one, not this one.
+            AddWeaponHeat(client, weapon);
+
             // let's calculate damage
             var damageRange = weaponClassInfo.MaxDamage - weaponClassInfo.MinDamage;
             var damage = weaponClassInfo.MinDamage + new Random().Next(0, damageRange + 1);
@@ -247,6 +265,110 @@ namespace Rasa.Managers
             MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage);
             
             return true;
+        }
+
+        /// <summary>
+        /// This weapon's heat, brought up to date.
+        ///
+        /// Cooling is applied on read rather than on a timer, which is exactly what the client
+        /// does - <c>_UpdateWeaponHeat</c> cools by the elapsed time whenever the value is
+        /// touched. Nothing needs to tick, and a weapon nobody is firing costs nothing.
+        /// </summary>
+        public double CurrentHeat(Item weapon)
+        {
+            if (weapon?.ItemTemplate?.WeaponInfo == null)
+                return 0;
+
+            var now = Environment.TickCount64;
+
+            if (weapon.HeatUpdatedAt == 0)
+            {
+                weapon.HeatUpdatedAt = now;
+                return weapon.Heat;
+            }
+
+            var cooled = weapon.Heat - WeaponHeat.Cooling(weapon.ItemTemplate.WeaponInfo.CoolRate, now - weapon.HeatUpdatedAt);
+
+            weapon.Heat = cooled < 0 ? 0 : cooled;
+            weapon.HeatUpdatedAt = now;
+
+            return weapon.Heat;
+        }
+
+        /// <summary>
+        /// Adds one shot's worth of heat, and jams the weapon if that reaches capacity.
+        ///
+        /// A worn weapon heats faster: the client scales the shot by
+        /// <c>(100 + (100 - condition)) / 100</c>, so a weapon at half condition heats at one and
+        /// a half times the rate and one at zero at double. That is the client's own arithmetic,
+        /// and this matches it so the heat meter the player is watching agrees with the jam they
+        /// get.
+        /// </summary>
+        public void AddWeaponHeat(Client client, Item weapon)
+        {
+            if (weapon?.ItemTemplate?.WeaponInfo == null)
+                return;
+
+            var heat = CurrentHeat(weapon) + WeaponHeat.PerShot(weapon.ItemTemplate.WeaponInfo.HeatPerShot, ConditionPercent(weapon));
+
+            weapon.Heat = heat;
+
+            if (heat >= WeaponHeat.Capacity)
+                JamWeapon(client, weapon);
+        }
+
+        /// <summary>
+        /// Jams a weapon and tells its owner.
+        ///
+        /// Public because overheating is not the only way in: the client's help says "some
+        /// creatures have been known to jam weapons", and a creature action that did so would
+        /// call this. Nothing does yet - no row in creature_action identifies itself as a jamming
+        /// attack, and picking one would be a guess - so this is the hook and not the feature.
+        /// </summary>
+        public void JamWeapon(Client client, Item weapon)
+        {
+            if (client?.Player == null || weapon == null || weapon.IsJammed)
+                return;
+
+            weapon.IsJammed = true;
+
+            // Pinned at capacity rather than left to drift above it, so that cooling from a jam
+            // always starts from the same place however far past the line the shot went.
+            weapon.Heat = WeaponHeat.Capacity;
+            weapon.HeatUpdatedAt = Environment.TickCount64;
+
+            client.CallMethod(weapon.EntityId, new WeaponJammedPacket(true));
+        }
+
+        /// <summary>
+        /// Frees a jammed weapon. Reloading is the only way a player has to do this, which is why
+        /// the reload path lets a jammed weapon through checks that would otherwise refuse it.
+        /// </summary>
+        public void ClearJam(Client client, Item weapon)
+        {
+            if (client?.Player == null || weapon == null || !weapon.IsJammed)
+                return;
+
+            weapon.IsJammed = false;
+
+            // Cleared, not merely below the line: leaving the barrel full would jam again on the
+            // first shot after the reload.
+            weapon.Heat = 0;
+            weapon.HeatUpdatedAt = Environment.TickCount64;
+
+            client.CallMethod(weapon.EntityId, new WeaponJammedPacket(false));
+        }
+
+        /// <summary>An item's hit points as a percentage of its class maximum, the way the client reads condition.</summary>
+        private static double ConditionPercent(Item item)
+        {
+            var classInfo = EntityClassManager.Instance.GetClassInfo(item.ItemTemplate.Class);
+            var max = classInfo?.ItemClassInfo?.MaxHitPoints ?? 0;
+
+            if (max <= 0)
+                return 100;
+
+            return 100.0 * item.CurrentHitPoints / max;
         }
 
         public void RequestArmAbility(Client client, int abilityDrawerSlot)
@@ -1154,6 +1276,22 @@ namespace Rasa.Managers
                     break;
             }
 
+            // A jammed weapon reloads regardless of what is in the clip or the pack, because
+            // reloading is the only way to clear a jam and the client already works this way:
+            // weaponreload.py runs its ammo, clip-full and out-of-ammo checks inside
+            // `if not weapon.isJammed`. Without this, a player who jams with a full clip or an
+            // empty pack has no way out of it.
+            if (weapon.IsJammed)
+            {
+                if (isRequested)
+                    client.CellCallMethod(client, client.Player.EntityId, new PerformWindupPacket(PerformType.TwoArgs, ActionId.WeaponReload, reloadActionId));
+                else
+                    client.CellIgnoreSelfCallMethod(client, new PerformWindupPacket(PerformType.TwoArgs, ActionId.WeaponReload, reloadActionId));
+
+                client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponReload, reloadActionId, foundAmmo, weapon.ItemTemplate.WeaponInfo.ReloadTime));
+                return;
+            }
+
             if (foundAmmo == 0)
             {
                 // Nothing to reload with.
@@ -1537,6 +1675,10 @@ namespace Rasa.Managers
 
             if (weaponClassInfo == null)
                 return;
+
+            // The reload finished, so the jam is cleared - whether or not a single round went in.
+            // A jam with a full clip still takes a reload to clear, and that reload loads nothing.
+            ClearJam(client, weapon);
 
             // What is in the clip now, topped up stack by stack until it is full. The old
             // arithmetic subtracted CurrentAmmo again on every stack after the first, and in

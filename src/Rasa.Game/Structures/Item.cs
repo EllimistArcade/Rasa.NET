@@ -36,5 +36,19 @@
         public uint CurrentAmmo { get; set; }
         public bool IsJammed { get; set; }
         public int CammeraProfile { get; set; }
+
+        /// <summary>
+        /// Heat in the barrel, 0 to <see cref="Data.WeaponHeat.Capacity"/>. Not persisted: the
+        /// client rebuilds its own heat table empty on every login, so a weapon that was hot when
+        /// you logged out is cold when you come back, and the server agreeing with that is the
+        /// point.
+        ///
+        /// Read it through <c>ManifestationManager.CurrentHeat</c> rather than directly - it is
+        /// only correct as of <see cref="HeatUpdatedAt"/>, and cooling is applied on read.
+        /// </summary>
+        public double Heat { get; set; }
+
+        /// <summary>When <see cref="Heat"/> was last brought up to date, in Environment.TickCount64 ms.</summary>
+        public long HeatUpdatedAt { get; set; }
     }
 }

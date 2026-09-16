@@ -461,20 +461,33 @@ namespace Rasa.Managers
             if (packet.DestSlot < 0 || packet.DestSlot >= 500)
                 return;
 
+            if (!ClanSlotIsUnlocked(client, (uint)packet.DestSlot))
+                return;
+
             var entityId = client.Player.Inventory.PersonalInventory[(int)packet.SrcSlot];
 
             if (entityId == 0)
                 return;
 
-            RemoveItemBySlot(client, InventoryType.Personal, packet.SrcSlot);
-
             // If DestSlot is not empty, move current item to SrcSlot (item swap)
             bool wasSwap = client.Player.Inventory.ClanInventory[(int)packet.DestSlot] != 0;
-            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+
+            // A swap hands whatever is in that slot to the depositor, which is a withdrawal
+            // however it is spelled - and the only one that was not held to the withdraw rank.
+            // Decided before anything moves: the item used to leave the pack first.
+            if (wasSwap && !CanTakeFromClanLockbox(client))
+                return;
+
             var depositedItem = EntityManager.Instance.GetItem(entityId);
 
+            // Looked up before the slot is emptied rather than after: an entity the slot names
+            // that the EntityManager does not have left the pack and arrived nowhere.
             if (depositedItem == null)
                 return;
+
+            RemoveItemBySlot(client, InventoryType.Personal, packet.SrcSlot);
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             // Rows are found by item id throughout: the character id they were written with
             // is not always this character's, and a delete by slot that misses leaves a row
@@ -559,6 +572,9 @@ namespace Rasa.Managers
             if (packet.DestSlot < 0 || packet.DestSlot >= 500)
                 return;
 
+            if (!ClanSlotIsUnlocked(client, (uint)packet.DestSlot))
+                return;
+
             var entityId = client.Player.Inventory.ClanInventory[(int)packet.SrcSlot];
 
             if (entityId == 0)
@@ -585,12 +601,8 @@ namespace Rasa.Managers
                 return;
 
             // Only the leader and the rank below them can withdraw items from the clan lockbox.
-            ClanMemberEntry member = ClanManager.Instance.GetClanMember(client.Player.ClanId, client.Player.Id);
-            if (member == null || member.Rank < ClanRank.MinRankToWithdrawFromLockbox)
-            {
-                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmClanInsufficientPermissions, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+            if (!CanTakeFromClanLockbox(client))
                 return;
-            }
 
             if (packet.SrcSlot < 0 || packet.SrcSlot >= 500)
                 return;
@@ -657,17 +669,40 @@ namespace Rasa.Managers
             if (packet.EntityId == 0)
                 return;
 
+            if (!CanTakeFromClanLockbox(client))
+                return;
+
+            // The slot comes from where the item actually sits in this clan's lockbox, not from
+            // the item's own OwnerSlotId. Nothing checked that the entity was a lockbox item at
+            // all, and OwnerSlotId for something in the player's own pack is a personal slot
+            // number - every one of which is a valid clan slot index - so naming a stack of one
+            // in pack slot K wiped clan slot K for every member while the pack item sat
+            // untouched.
+            var slotId = client.Player.Inventory.ClanInventory.IndexOf(packet.EntityId);
+
+            if (slotId < 0)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{client.Player.FamilyName} (character {client.Player.Id}) tried to destroy entity {packet.EntityId}, which is not in clan {client.Player.ClanId}'s lockbox.");
+                return;
+            }
+
             var tempItem = EntityManager.Instance.GetItem(packet.EntityId);
+
+            if (tempItem == null)
+                return;
 
             //TODO: Support deleting portions
             if ((tempItem.StackSize - packet.Quantity) > 0)
                 return;
 
-            RemoveItemBySlotForClan(client.Player.ClanId, tempItem.OwnerSlotId, 0);
+            RemoveItemBySlotForClan(client.Player.ClanId, (uint)slotId, 0);
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
-            unitOfWork.ClanInventories.DeleteInvItem(client.Player.ClanId, tempItem.OwnerSlotId);
+            // By item id, and the item row with it: deleting the lockbox row by slot alone left
+            // the item itself behind as a row nothing referenced any more.
+            DeleteItemRows(unitOfWork, tempItem);
 
             RefreshClanLockbox(client.Player.ClanId, packet.EntityId, client.Player.Id, 0, ref client.Player.Inventory.ClanInventory, false);
 
@@ -876,13 +911,8 @@ namespace Rasa.Managers
             if (clanId == 0)
                 return;
 
-            var member = ClanManager.Instance.GetClanMember(clanId, client.Player.Id);
-
-            if (member == null || member.Rank < ClanRank.MinRankToWithdrawFromLockbox)
-            {
-                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmClanInsufficientPermissions, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+            if (!CanTakeFromClanLockbox(client))
                 return;
-            }
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             var clan = unitOfWork.Clans.GetClanById(clanId);
@@ -930,6 +960,31 @@ namespace Rasa.Managers
 
             RecordClanLockboxLog(client, ClanLockboxLogEntry.ForCredits(clanId, InventoryTransactionType.TabPurchase,
                 client.Player.Id, client.Player.Name, client.Player.FamilyName, (byte)CurencyType.Prestige, price));
+        }
+
+        /// <summary>
+        /// Whether this client may take something out of their clan's lockbox.
+        ///
+        /// Withdrawing an item, swapping a deposit onto an occupied slot, destroying something,
+        /// buying a tab and drawing credits or prestige out are all one act as far as the clan is
+        /// concerned - clan property leaves - so they are held to one rank. Only the withdraw and
+        /// tab paths asked; the swap handed the occupied slot's item straight into the
+        /// depositor's pack, destroy deleted whatever it was pointed at, and the credit transfer
+        /// moved the whole bank, all at rank 0.
+        /// </summary>
+        private static bool CanTakeFromClanLockbox(Client client)
+        {
+            ClanMemberEntry member = ClanManager.Instance.GetClanMember(client.Player.ClanId, client.Player.Id);
+
+            if (member != null && member.Rank >= ClanRank.MinRankToWithdrawFromLockbox)
+                return true;
+
+            Logger.WriteLog(LogType.Security,
+                $"{client.Player.FamilyName} (character {client.Player.Id}) tried to take from clan {client.Player.ClanId}'s lockbox at rank {member?.Rank.ToString() ?? "no membership"}.");
+
+            client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmClanInsufficientPermissions, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+
+            return false;
         }
 
         /// <summary>
@@ -1001,6 +1056,16 @@ namespace Rasa.Managers
                 return;
 
             if (creditType != 1 && creditType != 2)
+                return;
+
+            // Membership, from the clan's own roster rather than from the id the manifestation
+            // is carrying around.
+            if (ClanManager.Instance.GetClanMember(client.Player.ClanId, client.Player.Id) == null)
+                return;
+
+            // A withdrawal is a withdrawal whether it is an item or the money. Items were held
+            // to the withdraw rank and the bank was not, so any member could empty it.
+            if (amount < 0 && !CanTakeFromClanLockbox(client))
                 return;
 
             if (amount > -500 && amount < 500)

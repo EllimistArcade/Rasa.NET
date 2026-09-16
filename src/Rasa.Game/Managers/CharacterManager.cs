@@ -15,6 +15,7 @@ namespace Rasa.Managers
     using Packets.ClientMethod.Server;
     using Packets.Communicator.Client;
     using Packets.Communicator.Server;
+    using Packets.Manifestation.Server;
     using Packets;
     using Repositories.Char;
     using Repositories.UnitOfWork;
@@ -191,7 +192,14 @@ namespace Rasa.Managers
             CopyProgressToClone(unitOfWork, source, characterId);
 
             // Spent last, so a clone that failed anywhere above costs nothing.
-            unitOfWork.Characters.UpdateCharacterCloneCredits(source.Id, source.CloneCredits - 1);
+            //
+            // Held in a local rather than re-read off `source` afterwards. UpdateCharacterCloneCredits
+            // writes through the tracked entity, and whether that is the same object as `source`
+            // depends on which context loaded the account - so reading it back would subtract
+            // twice on one path and once on the other.
+            var remainingCredits = source.CloneCredits - 1;
+
+            unitOfWork.Characters.UpdateCharacterCloneCredits(source.Id, remainingCredits);
 
             if (unitOfWork.CharacterLockboxes.Get(client.AccountEntry.Id) == null)
                 unitOfWork.CharacterLockboxes.Add(client.AccountEntry.Id);
@@ -207,6 +215,14 @@ namespace Rasa.Managers
 
             // The source pod shows a credit count, which just went down by one.
             SendCharacterInfo(client, packet.CloneSlotNum, unitOfWork.Characters.Get(source.Id));
+
+            // And the pod's own method for exactly this, which CharacterInfo does not replace:
+            // Recv_CloneCreditsChanged posts UI_UPDATE_CHARACTER_SELECTION_SLOT_CLONE_CREDITS,
+            // which repaints the stats panel if that slot is the selected one. CharacterInfo
+            // reaches _UpdatePod and _AutoSelectCharacter, and neither of those repaints, so the
+            // number would sit stale on screen until the player clicked away and back.
+            client.CallMethod(SelectionPodStartEntityId + packet.CloneSlotNum,
+                new CloneCreditsChangedPacket(remainingCredits));
         }
 
         /// <summary>

@@ -10,6 +10,7 @@ namespace Rasa.Managers
     using Packets;
     using Packets.Communicator.Server;
     using Packets.Game.Server;
+    using Packets.Manifestation.Client;
     using Packets.Manifestation.Server;
     using Packets.MapChannel.Client;
     using Packets.MapChannel.Server;
@@ -458,6 +459,61 @@ namespace Rasa.Managers
                 if (now >= client.Player.CombatExpiresAt)
                     ExitCombat(client);
             }
+        }
+
+        /// <summary>
+        /// Consumes a clone-credit item and gives its owner the credit.
+        ///
+        /// The client sends this from the item's right-click menu and expects nothing back except
+        /// the new total: <c>Recv_CloneCredits</c> raises the "clone credit added" message and the
+        /// tutorial itself, but only when the number it is given is higher than the one it had, so
+        /// the packet has to go out after the increment and not before.
+        ///
+        /// Everything is checked here rather than trusted. The client only offers the right-click
+        /// on an item with the CloneCredit augmentation, but the entity id arrived over the wire.
+        /// </summary>
+        public void RequestUseCloneCredit(Client client, RequestUseCloneCreditPacket packet)
+        {
+            if (client?.Player == null)
+                return;
+
+            // Theirs, and in the pack rather than a lockbox or someone else's window.
+            if (!client.Player.Inventory.PersonalInventory.Contains(packet.EntityId))
+                return;
+
+            var item = EntityManager.Instance.GetItem(packet.EntityId);
+
+            if (item?.ItemTemplate == null)
+                return;
+
+            var classInfo = EntityClassManager.Instance.GetClassInfo(item.ItemTemplate.Class);
+
+            // The augmentation is what makes an item a clone credit - not its template id, so a
+            // second one added later works without touching this.
+            if (classInfo == null || !classInfo.Augmentations.Contains(AugmentationType.CloneCredit))
+            {
+                Logger.WriteLog(LogType.Error,
+                    $"RequestUseCloneCredit: {client.Player.Name} used item {packet.EntityId} (class {item.ItemTemplate.Class}), which is not a clone credit");
+                return;
+            }
+
+            if (item.StackSize == 0)
+                return;
+
+            // Spent before it is granted, so that a failure here cannot mint a credit from
+            // nothing. ReduceStackCount's own preconditions - a live player, a non-null item, a
+            // non-zero count, and the item being in the named inventory - are all established
+            // above, so once it is reached it consumes.
+            //
+            // Worth knowing which branch it takes, because only one of them touches StackSize: a
+            // stack of several is decremented, while the last of a stack is destroyed and
+            // unregistered with its count left alone. Anything downstream that wants to know
+            // whether an item is gone has to look at the inventory slot, not the number.
+            InventoryManager.Instance.ReduceStackCount(client, InventoryType.Personal, item, 1);
+
+            client.Player.CloneCredits++;
+            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.CloneCredits);
+            client.CallMethod(client.Player.EntityId, new CloneCreditsPacket(client.Player.CloneCredits));
         }
 
         public void RequestArmAbility(Client client, int abilityDrawerSlot)

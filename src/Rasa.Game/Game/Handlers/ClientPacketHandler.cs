@@ -11,6 +11,7 @@
     using Packets.Inventory.Client;
     using Packets.LookingForGroup.Client;
     using Packets.LootDispenser.Client;
+    using Packets.Manifestation.Client;
     using Packets.Minion.Client;
     using Packets.Party.Both;
     using Packets.Party.Client;
@@ -308,6 +309,12 @@
         private void RequestQueryAuctions(RequestQueryAuctionsPacket packet)
         {
             AuctionHouseManager.Instance.RequestQueryAuctions(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestUseCloneCredit)]
+        private void RequestUseCloneCredit(RequestUseCloneCreditPacket packet)
+        {
+            ManifestationManager.Instance.RequestUseCloneCredit(Client, packet);
         }
 
         [PacketHandler(GameOpcode.RequestSetAbilitySlot)]

@@ -426,6 +426,10 @@ namespace Rasa.Game
                         return;
                     }
 
+                    // Nothing that acts on the world runs for a connection that is not in it.
+                    if (!IsExpected(csmPacket.MethodId))
+                        return;
+
                     // MethodId, not Packet.Opcode: an opcode with no handler leaves Packet null.
                     ManifestationManager.Instance.NotifyPlayerActivity(this, csmPacket.MethodId);
 
@@ -438,6 +442,87 @@ namespace Rasa.Game
                     SendMessage(pingMessage, delay: false);
                     break;
             }
+        }
+
+        /// <summary>
+        /// The character is in the world: registered with the EntityManager, standing in a map's
+        /// cells, and holding inventory lists that name live entities. Teleporting counts - a
+        /// dropship ride keeps the manifestation and everything registered with it - but Loading
+        /// does not, because a map change tears all of that down and MapLoaded builds it again.
+        /// </summary>
+        public bool IsInWorld => State == ClientState.Ingame || State == ClientState.Teleporting;
+
+        /// <summary>
+        /// The methods the real client sends while it is not in the world, taken from the module
+        /// each one is sent from: character creation and selection
+        /// (client/inputstate/charactercreation.py, characterselection.py), the loading screen's
+        /// MapLoaded (wonkavator.py), the ping it keeps up throughout (game.py), and the
+        /// account-wide options it can save from anywhere (clientmethod.py).
+        ///
+        /// Everything else names an entity, a map, a character or a clan, and only means
+        /// anything while the character is in the world. SaveCharacterOptions is deliberately
+        /// absent: it writes rows keyed on the character id, which is 0 until one is chosen.
+        /// </summary>
+        private static readonly HashSet<GameOpcode> WorldlessMethods = new()
+        {
+            GameOpcode.RequestCharacterName,
+            GameOpcode.RequestFamilyName,
+            GameOpcode.RequestCreateCharacterInSlot,
+            GameOpcode.RequestCloneCharacterToSlot,
+            GameOpcode.RequestDeleteCharacterInSlot,
+            GameOpcode.RequestSwitchToCharacterInSlot,
+            GameOpcode.StoreUserClientInformation,
+            GameOpcode.MapLoaded,
+            GameOpcode.Ping,
+            GameOpcode.SaveUserOptions
+        };
+
+        /// <summary>
+        /// Whether this connection may call that method now. There was no such check: every one
+        /// of the handlers was reachable in any state, which is what made the stale inventory
+        /// lists of a logged-out or mid-zone client worth anything to whoever kept them.
+        /// </summary>
+        private bool IsExpected(GameOpcode methodId)
+        {
+            if (IsInWorld || WorldlessMethods.Contains(methodId))
+                return true;
+
+            ReportOutOfState(methodId);
+
+            return false;
+        }
+
+        /// <summary>How long this client's refusals stay quiet after one has been logged.</summary>
+        private const long RefusalLogQuietMs = 5000;
+
+        private bool _refusalLogged;
+        private long _refusalsSinceLog;
+        private long _nextRefusalLogTick;
+
+        /// <summary>
+        /// The first refusal in full, then at most one every RefusalLogQuietMs saying how many
+        /// stood behind it. A client can send these as fast as the wire allows and the log writes
+        /// synchronously on the loop thread, so a line each would be the denial of service the
+        /// refusal is there to prevent. Refusing costs the packet, not the connection: the real
+        /// client has a few of its own to send as it crosses in and out of the world.
+        /// </summary>
+        private void ReportOutOfState(GameOpcode methodId)
+        {
+            _refusalsSinceLog++;
+
+            var now = Environment.TickCount64;
+
+            if (_refusalLogged && now < _nextRefusalLogTick)
+                return;
+
+            var repeat = _refusalsSinceLog > 1 ? $" ({_refusalsSinceLog} refused since the last of these)" : "";
+
+            Logger.WriteLog(LogType.Security,
+                $"Client {Socket.RemoteAddress} sent {methodId} in state {State}; ignored{repeat}.");
+
+            _refusalLogged = true;
+            _refusalsSinceLog = 0;
+            _nextRefusalLogTick = now + RefusalLogQuietMs;
         }
 
         private T GetMessageAs<T>(ProtocolPacket protocolPacket)

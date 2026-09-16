@@ -416,6 +416,26 @@ namespace Rasa.Managers
             client.CallMethod(SysEntity.ClientMethodId, new AckPingPacket(ping));
         }
 
+        /// <summary>
+        /// Destroys every item entity a slot list holds, and empties the list with them.
+        ///
+        /// Emptying it is the point. Destroying an item hands its entity id back to the
+        /// EntityManager's free list, which gives that id to the next item created - somebody
+        /// else's, moments later - while the slots here went on naming it. A connection that is
+        /// no longer in the world still had its four lists: at the character screen after a
+        /// logout, or between maps for as long as the client took to answer with MapLoaded. Every
+        /// handler that resolves a slot to an entity id resolved those to another player's items,
+        /// which was enough to auction, sell, bank or craft with them.
+        /// </summary>
+        private static void DestroyInventory(Client client, List<ulong> inventory)
+        {
+            foreach (var entityId in inventory)
+                if (entityId != 0)
+                    EntityManager.Instance.DestroyPhysicalEntity(client, entityId, EntityType.Item);
+
+            inventory.Clear();
+        }
+
         public void RemovePlayer(Client client, bool logout)
         {
             // A target is an entity on this map; the client does not always re-target after a
@@ -430,21 +450,10 @@ namespace Rasa.Managers
             EntityManager.Instance.UnregisterActor(client.Player.EntityId);
 
             // unregister character Inventory
-            foreach (var entityId in client.Player.Inventory.EquippedInventory)
-                if (entityId != 0)
-                    EntityManager.Instance.DestroyPhysicalEntity(client, entityId, EntityType.Item);
-
-            foreach (var entityId in client.Player.Inventory.HomeInventory)
-                if (entityId != 0)
-                    EntityManager.Instance.DestroyPhysicalEntity(client, entityId, EntityType.Item);
-
-            foreach (var entityId in client.Player.Inventory.PersonalInventory)
-                if (entityId != 0)
-                    EntityManager.Instance.DestroyPhysicalEntity(client, entityId, EntityType.Item);
-
-            foreach (var entityId in client.Player.Inventory.WeaponDrawer)
-                if (entityId != 0)
-                    EntityManager.Instance.DestroyPhysicalEntity(client, entityId, EntityType.Item);
+            DestroyInventory(client, client.Player.Inventory.EquippedInventory);
+            DestroyInventory(client, client.Player.Inventory.HomeInventory);
+            DestroyInventory(client, client.Player.Inventory.PersonalInventory);
+            DestroyInventory(client, client.Player.Inventory.WeaponDrawer);
 
             NpcManager.Instance.DiscardBuybackItems(client);
             ActorActionManager.Instance.RemoveActor(client.Player);

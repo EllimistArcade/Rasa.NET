@@ -325,6 +325,7 @@ namespace Rasa.Game
             MapTriggerManager.Instance.MapTriggerInit();
             MapLinkManager.Instance.MapLinkInit();
             RegionManager.Instance.RegionInit();
+            MapMarkerManager.Instance.MapMarkerInit();
             RecipeManager.Instance.RecipeInit();
 
             return true;

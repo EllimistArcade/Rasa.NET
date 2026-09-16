@@ -802,6 +802,44 @@ namespace Rasa.Migrations.MySqlWorld
                     b.ToTable("map_link");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.World.MapMarkerEntry", b =>
+                {
+                    b.Property<ulong>("MarkerEntityId")
+                        .HasColumnType("bigint unsigned")
+                        .HasColumnName("marker_entity_id");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("comment");
+
+                    b.Property<uint>("MapContextId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("map_context_id");
+
+                    b.Property<uint>("MarkerType")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("marker_type");
+
+                    b.Property<double>("MatchDistance")
+                        .HasColumnType("double")
+                        .HasColumnName("match_distance");
+
+                    b.Property<byte>("ObjectKind")
+                        .HasColumnType("tinyint unsigned")
+                        .HasColumnName("object_kind");
+
+                    b.Property<uint>("ObjectId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("object_id");
+
+                    b.HasKey("MarkerEntityId", "MapContextId");
+
+                    b.HasIndex("MapContextId")
+                        .HasDatabaseName("map_marker_index_map_context_id");
+
+                    b.ToTable("map_marker");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.MapRegionEntry", b =>
                 {
                     b.Property<uint>("Id")

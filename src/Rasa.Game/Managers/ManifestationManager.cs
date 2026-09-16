@@ -446,6 +446,7 @@ namespace Rasa.Managers
 
             // The regions the player is standing in; re-sent by RegionManager.Worker as they move.
             RegionManager.Instance.PlayerEnteredMap(client);
+            MapMarkerManager.Instance.PlayerEnteredMap(client);
 
             client.CallMethod(player.EntityId, new AdvancementStatsPacket(
                 player.Level,

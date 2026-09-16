@@ -602,6 +602,10 @@ namespace Rasa.Managers
             client.CallMethod(client.Player.EntityId, new WaypointGainedPacket(objectData.WaypointId, objectData.WaypointType));
             client.Player.GainedWaypoints.Add(newWaypoint);
 
+            // And on the map, where this is the one thing about a marker the client cannot work
+            // out for itself. The marker changes colour under the player as they stand on it.
+            MapMarkerManager.Instance.WaypointDiscovered(client, objectData.WaypointId);
+
             // update Db
             CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Teleporter, newWaypoint);
         }

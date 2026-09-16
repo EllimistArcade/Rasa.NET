@@ -46,6 +46,7 @@ namespace Rasa.Context.World
         public DbSet<MapLinkEntry> MapLinkEntries { get; set; }
         public DbSet<KraftwerksEntry> KraftwerksEntries { get; set; }
         public DbSet<MapRegionEntry> MapRegionEntries { get; set; }
+        public DbSet<MapMarkerEntry> MapMarkerEntries { get; set; }
         public DbSet<RecipeEntry> RecipeEntries { get; set; }
         public DbSet<RecipeInputEntry> RecipeInputEntries { get; set; }
         public DbSet<NpcMissionEntry> NpcMissionEntries { get; set; }
@@ -68,6 +69,18 @@ namespace Rasa.Context.World
             SetupExperienceForLevel(modelBuilder);
             SetupRandomName(modelBuilder);
             SetupItemTemplateItemClass(modelBuilder);
+            SetupMapMarker(modelBuilder);
+        }
+
+        /// <summary>
+        /// A marker is identified by its id *and* its map. The client reuses one marker id across
+        /// a zone and its wargame variant, where the server has two different objects, so the id
+        /// alone is not a key - and the read is always one map's worth anyway.
+        /// </summary>
+        private static void SetupMapMarker(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<MapMarkerEntry>()
+                .HasKey(e => new { e.MarkerEntityId, e.MapContextId });
         }
 
         private void SetupExperienceForLevel(ModelBuilder modelBuilder)

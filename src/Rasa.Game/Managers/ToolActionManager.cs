@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace Rasa.Managers
 {
@@ -23,10 +24,16 @@ namespace Rasa.Managers
     /// templates we seed are tools, and two of them - the level 5-9 field repair tool and area
     /// healing disc - are on service-NPC vendors, so this is reachable by a new character.
     ///
-    /// Three of the six do something: the healing disc, the field repair tool and armour
-    /// augmentation. Harvesting and the cipher are validated and then refused silently, because
-    /// asking for them is not a mistake - one needs a loot path and the other the usable-hack
-    /// flow, and neither exists yet.
+    /// Four of the six do something: the healing disc, the field repair tool, armour augmentation
+    /// and the two harvesting tools, which share one action id. The cipher is validated and then
+    /// refused silently, because asking for it is not a mistake - it needs the usable-hack flow,
+    /// which does not exist yet.
+    ///
+    /// Harvesting is the one of these that makes an item out of nothing rather than moving a
+    /// number that already existed, so it is the one a forged request is worth sending. Its rules
+    /// live in <see cref="Harvest"/> and every one of them is enforced twice - once at the
+    /// request and again at the recovery - because the windup gives the world 800ms to change
+    /// underneath a claim that was true when it was made.
     ///
     /// Validation runs whatever happens, and it is the half that has to be right either way: the
     /// client's own CheckAction is a courtesy to the player, not a constraint on the wire.
@@ -71,16 +78,31 @@ namespace Rasa.Managers
         };
 
         /// <summary>
-        /// The three that do something. Harvesting needs a loot path and the cipher needs the
-        /// usable-hack flow, so both are still refused - but silently, since there is nothing
-        /// wrong with asking.
+        /// The four that do something. The cipher still needs the usable-hack flow, so it is
+        /// refused - but silently, since there is nothing wrong with asking. Nerfweapon has no
+        /// effect to apply at all.
         /// </summary>
         public static readonly HashSet<ActionId> Applies = new HashSet<ActionId>
         {
             ActionId.ToolHealingDisc,
             ActionId.ToolFieldRepair,
-            ActionId.ToolArmorAugmentation
+            ActionId.ToolArmorAugmentation,
+            ActionId.ToolHarvest
         };
+
+        /// <summary>
+        /// The roll. Seeded once and locked, because a fresh Random per call seeded from the
+        /// clock returns the same number to every request inside a tick - which on a harvest is
+        /// a player learning that spamming during one tick gives the same answer every time.
+        /// </summary>
+        private static readonly Random Roll = new Random();
+        private static readonly object RollLock = new object();
+
+        private static int Next(int maxExclusive)
+        {
+            lock (RollLock)
+                return Roll.Next(maxExclusive);
+        }
 
         /// <summary>
         /// The healing skill level at which healdisc.py sets <c>canTargetDead</c>, letting the
@@ -142,11 +164,11 @@ namespace Rasa.Managers
                 return;
             }
 
-            // Harvesting and the cipher still do nothing, so they are refused silently - with
-            // msgId None. The client cancels the action and pops it off __unresolvedActions
-            // either way; what it skips is the message, which is deliberate: the player did
-            // nothing wrong, and telling them off on every click of a tool that is simply not
-            // finished says less than nothing.
+            // The cipher and the snowball launcher still do nothing, so they are refused silently
+            // - with msgId None. The client cancels the action and pops it off
+            // __unresolvedActions either way; what it skips is the message, which is deliberate:
+            // the player did nothing wrong, and telling them off on every click of a tool that is
+            // simply not finished says less than nothing.
             if (!Applies.Contains(packet.ActionId))
             {
                 Fail(client, packet, null);
@@ -168,6 +190,22 @@ namespace Rasa.Managers
             if (mapChannel == null)
             {
                 Fail(client, packet, null);
+                return;
+            }
+
+            // Nothing else caps this list, and a client can send faster than a windup resolves -
+            // so without a limit here a player could queue harvests without bound and spend the
+            // world loop resolving them. Counted per player rather than per map so that one
+            // client cannot crowd out everybody else's actions either.
+            var queued = 0;
+
+            foreach (var pending in mapChannel.PerformRecovery)
+                if (pending.Actor == client.Player)
+                    queued++;
+
+            if (queued >= Harvest.MaxQueuedPerPlayer)
+            {
+                Fail(client, packet, PlayerMessage.PmCannotPerformActionNow);
                 return;
             }
 
@@ -276,17 +314,25 @@ namespace Rasa.Managers
             // nothing lands, which is why the check is here and not only at the request.
             var classInfo = ClassInfoOf(InventoryManager.Instance.CurrentWeapon(client));
 
-            if (classInfo == null || classInfo.WeaponAttackActionId != action.ActionId
-                                  || classInfo.WeaponAttackArgId != action.ActionArgId)
-                return;
+            var stillArmed = classInfo != null
+                             && classInfo.WeaponAttackActionId == action.ActionId
+                             && classInfo.WeaponAttackArgId == action.ActionArgId;
 
+            // The windup gives the target 800ms to die, be looted away, or log out.
             var target = ResolveTarget(action.TargetId);
-
-            if (target == null)
-                return;
 
             var amount = (int)action.Args;
             var hits = new List<ToolHit>();
+
+            // Nothing lands if the tool was swapped away or the target is gone. Both of these used
+            // to return here and send nothing, which left the client holding the action in
+            // __unresolvedActions forever - so the action is resolved on the way out instead: no
+            // effect and no message, but closed.
+            if (!stillArmed || target == null)
+            {
+                Resolve(mapChannel, action, hits);
+                return;
+            }
 
             switch (action.ActionId)
             {
@@ -306,6 +352,23 @@ namespace Rasa.Managers
 
                     if (armored > 0)
                         hits.Add(new ToolHit(target.EntityId, armored));
+
+                    break;
+                }
+
+                case ActionId.ToolHarvest:
+                {
+                    // Harvesting resolves one way or the other, never both: a refusal carries the
+                    // reason and pops the action off the client's unresolved list, and anything
+                    // else falls through to the ordinary resolution below with no hit data -
+                    // which is all harvest.py wants, since its DoHits reads none.
+                    var refusal = Harvested(client, action, target as Creature);
+
+                    if (refusal != null)
+                    {
+                        Tell(client, action, refusal.Value);
+                        return;
+                    }
 
                     break;
                 }
@@ -333,10 +396,97 @@ namespace Rasa.Managers
                 }
             }
 
-            // Sent even with nothing in it: the client's DoAction is what clears the action out
-            // of __unresolvedActions, and an empty hit list simply announces nothing.
+            Resolve(mapChannel, action, hits);
+        }
+
+        /// <summary>
+        /// Closes the action out. Sent even with nothing in it: the client's DoAction is what
+        /// clears the action out of __unresolvedActions, and an empty hit list simply announces
+        /// nothing. Goes to the whole cell rather than to the caster alone, because the amount is
+        /// only known here.
+        /// </summary>
+        private static void Resolve(MapChannel mapChannel, ActionData action, List<ToolHit> hits)
+        {
             CellManager.Instance.CellCallMethod(mapChannel, action.Actor,
                 new ToolActionRecoveryPacket(action.ActionId, action.ActionArgId, hits));
+        }
+
+        /// <summary>
+        /// One harvest attempt, resolved. Everything the request checked is checked again here,
+        /// because the windup gives the world 800ms to change underneath it: the corpse can be
+        /// looted and gone, the player can have walked away, someone else's attempt can have
+        /// taken the last charge.
+        ///
+        /// The attempt is spent whether the roll succeeds or not. That is the point of counting
+        /// attempts: a tool with a 55% chance retried until it works is a tool with a 100%
+        /// chance, and the number of asks is the only thing limiting what one corpse is worth.
+        ///
+        /// What is deliberately not re-checked here is the substance and skill pair, because
+        /// neither can move while this action is in flight: the substance is a flag on the
+        /// creature's class, and the tool that decides which harvest this is has already been
+        /// checked by <see cref="PerformRecovery"/> to still be the same action pair that started
+        /// it, so the arg id that chose between Salvage and Tissue Extraction cannot have
+        /// changed either.
+        /// </summary>
+        private PlayerMessage? Harvested(Client client, ActionData action, Creature creature)
+        {
+            // The corpse was looted away, or the target was never a creature to begin with.
+            if (creature == null || creature.State != CharacterState.Dead)
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            if (creature.HarvestOwnerEntityId != action.Actor.EntityId)
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            if (creature.HarvestAttemptsLeft <= 0)
+                return PlayerMessage.PmHarvestFailDepleted;
+
+            if (Vector3.Distance(action.Actor.Position, creature.Position)
+                > Harvest.MaxRange + Harvest.RangeTolerance)
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            var species = SpeciesOf(creature);
+
+            if (species == null || !HarvestYield.Has(species.Value))
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            // Spent before the roll, so that a failure costs the same as a success and there is
+            // nothing to be gained by aborting a harvest that is about to miss.
+            creature.HarvestAttemptsLeft--;
+
+            // The chance is the tool class's max damage, which is what the client's own tooltip
+            // prints: "Salvage Chance: 55%" on a level 5 tool, rising to 100 at 50.
+            var chance = (int)action.Args;
+
+            if (Next(100) >= chance)
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            var templates = HarvestYield.BySpecies[species.Value];
+            var item = ItemManager.Instance.CreateFromTemplateId(templates[Next(templates.Length)], 1);
+
+            if (item == null)
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            // A full pack means the harvest does not happen rather than the item vanishing into
+            // one: AddItemToInventory returns null with nowhere to put it, and the item it was
+            // handed is already registered, so it has to be taken back out again.
+            if (InventoryManager.Instance.AddItemToInventory(client, item) == null)
+            {
+                EntityManager.Instance.DestroyPhysicalEntity(client, item.EntityId, EntityType.Item);
+                return PlayerMessage.PmYourInventoryIsFull;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Resolves the action with a reason. harvest.py's DoHits does nothing with hit data, so
+        /// what a player sees of a harvest is the message and the item - but the action still has
+        /// to be resolved, or the client keeps it in __unresolvedActions forever.
+        /// </summary>
+        private static void Tell(Client client, ActionData action, PlayerMessage message)
+        {
+            client.CallMethod(client.Player.EntityId,
+                new UserActionFailedPacket(action.ActionId, action.ActionArgId, message));
         }
 
         private static Actor ResolveTarget(ulong entityId)
@@ -345,6 +495,37 @@ namespace Rasa.Managers
                 return player;
 
             return EntityManager.Instance.GetCreature(entityId);
+        }
+
+        /// <summary>The species flag on this creature's class, or null if it has none.</summary>
+        private static CreatureFlag? SpeciesOf(Creature creature)
+        {
+            foreach (var flag in FlagsOf(creature))
+                if (flag.ToString().StartsWith("Species", StringComparison.Ordinal))
+                    return flag;
+
+            return null;
+        }
+
+        /// <summary>Biological, Mechanical, or null when the class carries neither.</summary>
+        private static CreatureFlag? SubstanceOf(Creature creature)
+        {
+            foreach (var flag in FlagsOf(creature))
+                if (flag == CreatureFlag.Biological || flag == CreatureFlag.Mechanical)
+                    return flag;
+
+            return null;
+        }
+
+        private static IEnumerable<CreatureFlag> FlagsOf(Creature creature)
+        {
+            if (creature != null
+                && EntityClassManager.Instance.LoadedEntityClasses
+                    .TryGetValue(creature.EntityClass, out var entityClass)
+                && entityClass?.CreatureFlags != null)
+                return entityClass.CreatureFlags;
+
+            return System.Array.Empty<CreatureFlag>();
         }
 
         private static WeaponClassInfo ClassInfoOf(Item tool)
@@ -486,13 +667,55 @@ namespace Rasa.Managers
             if (creature == null || creature.State != CharacterState.Dead)
                 return PlayerMessage.PmHarvestFailNotHarvestable;
 
-            // ToDo: Salvage refuses a BIOLOGICAL creature and Tissue Extraction refuses a
-            // MECHANICAL one, both with PmTargetInvalid. Creature flags are not loaded
-            // server-side (CreatureManager still passes an empty flag list to CreatureInfo), so
-            // neither can be checked. The arg id that decides which rule applies is already here:
-            // 168 Salvage, 169 Tissue Extraction.
+            // The arg id says which harvest this is, and it is the class's own - the action-pair
+            // check above already refused anything else - so this only rejects the one broken
+            // weapon_class row that carries a harvest action with an arg that is not a skill.
             if (packet.ActionArgId != (uint)SkillId.Salvage && packet.ActionArgId != (uint)SkillId.TissueExtraction)
                 return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            // Whose kill it was. Corpse looting is already owner-only and harvesting hands out
+            // items the same way, so it follows the same rule - and a corpse nobody earned, which
+            // carries owner 0, belongs to nobody.
+            if (creature.HarvestOwnerEntityId == 0 || creature.HarvestOwnerEntityId != client.Player.EntityId)
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            // Already stripped. Checked before the substance and skill rules so that a depleted
+            // corpse says so rather than sending the player off to find a different tool.
+            if (creature.HarvestAttemptsLeft <= 0)
+                return PlayerMessage.PmHarvestFailDepleted;
+
+            // Standing over it. The client will not aim past the tool's range, but the entity id
+            // arrives over the wire, and nothing else on this server checks a distance.
+            if (Vector3.Distance(client.Player.Position, creature.Position)
+                > Harvest.MaxRange + Harvest.RangeTolerance)
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            var species = SpeciesOf(creature);
+
+            // harvest.py: Salvage refuses a BIOLOGICAL creature, Tissue Extraction refuses a
+            // MECHANICAL one. A creature with no flags at all - the 128 classes no species was
+            // matched to - is refused by both, since nothing is known about what it is made of.
+            var substance = SubstanceOf(creature);
+
+            if (substance == null)
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            if (packet.ActionArgId == (uint)SkillId.Salvage && substance == CreatureFlag.Biological)
+                return PlayerMessage.PmTargetInvalid;
+
+            if (packet.ActionArgId == (uint)SkillId.TissueExtraction && substance == CreatureFlag.Mechanical)
+                return PlayerMessage.PmTargetInvalid;
+
+            // Nothing is known to come off this species. Refused before the roll so the player is
+            // not charged ammo and an attempt for a corpse that could never have paid out.
+            if (species == null || !HarvestYield.Has(species.Value))
+                return PlayerMessage.PmHarvestFailNotHarvestable;
+
+            // The skill the tool needs is the one its arg names, and the tool's own level is
+            // already gated by the item's requirements - this is the player having trained it at
+            // all.
+            if (!client.Player.Skills.ContainsKey((SkillId)packet.ActionArgId))
+                return PlayerMessage.PmHarvestFailSkillTooLow;
 
             return null;
         }

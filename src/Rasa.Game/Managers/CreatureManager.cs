@@ -161,6 +161,18 @@ namespace Rasa.Managers
                 ManifestationManager.Instance.GainExperience(client, experience);
             }
 
+            // The corpse is harvestable by whoever earned it, a fixed number of times. Set here
+            // rather than at the first harvest so that a creature that died without a player
+            // behind it - a minion's kill, a fall, a despawn - is left at zero and nobody can
+            // harvest it at all.
+            //
+            // Written on every kill and not only on a claimed one: a spawn pool puts the same
+            // Creature back on its feet, so a claim left over from a previous life would still be
+            // sitting there the next time it died to something that was not a player, and that
+            // player would be handed a corpse they did not earn.
+            creature.HarvestOwnerEntityId = client?.Player.EntityId ?? 0;
+            creature.HarvestAttemptsLeft = client != null ? Harvest.AttemptsPerCorpse : 0;
+
             // spawn loot
             if (killedBy != null && client != null)
                 LootDispenserManager.Instance.Loot(client, creature);

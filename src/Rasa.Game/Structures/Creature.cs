@@ -77,6 +77,22 @@ namespace Rasa.Structures
         /// </summary>
         public long DespawnTime { get; set; }
 
+        /// <summary>
+        /// Who may harvest this corpse: the player whose kill it was, set in HandleCreatureKill.
+        /// Corpse looting already works this way - RequestCorpseLooting refuses anyone but the
+        /// dispenser's owner - and harvesting hands out items just as looting does, so it is held
+        /// to the same rule rather than being first-come.
+        /// </summary>
+        public ulong HarvestOwnerEntityId { get; set; }
+
+        /// <summary>
+        /// Attempts left on this corpse, successes and failures alike. Set when the creature dies
+        /// and decremented by every attempt; at zero the corpse is depleted. Living creatures sit
+        /// at zero, which is also a refusal, so a corpse that was never killed by anyone cannot
+        /// be harvested either.
+        /// </summary>
+        public int HarvestAttemptsLeft { get; set; }
+
         public Creature(CreatureEntry data)
         {
             DbId = data.Id;

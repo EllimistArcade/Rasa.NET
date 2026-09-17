@@ -101,6 +101,35 @@ namespace Rasa.Managers
         private readonly IGameUnitOfWorkFactory _gameUnitOfWorkFactory;
 
         private static List<AutoFireTimer> AutoFire = new List<AutoFireTimer>();
+
+        /// <summary>
+        /// How far a shot may be handled from when it was due, early or late, without the shot
+        /// clock holding it against the player, in ms.
+        ///
+        /// A shot is timed when it is handled, which is a tick at a time, after a network that
+        /// delays packets unevenly: two shots sent a refire apart can be handled closer together
+        /// than that, or one late and the next on time. A strict clock would refuse the second
+        /// of a close pair, and charge a late shot's delay to the one after it. Within the
+        /// allowance a shot is charged from when it was due instead, so over any stretch of time
+        /// no more than one shot per refire is fired - plus, once, twice the allowance's worth.
+        /// </summary>
+        private const long ShotTolerance = 250;
+
+        /// <summary>
+        /// The least a shot is charged, in ms. The auto-fire list is walked once every 100 ms
+        /// (MapChannelManager's "AutoFire" timer), which is the fastest the server fires a weapon
+        /// by itself; a weapon whose refire reads 0 is held to that rather than to nothing.
+        /// </summary>
+        private const long MinRefire = 100;
+
+        private enum FireResult
+        {
+            Fired,
+            /// <summary>Everything else allowed the shot, and the shot clock did not yet.</summary>
+            TooSoon,
+            NotFired
+        }
+
         public static byte MaxPlayerLevel = 50;
 
         /// <summary>The levels that award a clone credit, per the live game's own rules.</summary>
@@ -201,12 +230,19 @@ namespace Rasa.Managers
             client.MapClient.Player.CurentTitle = titleId;*/
         }
 
-        public bool PlayerTryFireWeapon(Client client)
+        public bool PlayerTryFireWeapon(Client client) => TryFireWeapon(client) == FireResult.Fired;
+
+        /// <summary>
+        /// Fires the weapon in hand if it can be fired now. Every shot a player makes comes through
+        /// here, by three routes: the auto-fire list, the first shot of StartAutoFire, and
+        /// RequestWeaponAttack.
+        /// </summary>
+        private FireResult TryFireWeapon(Client client)
         {
             // Reached from the auto-fire list on the main loop as well as from the handler; a
             // client that has left the world since must not be fired for.
             if (client.Player == null || client.State != ClientState.Ingame)
-                return false;
+                return FireResult.NotFired;
 
             var weapon = InventoryManager.Instance.CurrentWeapon(client);
 
@@ -217,7 +253,7 @@ namespace Rasa.Managers
             // is walked at the top of the map channel worker - the dereference took the whole
             // tick with it, on every map, for as long as the client kept the fire alive.
             if (weapon == null)
-                return false;
+                return FireResult.NotFired;
 
             // A jammed weapon does nothing until it is reloaded. Checked before WeaponReady so
             // that a jam does not get mistaken for a weapon that is merely stowed and silently
@@ -227,33 +263,65 @@ namespace Rasa.Managers
                 // Once per trigger pull would be once per tick while auto-fire is held, so the
                 // message is not repeated - the client already showed it when the jam arrived,
                 // and its ammo readout still says "Jammed".
-                return false;
+                return FireResult.NotFired;
             }
 
             // ToDo: isOverheated, and some other checks
             if (!client.Player.WeaponReady)
             {
                 RequestWeaponDraw(client);
-                return false;
+                return FireResult.NotFired;
             }
 
             var weaponClassInfo = EntityClassManager.Instance.GetWeaponClassInfo(weapon);
 
             if (weaponClassInfo == null)
-                return false;
+                return FireResult.NotFired;
+
+            // A weapon being reloaded does not fire. The client never asks it to: primary fire
+            // waits for a reload to finish, and anything else the player does interrupts the
+            // reload first - RequestActionInterrupt, then the attack, handled in that order - so
+            // by the time a legitimate shot is looked at here the reload is already marked. A
+            // shot with the reload still live fired out of the clip while the reload went on to
+            // top the clip up anyway, so a reload never kept anyone from firing.
+            if (IsReloading(client.Player))
+                return FireResult.NotFired;
 
             // do we need to reload?
             if (weapon.CurrentAmmo < weapon.ItemTemplate.WeaponInfo.AmmoPerShot)
             {
                 RequestWeaponReload(client, true);
-                return false;
+                return FireResult.NotFired;
             }
+
+            // The shot clock. Nothing used to time shots at all: RequestWeaponAttack fired as
+            // often as it arrived, a clip per tick if the client sent a clip's worth, and every
+            // StartAutoFire fired at once whatever the last shot had been, so pressing fire over
+            // and over outran holding it down. Last of the checks, so that TooSoon always means a
+            // shot that would otherwise have gone.
+            //
+            // The refire is the weapon's own, and the same one the auto-fire timer waits between
+            // shots, so a player cannot make a weapon fire faster than the server fires it itself.
+            var now = Environment.TickCount64;
+
+            if (ShotWait(client.Player, now) > 0)
+                return FireResult.TooSoon;
+
+            // The next shot is due a refire after this one was due - or, if this one came more than
+            // the allowance late, a refire after it came less the allowance. Charged before
+            // anything below can throw, so a shot that fails half way is still a shot as far as
+            // the clock is concerned.
+            client.Player.NextShotAt = Math.Max(client.Player.NextShotAt, now - ShotTolerance) + Math.Max(MinRefire, weapon.ItemTemplate.WeaponInfo.Refire);
 
             // decrease ammo count
             weapon.CurrentAmmo -= weapon.ItemTemplate.WeaponInfo.AmmoPerShot;
             client.CallMethod(weapon.EntityId, new WeaponAmmoInfoPacket(weapon.CurrentAmmo));
 
-            // should we update db per shot? it will be a lot of db calls
+            // Written per shot, and deliberately so: RemovePlayer destroys the inventory on every
+            // map change and MapLoaded reads it back from the database, so a clip count left to be
+            // written later would come back from any zone change it was not flushed before with
+            // the rounds already fired still in it. The shot clock above is what keeps this write
+            // to the rate the weapon fires at.
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             unitOfWork.Items.UpdateAmmo(weapon);
 
@@ -269,7 +337,35 @@ namespace Rasa.Managers
             // launch correct missile type depending on weapon type
             MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage);
             
-            return true;
+            return FireResult.Fired;
+        }
+
+        /// <summary>
+        /// How long before the player's next shot may be fired, in ms; 0 when it may be fired now.
+        /// A shot is allowed <see cref="ShotTolerance"/> ahead of <see cref="Manifestation.NextShotAt"/>.
+        /// </summary>
+        private static long ShotWait(Manifestation player, long now)
+        {
+            return Math.Max(0, player.NextShotAt - ShotTolerance - now);
+        }
+
+        /// <summary>
+        /// Whether the player has a reload waiting out its reload time that has not been
+        /// interrupted. An interrupted one stays in the queue until the next tick sees to it, and
+        /// is already over as far as the player is concerned.
+        /// </summary>
+        private static bool IsReloading(Manifestation player)
+        {
+            var queue = player.MapChannel?.PerformRecovery;
+
+            if (queue == null)
+                return false;
+
+            foreach (var action in queue)
+                if (action.Actor == player && action.ActionId == ActionId.WeaponReload && !action.IsInrerrupted)
+                    return true;
+
+            return false;
         }
 
         /// <summary>
@@ -637,10 +733,21 @@ namespace Rasa.Managers
             // yaw is probobly used to mach player and target orientation,
             // some creatures recive more damage from back then from front
 
-            if (PlayerTryFireWeapon(client))
+            switch (TryFireWeapon(client))
             {
-                ActorManager.Instance.RequestVisualCombatMode(client, true);
-                RegisterAutoFire(client);
+                case FireResult.Fired:
+                    ActorManager.Instance.RequestVisualCombatMode(client, true);
+                    RegisterAutoFire(client);
+                    break;
+
+                // Pressed again before the last shot's refire was up. The press still starts the
+                // fire, from when the clock allows: only a first shot that went used to start the
+                // timer, so a first shot held back would leave the trigger down and nothing firing
+                // until the player let go and pressed again.
+                case FireResult.TooSoon:
+                    if (RegisterAutoFire(client, ShotWait(client.Player, Environment.TickCount64)))
+                        ActorManager.Instance.RequestVisualCombatMode(client, true);
+                    break;
             }
         }
 
@@ -1145,18 +1252,24 @@ namespace Rasa.Managers
             client.CallMethod(client.Player.EntityId, new EquipmentInfoPacket(client.Player.Inventory.EquippedInventory));
         }
 
-        public void RegisterAutoFire(Client client)
+        /// <param name="delay">Milliseconds until the timer's first shot; a whole refire when left out.</param>
+        /// <returns>false when there is no weapon in hand to fire, and no timer was started.</returns>
+        public bool RegisterAutoFire(Client client, long delay = -1)
         {
             var weapon = InventoryManager.Instance.CurrentWeapon(client);
 
             if (weapon?.ItemTemplate?.WeaponInfo == null)
-                return;
+                return false;
 
             // One timer per client: a second StartAutoFire used to add a second timer and
             // double the rate of fire.
             RemoveAutoFire(client);
 
-            AutoFire.Add(new AutoFireTimer(client, weapon.ItemTemplate.WeaponInfo.Refire, weapon.ItemTemplate.WeaponInfo.Refire));
+            var refire = weapon.ItemTemplate.WeaponInfo.Refire;
+
+            AutoFire.Add(new AutoFireTimer(client, refire, delay < 0 ? refire : delay));
+
+            return true;
         }
 
         private static void RemoveAutoFire(Client client)
@@ -1424,6 +1537,15 @@ namespace Rasa.Managers
 
         public void RequestWeaponReload(Client client, bool isRequested)
         {
+            // One reload at a time. Every request used to queue another, with a windup to everyone
+            // in range for each: the client never sends a second while its first is in progress,
+            // but the fire path asks again on every trigger pull that finds the clip empty, so
+            // holding fire through a reload queued another every refire, and a client sending the
+            // request in a loop queued one per packet - each coming due with its own recovery to
+            // everyone in range and its own database write.
+            if (client.Player == null || IsReloading(client.Player))
+                return;
+
             // here we only check, can we reload weapon
             // actual weapon reload happen if reaload action isn't interupted
             var weapon = InventoryManager.Instance.CurrentWeapon(client);
@@ -1878,6 +2000,23 @@ namespace Rasa.Managers
             // where a null here used to end the process, so it is checked as well.
             if (client == null || client.State != ClientState.Ingame)
                 return;
+
+            // Interrupted before it finished. WeaponReload sets actionInterrupts, so the client
+            // interrupts its own reload when the player performs another action - a melee or an
+            // alternate attack; primary fire waits for the reload instead - cancelling it on its
+            // side as it sends RequestActionInterrupt. ActorActionManager brings an
+            // interrupted action forward to be seen to at once, and this took that for the reload
+            // finishing: the clip was filled and the jam cleared on the next tick. Any melee or
+            // alternate attack mid-reload was an instant reload, and a request followed at once by
+            // an interrupt cleared a jam in one tick, so the jam never cost anything.
+            //
+            // It loads nothing, and the jam stays. Everyone in range was shown the windup and is
+            // told it ended; the player's own client already cancelled it.
+            if (action.IsInrerrupted)
+            {
+                client.CellIgnoreSelfCallMethod(client, new ActionInterruptPacket(client.Player.EntityId, ActionId.WeaponReload, action.ActionArgId));
+                return;
+            }
 
             var weapon = InventoryManager.Instance.CurrentWeapon(client);
 

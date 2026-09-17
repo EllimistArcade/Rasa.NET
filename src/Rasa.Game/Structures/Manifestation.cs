@@ -100,6 +100,15 @@ namespace Rasa.Structures
         /// <summary>Environment.TickCount64 at which combat lapses, refreshed by every hit.</summary>
         public long CombatExpiresAt { get; set; }
 
+        /// <summary>
+        /// Environment.TickCount64 at which this player's next shot is due, whichever weapon fires
+        /// it. On the player rather than the weapon so that switching drawer slots between shots
+        /// does not give each weapon a clock of its own. Read through ManifestationManager's shot
+        /// clock, which lets a shot come a little before or after this and still charges the next
+        /// one from it.
+        /// </summary>
+        public long NextShotAt { get; set; }
+
         /// <summary>Environment.TickCount64 when the pending logout was requested.</summary>
         public long LogoutRequestedTick { get; set; }
         public bool RemoveFromMap { get; set; }

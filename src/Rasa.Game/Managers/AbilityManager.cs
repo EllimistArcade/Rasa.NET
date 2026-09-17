@@ -241,13 +241,14 @@ namespace Rasa.Managers
                 return;
             }
 
-            // Sprint is a toggle in play but not in the client code: SprintAction does not set
-            // isToggle, so pressing it while sprinting sends a fresh request rather than a
-            // detach. Ending the running sprint is what the player meant; the silent refusal
-            // cancels the client's local windup and takes nothing.
-            if (action.Module == "abilities.sprint")
+            // A sustained ability is a toggle: "Duration: Open-ended (toggle to deactivate)", the
+            // sprint tooltip says. SprintAction does not set isToggle in the client code, so the
+            // second press arrives as an ordinary request rather than a detach; ending the running
+            // effect is what the player meant, and the silent refusal cancels the client's local
+            // windup and takes nothing.
+            if (IsSustained(info))
             {
-                var running = player.ActiveEffects.Values.FirstOrDefault(e => e.TypeId == GameEffectManager.SprintTypeId);
+                var running = player.ActiveEffects.Values.FirstOrDefault(e => e.ActionId == actionId);
 
                 if (running != null)
                 {
@@ -297,13 +298,26 @@ namespace Rasa.Managers
             }
 
             // Can they pay? Checked now so the refusal is immediate; taken when the ability
-            // lands, so an interrupted windup costs nothing.
-            var shortfall = CostShortfall(player, info);
-
-            if (shortfall.HasValue)
+            // lands, so an interrupted windup costs nothing. A sustained ability has no price to
+            // pay up front - its cost row is the same figure as its drain, and the drain is how it
+            // is paid - but it does need something in the tank to start on.
+            if (IsSustained(info))
             {
-                Fail(client, actionId, level, shortfall.Value == Attributes.Power ? PlayerMessage.PmConsumableNotEnoughPower : PlayerMessage.PmConsumableNotEnoughChi);
-                return;
+                if (!player.Attributes.TryGetValue(Attributes.Chi, out var chi) || chi.Current <= 0)
+                {
+                    Fail(client, actionId, level, PlayerMessage.PmConsumableNotEnoughChi);
+                    return;
+                }
+            }
+            else
+            {
+                var shortfall = CostShortfall(player, info);
+
+                if (shortfall.HasValue)
+                {
+                    Fail(client, actionId, level, shortfall.Value == Attributes.Power ? PlayerMessage.PmConsumableNotEnoughPower : PlayerMessage.PmConsumableNotEnoughChi);
+                    return;
+                }
             }
 
             foreach (var requirement in info.ItemRequirements)
@@ -352,6 +366,17 @@ namespace Rasa.Managers
         private static bool CanResolve(ActionInfo action, ActionLevelInfo info)
         {
             return action.Module == "abilities.sprint" || IsDirectDamage(action, info);
+        }
+
+        /// <summary>
+        /// An ability that stays on and pays for itself out of adrenaline while it does -
+        /// DRAIN_PER_TICK_ADRENALINE is the tell. Sprint is the only one in the client's data.
+        /// Its action_cost row carries the same number as the drain: that row is what the client
+        /// checks against before asking, not a price the server should take on top.
+        /// </summary>
+        private static bool IsSustained(ActionLevelInfo info)
+        {
+            return info.Has(AbilityProperty.DrainPerTickAdrenaline);
         }
 
         private static bool IsDirectDamage(ActionInfo action, ActionLevelInfo info)
@@ -436,8 +461,10 @@ namespace Rasa.Managers
                 return;
             }
 
-            // Paid on landing, not on asking.
-            TakeCosts(client, player, info);
+            // Paid on landing, not on asking. A sustained ability pays as it runs, through its
+            // effect's drain, not here.
+            if (!IsSustained(info))
+                TakeCosts(client, player, info);
 
             foreach (var requirement in info.ItemRequirements)
                 InventoryManager.Instance.RemoveItemsByClass(client, requirement.ItemClass, requirement.Quantity);

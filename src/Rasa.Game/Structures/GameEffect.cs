@@ -35,8 +35,8 @@ namespace Rasa.Structures
         /// <summary>Movement speed as a percent of normal while the effect is on: 120 is a fifth faster. 0 means no change.</summary>
         public int MovementModifierPercent { get; set; }
 
-        /// <summary>Chi (adrenaline) taken from the actor per second while the effect is on; the effect ends when they run out.</summary>
-        public double AdrenalineDrainPerSecond { get; set; }
+        /// <summary>Percent of the actor's maximum chi (adrenaline) taken per second while the effect is on; the effect ends when the bar is empty.</summary>
+        public double AdrenalineDrainPercentPerSecond { get; set; }
 
         /// <summary>The fraction of a point of drain carried to the next tick, so 1.5 a second takes 3 every two seconds and not 2.</summary>
         public double DrainCarry { get; set; }

@@ -1089,6 +1089,48 @@ namespace Rasa.Managers
                 PartyManager.Instance.MemberInfoChanged(client);
         }
 
+        /// <summary>
+        /// Adrenaline (chi) earned for a kill, as a percent of the bar. Not a live-game figure:
+        /// the client says only that adrenaline is "gained by defeating enemies" and that the
+        /// Regen stat "improves ... Adrenaline gain", so the shape - a share of the bar per
+        /// kill, scaled by Regen - is the client's and the number is a placeholder to tune.
+        /// Five kills at 100% Regen fill an empty bar; sprint then runs for about a minute.
+        /// </summary>
+        public const int AdrenalinePerKillPercent = 20;
+
+        /// <summary>
+        /// Adds adrenaline to the player's bar, up to its maximum, and tells the client. whoId 0
+        /// makes the client announce the change (the floating number over the bar), as the live
+        /// server did from the killing blow.
+        /// </summary>
+        internal void GainAdrenaline(Client client, int amount)
+        {
+            var player = client.Player;
+
+            if (player == null || player.State == CharacterState.Dead || amount <= 0)
+                return;
+
+            if (!player.Attributes.TryGetValue(Attributes.Chi, out var chi) || chi.Current >= chi.CurrentMax)
+                return;
+
+            chi.Current = Math.Min(chi.CurrentMax, chi.Current + amount);
+
+            client.CallMethod(player.EntityId, new UpdateChiPacket(chi, 0));
+        }
+
+        /// <summary>The adrenaline one kill is worth to this player: AdrenalinePerKillPercent of the bar, scaled by Regen.</summary>
+        internal int AdrenalineForKill(Client client)
+        {
+            var player = client.Player;
+
+            if (player == null || !player.Attributes.TryGetValue(Attributes.Chi, out var chi))
+                return 0;
+
+            var regenPercent = player.Attributes.TryGetValue(Attributes.Regen, out var regen) ? regen.CurrentMax : 100;
+
+            return (int)Math.Round(chi.CurrentMax * AdrenalinePerKillPercent / 100D * regenPercent / 100D);
+        }
+
         public void DebugChgPlayerClass(Client client, uint newClassId)
         {
             client.Player.Class = newClassId;
@@ -2061,14 +2103,21 @@ namespace Rasa.Managers
             // _EvaluatePredictedRefresh returns early on a period of 0.
             attribute[Attributes.Health].RefreshAmount = (int)Math.Round(2D * attribute[Attributes.Regen].CurrentMax / 100, 0);
 
-            // Power and chi regenerate at the health rate for now. The live game grew adrenaline
-            // from combat and regenerated power by a formula of its own, neither of which is
-            // known; without any regeneration an ability could be used a handful of times per
-            // map, since abilities now spend both. Interim, and marked as such in
-            // docs/abilities.md. ActorManager.Regenerate applies these server-side at the same
-            // period the client predicts them with.
+            // Power regenerates at the health rate for now. The live game regenerated power by a
+            // formula of its own that is not known; without any regeneration an ability could be
+            // used a handful of times per map, since abilities now spend it. Interim.
+            // ActorManager.Regenerate applies it server-side at the same period the client
+            // predicts it with.
+            //
+            // Chi (adrenaline) does not regenerate. The client's own text has it "consumed by
+            // specific abilities such as Rage and Sprint" and "gained by defeating enemies or by
+            // using an adrenaline booster", with the Regen stat improving "Adrenaline gain" -
+            // it is earned in combat, not refilled over time, and a passive refill would outpace
+            // sprint's 1.5% a second drain and make it free. Kills grant it in
+            // CreatureManager.HandleCreatureKill; its RefreshAmount stays 0 so the client
+            // predicts nothing.
             attribute[Attributes.Power].RefreshAmount = attribute[Attributes.Health].RefreshAmount;
-            attribute[Attributes.Chi].RefreshAmount = attribute[Attributes.Health].RefreshAmount;
+            attribute[Attributes.Chi].RefreshAmount = 0;
             // 2.0 per second is the base regeneration for health
             // calculate armor max
             var armorMax = 0.0d;

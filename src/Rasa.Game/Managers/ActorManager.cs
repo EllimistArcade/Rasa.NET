@@ -242,16 +242,18 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// One second of regeneration for every player on the map: health, armour, power and
-        /// chi each gain their RefreshAmount once every RefreshPeriod seconds, up to their
+        /// One second of regeneration for every player on the map: health, armour and power
+        /// each gain their RefreshAmount once every RefreshPeriod seconds, up to their
         /// maximum. Nothing is sent - the client predicts the same thing from the RefreshAmount
         /// and RefreshPeriod it was last given (ActorAttribute adds elapsed * amount / period), so
         /// the two sides move together, and the next real update - a cost, a hit - carries the
         /// exact value. Without this the server's copy never moved: a cost check read a power
         /// bar that was full at map entry and only ever went down. The C++ server did this for
-        /// health and armour in manifestation_updatePlayer; power and chi are the interim rule
-        /// described at UpdateStatsValues. In combat the health and armour periods are five
-        /// times longer (CombatRegen), which this honours by ticking them every fifth second.
+        /// health and armour in manifestation_updatePlayer; power is the interim rule described
+        /// at UpdateStatsValues. Chi (adrenaline) is not regenerated: it is gained on kills
+        /// (ManifestationManager.GainAdrenaline) and spent by sprint and the like. In combat the
+        /// health and armour periods are five times longer (CombatRegen), which this honours by
+        /// ticking them every fifth second.
         /// </summary>
         public void Regenerate(MapChannel mapChannel)
         {
@@ -274,9 +276,6 @@ namespace Rasa.Managers
 
                 if (player.Attributes.TryGetValue(Attributes.Power, out var power))
                     Regenerate(power, player.RegenSeconds);
-
-                if (player.Attributes.TryGetValue(Attributes.Chi, out var chi))
-                    Regenerate(chi, player.RegenSeconds);
             }
         }
 

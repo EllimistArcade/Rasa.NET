@@ -159,6 +159,10 @@ namespace Rasa.Managers
 
                 // todo: Depending on level difference reduce experience
                 ManifestationManager.Instance.GainExperience(client, experience);
+
+                // Adrenaline is earned here and nowhere else: it does not regenerate. See
+                // ManifestationManager.AdrenalinePerKillPercent.
+                ManifestationManager.Instance.GainAdrenaline(client, ManifestationManager.Instance.AdrenalineForKill(client));
             }
 
             // The corpse is harvestable by whoever earned it, a fixed number of times. Set here

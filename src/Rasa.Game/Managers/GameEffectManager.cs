@@ -98,11 +98,13 @@ namespace Rasa.Managers
         /// <summary>
         /// Sprint, from its action_property row: EFFECT_MOVEMENT_MODIFIER is the speed as a
         /// percent (120 at level 1, 160 at 5), DURATION the cap in seconds, and
-        /// DRAIN_PER_TICK_ADRENALINE over INTERVAL the adrenaline it burns - the client shows
-        /// that as drain / (interval * 10) a second (abilities/sprint.py), 1.5 a second at level
-        /// 1, and this takes the same. It ends when the duration is up, the adrenaline is gone,
-        /// the player right-clicks the buff away (a detach request), or the player presses
-        /// sprint again - AbilityManager turns a second request into ending the first.
+        /// DRAIN_PER_TICK_ADRENALINE over INTERVAL the adrenaline it burns. The client's tooltip
+        /// shows that as drain / (interval * 10) and calls it "-1.5% every second"
+        /// (abilities/sprint.py, uielement 2578): a percent of the adrenaline bar, so the same
+        /// pump costs the same share of the bar at every level. This takes the same. It ends when
+        /// the duration is up, the bar is empty, the player right-clicks the buff away (a detach
+        /// request), or the player presses sprint again - AbilityManager turns a second request
+        /// into ending the first. There is no cost to start or stop it; the drain is the cost.
         /// </summary>
         public GameEffect AttachSprint(MapChannel mapChannel, Actor actor, ActionLevelInfo level)
         {
@@ -125,7 +127,7 @@ namespace Rasa.Managers
                 TickIntervalMs = 1000,
                 NextTickTick = now + 1000,
                 MovementModifierPercent = level.Get(AbilityProperty.EffectMovementModifier, 100),
-                AdrenalineDrainPerSecond = drainPerTick / (interval * 10.0),
+                AdrenalineDrainPercentPerSecond = drainPerTick / (interval * 10.0),
                 AllowDetach = true
             };
 
@@ -192,22 +194,42 @@ namespace Rasa.Managers
         {
             effect.NextTickTick += effect.TickIntervalMs;
 
-            if (effect.AdrenalineDrainPerSecond > 0 && actor.Attributes.TryGetValue(Attributes.Chi, out var chi))
+            if (effect.AdrenalineDrainPercentPerSecond > 0 && actor.Attributes.TryGetValue(Attributes.Chi, out var chi))
             {
-                var due = effect.AdrenalineDrainPerSecond * effect.TickIntervalMs / 1000.0 + effect.DrainCarry;
-                var take = (int)Math.Floor(due);
-                effect.DrainCarry = due - take;
+                var take = DrainThisTick(effect, chi.CurrentMax);
 
-                if (chi.Current < take)
-                {
-                    // Out of breath: the effect ends and whatever is left stays.
-                    DettachEffect(mapChannel, actor, effect);
+                if (take <= 0)
                     return;
-                }
 
-                chi.Current -= take;
+                // "will end once all Adrenaline has been consumed": the last tick takes what is
+                // left and the effect goes with it.
+                var ended = chi.Current <= take;
+
+                chi.Current = Math.Max(0, chi.Current - take);
                 client.CallMethod(actor.EntityId, new UpdateChiPacket(chi, 0));
+
+                if (ended)
+                    DettachEffect(mapChannel, actor, effect);
             }
+        }
+
+        /// <summary>
+        /// The whole points of adrenaline one tick of a drain takes, out of a bar of the given
+        /// maximum: a percent of the bar per second, with the fraction carried on the effect so
+        /// 1.5% of 100 takes 3 every two seconds - 1, then 2 - rather than rounding down to 1
+        /// every second and running at two thirds of the advertised rate.
+        /// </summary>
+        public static int DrainThisTick(GameEffect effect, int currentMax)
+        {
+            var due = currentMax * effect.AdrenalineDrainPercentPerSecond / 100.0 * effect.TickIntervalMs / 1000.0 + effect.DrainCarry;
+
+            // Twenty carries of 0.3 sum to 5.999..., not 6; the nudge keeps a whole point that
+            // floating-point arithmetic has left a hair short from slipping a tick.
+            var take = (int)Math.Floor(due + 1e-6);
+
+            effect.DrainCarry = due - take;
+
+            return take;
         }
 
         /// <summary>

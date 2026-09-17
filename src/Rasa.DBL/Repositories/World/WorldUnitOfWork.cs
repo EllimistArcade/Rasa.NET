@@ -9,6 +9,7 @@ namespace Rasa.Repositories.World
     {
         [SuppressMessage("ReSharper", "SuggestBaseTypeForParameter", Justification = "Required for DI")]
         public WorldUnitOfWork(WorldContext dbContext,
+            IActionRepository actionRepository,
             IEquipmentRepository equipmentRepository,
             ICreatureRepository creatureRepository,
             IEntityClassRepository entityClassRepository,
@@ -28,6 +29,7 @@ namespace Rasa.Repositories.World
             ITeleporterRepository teleporterRepository)
                 : base(dbContext)
         {
+            Actions = actionRepository;
             Equipment = equipmentRepository;
             Creatures = creatureRepository;
             EntityClasses = entityClassRepository;
@@ -47,6 +49,7 @@ namespace Rasa.Repositories.World
             Teleporters = teleporterRepository;
         }
 
+        public IActionRepository Actions { get; }
         public IEquipmentRepository Equipment { get; }
         public ICreatureRepository Creatures { get; }
         public IEntityClassRepository EntityClasses { get; }

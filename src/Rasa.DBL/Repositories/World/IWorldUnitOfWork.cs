@@ -4,6 +4,7 @@
 
     public interface IWorldUnitOfWork : IUnitOfWork
     {
+        IActionRepository Actions { get; }
         IEquipmentRepository Equipment { get; }
         ICreatureRepository Creatures { get; }
         IEntityClassRepository EntityClasses { get; }

@@ -16,6 +16,170 @@ namespace Rasa.Migrations.SqliteWorld
             modelBuilder
                 .HasAnnotation("ProductVersion", "5.0.1");
 
+            modelBuilder.Entity("Rasa.Structures.World.ActionCostEntry", b =>
+                {
+                    b.Property<uint>("ActionId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("action_id");
+
+                    b.Property<uint>("AttributeId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attribute_id");
+
+                    b.Property<int>("Cost")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("cost");
+
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("Level")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("level");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("action_cost");
+                });
+
+            modelBuilder.Entity("Rasa.Structures.World.ActionEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<byte>("IsCharged")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_charged");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("module");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("action");
+                });
+
+            modelBuilder.Entity("Rasa.Structures.World.ActionItemRequirementEntry", b =>
+                {
+                    b.Property<uint>("ActionId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("action_id");
+
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("ItemClassId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("item_class_id");
+
+                    b.Property<uint>("Level")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("level");
+
+                    b.Property<uint>("Quantity")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("action_item_requirement");
+                });
+
+            modelBuilder.Entity("Rasa.Structures.World.ActionLevelEntry", b =>
+                {
+                    b.Property<uint>("ActionId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("action_id");
+
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("Level")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("level");
+
+                    b.Property<int>("MaxRange")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_range");
+
+                    b.Property<byte>("Preload")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("preload");
+
+                    b.Property<uint?>("RecoveryAnimFamilyId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("recovery_anim_family_id");
+
+                    b.Property<int>("RecoveryMs")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("recovery_ms");
+
+                    b.Property<int>("ReuseMs")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("reuse_ms");
+
+                    b.Property<byte>("StartReuseOnPerform")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("start_reuse_on_perform");
+
+                    b.Property<uint?>("WindupAnimFamilyId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("windup_anim_family_id");
+
+                    b.Property<int>("WindupMs")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("windup_ms");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("action_level");
+                });
+
+            modelBuilder.Entity("Rasa.Structures.World.ActionPropertyEntry", b =>
+                {
+                    b.Property<uint>("ActionId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("action_id");
+
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("Level")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("level");
+
+                    b.Property<uint>("PropertyId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("property_id");
+
+                    b.Property<int>("Value")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("action_property");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.ArmorClassEntry", b =>
                 {
                     b.Property<uint>("Id")
@@ -369,6 +533,30 @@ namespace Rasa.Migrations.SqliteWorld
                     b.HasKey("Id");
 
                     b.ToTable("itemclass");
+                });
+
+            modelBuilder.Entity("Rasa.Structures.World.ItemTemplateActionEntry", b =>
+                {
+                    b.Property<uint>("ActionId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("action_id");
+
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("ItemTemplateId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("item_template_id");
+
+                    b.Property<uint>("Level")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("level");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("item_template_action");
                 });
 
             modelBuilder.Entity("Rasa.Structures.World.ItemTemplateArmorEntry", b =>

@@ -2,15 +2,17 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Rasa.Context.World;
 
 namespace Rasa.Migrations.MySqlWorld
 {
     [DbContext(typeof(MySqlWorldContext))]
-    partial class MySqlWorldContextModelSnapshot : ModelSnapshot
+    [Migration("20260917120000_Add_actions")]
+    partial class Add_actions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -13,6 +13,8 @@ namespace Rasa.Repositories.UnitOfWork
             _parent = parent;
         }
 
+        public IActionRepository Actions => _parent.Actions;
+
         public IEquipmentRepository Equipment => _parent.Equipment;
 
         public ICreatureRepository Creatures => _parent.Creatures;

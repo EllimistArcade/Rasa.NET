@@ -10,7 +10,8 @@
     /// announce, tooltipDict, *args) passes *args to the effect's Attach, and
     /// client/actions/gesture.py GestureEffect.OnAnnounceAttach reads them as
     /// (actionId, actionArgId, actionTargetId) to pick the looping animation and FX.
-    /// GameEffectAttachedPacket always writes a single empty list there, so it cannot carry them.
+    /// GameEffectAttachedPacket carries them as Args now; this packet predates that and keeps
+    /// its own layout.
     ///
     /// announce is false: the pose starts when the Gesture action reaches recovery and calls
     /// AnnounceGameEffectAttach, which on the gesturing player's own client may come before or

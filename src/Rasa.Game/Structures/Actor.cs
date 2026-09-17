@@ -27,6 +27,14 @@ namespace Rasa.Structures
         public int CurrentAction { get; set; }
         public Dictionary<Attributes, ActorAttributes> Attributes = new Dictionary<Attributes, ActorAttributes>();
         public Dictionary<int, GameEffect> ActiveEffects { get; set; } = new Dictionary<int, GameEffect>();
+
+        /// <summary>
+        /// Environment.TickCount64 at which each action comes off cooldown, by action id. An
+        /// action not in here, or past its tick, is ready. Kept per action rather than per
+        /// action and level, as the client does (SetActionReuseTime keys by actionId).
+        /// </summary>
+        public Dictionary<ActionId, long> ActionReuseUntil { get; } = new Dictionary<ActionId, long>();
+
         public uint[,] Cells = new uint[5 ,5];
         // sometimes we only have access to the actor, the owner variable allows us to access the client anyway (only if actor is a player manifestation)
         //public MapChannelClient Owner { get; set; }

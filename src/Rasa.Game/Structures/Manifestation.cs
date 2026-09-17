@@ -100,6 +100,9 @@ namespace Rasa.Structures
         /// <summary>Environment.TickCount64 at which combat lapses, refreshed by every hit.</summary>
         public long CombatExpiresAt { get; set; }
 
+        /// <summary>Seconds of regeneration ticked so far (ActorManager.Regenerate); the in-combat period is a multiple of them.</summary>
+        public long RegenSeconds { get; set; }
+
         /// <summary>
         /// Environment.TickCount64 at which this player's next shot is due, whichever weapon fires
         /// it. On the player rather than the weapon so that switching drawer slots between shots

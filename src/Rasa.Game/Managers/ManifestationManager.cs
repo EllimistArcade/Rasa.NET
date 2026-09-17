@@ -1357,28 +1357,16 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Firing an armed ability. Queues the action for ActorActionManager, which is where the
-        /// few that are implemented resolve; the rest log that they are unsupported.
-        ///
-        /// The map channel is checked because this arrives from the wire: a player mid-teleport
-        /// or mid-logout has none, and the NullReferenceException that used to raise was caught
-        /// as a malformed packet and closed the connection.
-        ///
-        /// Only an entity target is carried through, and no check is needed for that: ActionTarget
-        /// leaves EntityId at 0 unless it actually read one, so an ability aimed at the ground or
-        /// at nothing arrives here as 0 on its own. The position itself is dropped - ActionData
-        /// has nowhere to put one and nothing downstream reads it yet.
+        /// Firing an armed ability. AbilityManager checks it - ownership, cooldown, target, range,
+        /// cost - answers a refusal with UserActionFailed, and queues an accepted one for the
+        /// windup; ActorActionManager hands the recovery back to it. The position of a
+        /// ground-targeted ability travels in ActionData.TargetLocation.
         /// </summary>
         public void RequestPerformAbility(Client client, RequestPerformAbilityPacket packet)
         {
-            var mapChannel = client.Player?.MapChannel;
-
-            if (mapChannel == null)
-                return;
-
-            mapChannel.PerformRecovery.Add(
-                new ActionData(client.Player, packet.ActionId, (uint)packet.ActionArgId,
-                    packet.Target.EntityId, 0));
+            // Ownership, cooldown, range, cost and the windup are AbilityManager's; this used to
+            // queue the action for the next tick with no checks at all.
+            AbilityManager.Instance.RequestPerformAbility(client, packet);
         }
 
         public void RequestToggleRun(Client client)
@@ -1939,6 +1927,15 @@ namespace Rasa.Managers
             // regenerated health at all. The period has to be non-zero as well:
             // _EvaluatePredictedRefresh returns early on a period of 0.
             attribute[Attributes.Health].RefreshAmount = (int)Math.Round(2D * attribute[Attributes.Regen].CurrentMax / 100, 0);
+
+            // Power and chi regenerate at the health rate for now. The live game grew adrenaline
+            // from combat and regenerated power by a formula of its own, neither of which is
+            // known; without any regeneration an ability could be used a handful of times per
+            // map, since abilities now spend both. Interim, and marked as such in
+            // docs/abilities.md. ActorManager.Regenerate applies these server-side at the same
+            // period the client predicts them with.
+            attribute[Attributes.Power].RefreshAmount = attribute[Attributes.Health].RefreshAmount;
+            attribute[Attributes.Chi].RefreshAmount = attribute[Attributes.Health].RefreshAmount;
             // 2.0 per second is the base regeneration for health
             // calculate armor max
             var armorMax = 0.0d;

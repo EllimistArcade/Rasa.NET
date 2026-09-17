@@ -284,30 +284,18 @@ namespace Rasa.Managers
                 triggerTime = 0;
             }
 
-            // is the missile/action an ability that need needs to use Recv_PerformAbility?
-            var isAbility = false;
-            if (action.ActionId == ActionId.AaRecruitLightning) // recruit lighting ability
-                isAbility = true;
-            
+            // Weapons only: abilities resolve in AbilityManager from their own tables, and the
+            // lightning special case that used to fire from here on a hand-typed damage roll
+            // went with them.
             missile.TargetActor = targetActor;
             missile.TriggerTime = triggerTime;
             missile.ActionId = action.ActionId;
             missile.ActionArgId = action.ActionArgId;
-            missile.IsAbility = isAbility;
+            missile.IsAbility = false;
 
-            // send windup and append to queue (only for non-abilities)
-            if (isAbility == false)
-            {
-                CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformWindupPacket(PerformType.ThreeArgs, missile.ActionId, missile.ActionArgId, missile.TargetEntityId));
-                
-                // add to list
-                mapChannel.QueuedMissiles.Add(missile);
-            }
-            else
-            {
-                // abilities get applied directly without delay
-                MissileTrigger(mapChannel, missile);
-            }
+            CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformWindupPacket(PerformType.ThreeArgs, missile.ActionId, missile.ActionArgId, missile.TargetEntityId));
+
+            mapChannel.QueuedMissiles.Add(missile);
         }
 
         public void MissileTrigger(MapChannel mapChannel, Missile missile)
@@ -354,9 +342,6 @@ namespace Rasa.Managers
                 // right thing but logged every swing as an unsupported action.
                 case ActionId.WeaponMelee:
                     CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
-                    break;
-                case ActionId.AaRecruitLightning:
-                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new LightningRecovery(missile));
                     break;
                 //else if (missile->actionId == 203)
                 //    missile_ActionHandler_CR_FOREAN_LIGHTNING(mapChannel, missile);

@@ -106,8 +106,8 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// RequestDetachGameEffect. Only a gesture effect can be removed this way; buffs and
-        /// debuffs end on the server's terms.
+        /// RequestDetachGameEffect: the player wants an effect off. Gestures and effects flagged
+        /// AllowDetach (sprint, and buffs in general) go; debuffs end on the server's terms.
         /// </summary>
         internal void RequestDetachGameEffect(Client client, RequestDetachGameEffectPacket packet)
         {
@@ -117,9 +117,12 @@ namespace Rasa.Managers
             if (mapChannel == null || !actor.ActiveEffects.TryGetValue(packet.EffectId, out var effect))
                 return;
 
-            if (effect.TypeId != Gestures.EffectTypeId)
+            // A gesture, or an effect that says it can be taken off by request - a toggle like
+            // sprint, which the client turns off by asking for exactly this, or a buff the player
+            // right-clicks away. Debuffs end on the server's terms.
+            if (effect.TypeId != Gestures.EffectTypeId && !effect.AllowDetach)
             {
-                Logger.WriteLog(LogType.Security, $"{actor.FamilyName} asked to detach effect {packet.EffectId} of type {effect.TypeId}; only gesture effects can be detached by request");
+                Logger.WriteLog(LogType.Security, $"{actor.FamilyName} asked to detach effect {packet.EffectId} of type {effect.TypeId}, which is not theirs to remove");
                 return;
             }
 
@@ -146,9 +149,10 @@ namespace Rasa.Managers
                 TypeId = Gestures.EffectTypeId,
                 EffectId = mapChannel.CurrentEffectId,
                 EffectLevel = actionArgId,
-                // Held until detached; GameEffectManager.DoWork ends effects by duration.
-                Duration = int.MaxValue,
-                EffectTime = 0
+                SourceId = actor.EntityId,
+                // Held until detached.
+                ExpiresTick = long.MaxValue,
+                AllowDetach = true
             };
 
             GameEffectManager.Instance.AddToList(actor, effect);

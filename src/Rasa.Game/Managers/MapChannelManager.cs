@@ -169,6 +169,7 @@ namespace Rasa.Managers
             Timer.Add("CellUpdateVisibility", 1000, true, null);
             Timer.Add("CheckForCreatures", 1000, true, null);
             Timer.Add("CheckForMapTriggers", 1000, true, null);
+            Timer.Add("Regenerate", 1000, true, null);
         }
 
         public void MapChannelWorker(long delta)
@@ -240,6 +241,10 @@ namespace Rasa.Managers
                     // check for effects (buffs)
                     if (Timer.IsTriggered("ClientEffectUpdate"))
                         GameEffectManager.Instance.DoWork(mapChannel, delta);
+
+                    // a second's health, armour, power and chi for everyone here
+                    if (Timer.IsTriggered("Regenerate"))
+                        ActorManager.Instance.Regenerate(mapChannel);
 
                     // warn idle players and flag long-idle ones for removal below
                     ManifestationManager.Instance.CheckInactivity(mapChannel);
@@ -501,6 +506,10 @@ namespace Rasa.Managers
 
             NpcManager.Instance.DiscardBuybackItems(client);
             ActorActionManager.Instance.RemoveActor(client.Player);
+
+            // Effects are per map as far as the clients know - nobody on the next map was told
+            // about them - and a sprint left running would keep draining adrenaline unseen.
+            GameEffectManager.Instance.ClearEffects(client.Player);
 
             // Before the player leaves the cells, while their minions can still be told to go:
             // "Player-controlled subordinates will teleport with their masters, but not change

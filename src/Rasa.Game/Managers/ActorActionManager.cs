@@ -114,12 +114,6 @@ namespace Rasa.Managers
                 case ActionId.Gesture:
                     GestureManager.Instance.PerformRecovery(mapChannel, action);
                     break;
-                case ActionId.AaRecruitLightning:
-                    MissileManager.Instance.MissileLaunch(mapChannel, action, new Random().Next(233, 311 + 1));
-                    break;
-                case ActionId.AaRecruitSprint:
-                    GameEffectManager.Instance.AttachSprint(mapChannel, action.Actor, action.ActionArgId, 500);
-                    break;
                 case ActionId.UseObject:
                     CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformRecoveryPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
                     switch (action.ActionArgId)
@@ -165,7 +159,12 @@ namespace Rasa.Managers
                     action.Actor.WeaponReady = false;
                     break;
                 default:
-                    Logger.WriteLog(LogType.Error, $"PerformAction: unsuported {action.ActionId}");
+                    // Anything in the action tables is an ability, resolved from its data. The
+                    // lightning and sprint cases that used to sit here ran on hand-typed numbers.
+                    if (AbilityManager.Instance.TryGetAction(action.ActionId, out _))
+                        AbilityManager.Instance.PerformRecovery(mapChannel, action);
+                    else
+                        Logger.WriteLog(LogType.Error, $"PerformAction: unsuported {action.ActionId}");
                     break;
             };
         }

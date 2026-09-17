@@ -174,6 +174,126 @@ namespace Rasa.Managers
             return applied;
         }
 
+        /// <summary>
+        /// Takes health from an actor, armour first: damage eats the armour bar until it is
+        /// empty and the rest comes off health. Returns what was actually taken off health and
+        /// armour together. A creature brought to zero is killed and its killer credited; one
+        /// that survives and was minding its own business turns on the attacker. Players are
+        /// left at zero for now, the same way weapon fire leaves them (MissileManager): dying
+        /// is not wired yet, and a character stuck dead with no way back is worse than one
+        /// standing at zero.
+        /// </summary>
+        /// <param name="source">Who did it; credited with a kill, and what a surviving creature turns on.</param>
+        public int Damage(MapChannel mapChannel, Actor target, int amount, Actor source)
+        {
+            if (target == null || amount <= 0 || target.State == CharacterState.Dead)
+                return 0;
+
+            if (!target.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
+                return 0;
+
+            var armorTaken = 0;
+
+            if (target.Attributes.TryGetValue(Attributes.Armor, out var armor) && armor.Current > 0)
+            {
+                armorTaken = Math.Min(amount, armor.Current);
+                armor.Current -= armorTaken;
+                CellManager.Instance.CellCallMethod(mapChannel, target, new UpdateArmorPacket(armor, target is Creature ? target.EntityId : 0));
+            }
+
+            var healthTaken = Math.Min(amount - armorTaken, health.Current);
+            health.Current -= healthTaken;
+            CellManager.Instance.CellCallMethod(mapChannel, target, new UpdateHealthPacket(health, target is Creature ? target.EntityId : 0));
+
+            if (target is Creature creature)
+            {
+                if (health.Current <= 0)
+                {
+                    // No regeneration for the dead: health and armour stay where they fell.
+                    health.Current = 0;
+                    health.RefreshAmount = 0;
+                    health.RefreshPeriod = 0;
+
+                    if (armor != null)
+                    {
+                        armor.Current = 0;
+                        armor.RefreshAmount = 0;
+                        armor.RefreshPeriod = 0;
+                    }
+
+                    if (source != null)
+                        CreatureManager.Instance.HandleCreatureKill(mapChannel, creature, source);
+                    else
+                        Logger.WriteLog(LogType.Error, $"Creature {creature.EntityId} was killed with no source to credit; it stays at zero.");
+                }
+                else if (source != null && (creature.Controller.CurrentAction == BehaviorManager.BehaviorActionWander || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath))
+                {
+                    BehaviorManager.Instance.SetActionFighting(creature, source.EntityId);
+                }
+            }
+            else if (health.Current <= 0)
+            {
+                // A player at zero stands back up at full: see the remarks.
+                health.Current = health.CurrentMax;
+                CellManager.Instance.CellCallMethod(mapChannel, target, new UpdateHealthPacket(health, 0));
+            }
+
+            return armorTaken + healthTaken;
+        }
+
+        /// <summary>
+        /// One second of regeneration for every player on the map: health, armour, power and
+        /// chi each gain their RefreshAmount once every RefreshPeriod seconds, up to their
+        /// maximum. Nothing is sent - the client predicts the same thing from the RefreshAmount
+        /// and RefreshPeriod it was last given (ActorAttribute adds elapsed * amount / period), so
+        /// the two sides move together, and the next real update - a cost, a hit - carries the
+        /// exact value. Without this the server's copy never moved: a cost check read a power
+        /// bar that was full at map entry and only ever went down. The C++ server did this for
+        /// health and armour in manifestation_updatePlayer; power and chi are the interim rule
+        /// described at UpdateStatsValues. In combat the health and armour periods are five
+        /// times longer (CombatRegen), which this honours by ticking them every fifth second.
+        /// </summary>
+        public void Regenerate(MapChannel mapChannel)
+        {
+            foreach (var client in mapChannel.ClientList)
+            {
+                var player = client?.Player;
+
+                if (player == null || player.State == CharacterState.Dead)
+                    continue;
+
+                if (!player.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
+                    continue;
+
+                player.RegenSeconds++;
+
+                Regenerate(health, player.RegenSeconds);
+
+                if (player.Attributes.TryGetValue(Attributes.Armor, out var armor))
+                    Regenerate(armor, player.RegenSeconds);
+
+                if (player.Attributes.TryGetValue(Attributes.Power, out var power))
+                    Regenerate(power, player.RegenSeconds);
+
+                if (player.Attributes.TryGetValue(Attributes.Chi, out var chi))
+                    Regenerate(chi, player.RegenSeconds);
+            }
+        }
+
+        private static void Regenerate(ActorAttributes attribute, long second)
+        {
+            if (attribute.RefreshAmount <= 0 || attribute.Current >= attribute.CurrentMax)
+                return;
+
+            // A period of 0 is one the stats never set; the client treats an unset period as 1.
+            var period = Math.Max(1, attribute.RefreshPeriod);
+
+            if (second % period != 0)
+                return;
+
+            attribute.Current = Math.Min(attribute.CurrentMax, attribute.Current + attribute.RefreshAmount);
+        }
+
         /// <summary>Puts an actor back to its maximum, and says how much that took.</summary>
         public int HealToFull(Actor target, ulong sourceEntityId = 0)
         {

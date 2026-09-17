@@ -41,6 +41,30 @@ namespace Rasa.Managers
 
         /// <inheritdoc cref="FootlockerUseArgId"/>
         public const uint ControlPointUseArgId = 7;
+
+        /// <summary>
+        /// How far from an object a player may be and still use it.
+        ///
+        /// The client's own radius is the larger of the player's use range and the object class's
+        /// own: an actor's use range is 3 and a manifestation doubles it
+        /// (client/augmentations/manifestation.py GetUseRange), and of every usable class only one
+        /// - 26232, which is none of the objects placed here - sets a range of its own. So an
+        /// honest client asks from within 6 units, and measures them from itself to the object's
+        /// DAMAGE1 connection point rather than to where the object stands, which is what the rest
+        /// of this allowance is for: the server knows only where it stands, and the position it
+        /// has for the player is a tick behind the one the client checked. Twenty units is
+        /// generous about all of that and still refuses what is worth refusing, which is a request
+        /// from across the map.
+        /// </summary>
+        public const float MaxUseDistance = 20f;
+
+        /// <summary>Whether an actor is on the object's map and near enough to use it.</summary>
+        private static bool IsInUseRange(Actor actor, DynamicObject obj)
+        {
+            return obj.MapContextId == actor.MapContextId
+                   && Vector3.Distance(actor.Position, obj.Position) <= MaxUseDistance;
+        }
+
         public static DynamicObjectManager Instance
         {
             get
@@ -80,7 +104,43 @@ namespace Rasa.Managers
 
         internal void RequestUseObjectPacket(Client client, RequestUseObjectPacket packet)
         {
-            var obj = EntityManager.Instance.GetObject(packet.EntityId);
+            // Teleporting counts as being in the world for the packet gate - a dropship ride keeps
+            // the manifestation and everything registered with it - but the rider is between maps,
+            // standing where they left, with no cells. There is nothing there for them to use.
+            if (client.State != ClientState.Ingame)
+                return;
+
+            // The id names an object, or it names nothing this can answer. GetObject is the
+            // throwing indexer, so any item, creature or player id - or an object id that is no
+            // longer registered - closed the connection of whoever sent it.
+            if (!EntityManager.Instance.TryGetObject(packet.EntityId, out var obj))
+            {
+                Logger.WriteLog(LogType.Debug, $"{client.Player.FamilyName} asked to use {packet.EntityId}, which is not an object.");
+                return;
+            }
+
+            // Where the player is standing decides what they can reach. Object ids are handed out
+            // in order and are the same for every client, so a client could walk the id space and
+            // use every footlocker, station and control point on the map without leaving the spot
+            // it was standing on - and collect every logos tablet on it, since the recovery asks
+            // only that the player be in the object's TriggeredByPlayers list. An object on
+            // another map left them in that list for good, which holds their connection open in
+            // the server's memory long after they have gone.
+            if (obj.MapContextId != client.Player.MapContextId)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{client.Player.FamilyName} asked to use object {packet.EntityId}, which is on map {obj.MapContextId} and not on {client.Player.MapContextId}. Ignored.");
+                return;
+            }
+
+            var distance = Vector3.Distance(client.Player.Position, obj.Position);
+
+            if (distance > MaxUseDistance)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{client.Player.FamilyName} asked to use object {packet.EntityId} from {distance:F0} units away. Ignored.");
+                return;
+            }
 
             // Using an object is the only thing a use request may ask for. The queued action
             // carried the packet's own action id to ActorActionManager.PerformRecovery, which
@@ -365,6 +425,16 @@ namespace Rasa.Managers
                             break;
                         }
 
+                        // As with a logos: a capture belongs to whoever is still standing at the
+                        // point when its ten seconds are up.
+                        if (!IsInUseRange(action.Actor, controlpoint))
+                        {
+                            Logger.WriteLog(LogType.Security,
+                                $"{client.Player.FamilyName} was no longer at control point {controlpoint.EntityId} when the use finished; not captured.");
+                            controlpoint.TriggeredByPlayers.Remove(client);
+                            break;
+                        }
+
                         Logger.WriteLog(LogType.Debug, $"Action Exicuted");
                         controlpoint.TriggeredByPlayers.Remove(client);
                         controlpoint.Faction = controlpoint.Faction == Factions.AFS ? Factions.Bane : Factions.AFS;
@@ -546,6 +616,19 @@ namespace Rasa.Managers
                             Logger.WriteLog(LogType.Debug, $"Action is interupted");
                             obj.TriggeredByPlayers.Remove(client);
                             //CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformWindupPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
+                            break;
+                        }
+
+                        // Still at it when the ten seconds are up, not only when they started.
+                        // The client interrupts a use the moment the player moves (useobject.py
+                        // sets moveInterrupts), so the only client this refuses is one that did
+                        // not - and a tablet is a permanent thing to be given for a use that was
+                        // walked away from.
+                        if (!IsInUseRange(action.Actor, obj))
+                        {
+                            Logger.WriteLog(LogType.Security,
+                                $"{client.Player.FamilyName} was no longer at logos object {obj.EntityId} when the use finished; nothing given.");
+                            obj.TriggeredByPlayers.Remove(client);
                             break;
                         }
 

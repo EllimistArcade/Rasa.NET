@@ -220,7 +220,7 @@ namespace Rasa.Managers
             var offered = session.ItemsOf(client);
             var entityId = (ulong)packet.ItemEntityId;
 
-            if (offered.Contains(entityId))
+            if (offered.Any(item => item.EntityId == entityId))
                 return;
 
             if (offered.Count >= TradeSlots)
@@ -250,7 +250,9 @@ namespace Rasa.Managers
                 return;
             }
 
-            offered.Add(entityId);
+            // Taken as it stands: the stack size and condition here are what the partner is shown
+            // and what Complete holds the offer to.
+            offered.Add(new TradeSession.OfferedItem(item));
 
             // The partner has never seen this item, and their client resolves it with
             // _entitymanager.GetEntity before it draws anything (ui/tradewindow.py:162). Without
@@ -270,8 +272,10 @@ namespace Rasa.Managers
                 return;
 
             var entityId = (ulong)packet.ItemEntityId;
+            var offered = session.ItemsOf(client);
+            var taken = offered.FirstOrDefault(item => item.EntityId == entityId);
 
-            if (!session.ItemsOf(client).Remove(entityId))
+            if (taken == null || !offered.Remove(taken))
                 return;
 
             TermsChanged(session, client);
@@ -289,13 +293,13 @@ namespace Rasa.Managers
         /// <summary>
         /// Destroys, on one player's client, the copies of items the other had offered.
         /// </summary>
-        private static void ReturnOfferedCopies(TradeSession session, Client viewer, List<ulong> offeredByPartner)
+        private static void ReturnOfferedCopies(TradeSession session, Client viewer, List<TradeSession.OfferedItem> offeredByPartner)
         {
             if (viewer.State == ClientState.Disconnected)
                 return;
 
-            foreach (var entityId in offeredByPartner)
-                Unreplicate(viewer, entityId);
+            foreach (var offered in offeredByPartner)
+                Unreplicate(viewer, offered.EntityId);
         }
 
         /// <summary>True when the entity is sitting in this player's personal inventory.</summary>
@@ -443,14 +447,37 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Everything offered is still in the offering player's inventory. An item can leave
-        /// between the confirmation and the exchange - equipped, moved to the home inventory,
-        /// used up - and the offer is stale rather than the player dishonest.
+        /// Everything offered is still in the offering player's inventory, and is still what was
+        /// offered. An item can leave between the confirmation and the exchange - equipped, moved
+        /// to the home inventory, used up - and it can also shrink where it lies, which is the
+        /// same offer in name only: every path that spends a stack (destroying part of it, a
+        /// partial sale to a vendor, a reload, a crafting job, an ability's item cost) writes
+        /// straight to StackSize without a word to the trade, so the confirmations stand while
+        /// what they were given for goes. The exchange then hands over whatever is left.
+        ///
+        /// So the size and condition each item was offered at are compared with the item as it
+        /// stands, and a trade whose terms have quietly moved is cancelled rather than completed.
         /// </summary>
-        private static bool StillHolds(Client client, List<ulong> items)
+        private static bool StillHolds(Client client, List<TradeSession.OfferedItem> items)
         {
-            return items.All(entityId => HoldsInPersonalInventory(client, entityId)
-                                         && EntityManager.Instance.GetItem(entityId) != null);
+            foreach (var offered in items)
+            {
+                var item = EntityManager.Instance.GetItem(offered.EntityId);
+
+                if (item == null || !HoldsInPersonalInventory(client, offered.EntityId))
+                    return false;
+
+                if (offered.Matches(item))
+                    continue;
+
+                Logger.WriteLog(LogType.Security,
+                    $"{client.Player.FamilyName} offered item {offered.EntityId} as {offered.StackSize} at {offered.CurrentHitPoints} hp "
+                    + $"and would have handed over {item.StackSize} at {item.CurrentHitPoints}; the trade is cancelled.");
+
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -458,14 +485,15 @@ namespace Rasa.Managers
         /// bands, without writing anything. Returns false when they do not all fit, or when the
         /// giver has stopped holding one of them.
         /// </summary>
-        private static bool TryReserveSlots(Client giver, Client receiver, List<ulong> items, out List<ItemMove> moves)
+        private static bool TryReserveSlots(Client giver, Client receiver, List<TradeSession.OfferedItem> items, out List<ItemMove> moves)
         {
             moves = new List<ItemMove>();
 
             var taken = new HashSet<uint>();
 
-            foreach (var entityId in items)
+            foreach (var offered in items)
             {
+                var entityId = offered.EntityId;
                 var item = EntityManager.Instance.GetItem(entityId);
 
                 if (item == null)

@@ -37,17 +37,17 @@ namespace Rasa.Structures
         }
 
         /// <summary>
-        /// Item entity ids each side has put up, in the order they were offered. The trade window
-        /// holds five a side (shared/gameconstants.py DEFAULT_TRADE_INVENTORY_SIZE), and the
-        /// items stay in their owner's inventory until the exchange - nothing is escrowed, so a
-        /// trade that falls over cannot strand anything.
+        /// What each side has put up, in the order it was offered. The trade window holds five a
+        /// side (shared/gameconstants.py DEFAULT_TRADE_INVENTORY_SIZE), and the items stay in
+        /// their owner's inventory until the exchange - nothing is escrowed, so a trade that
+        /// falls over cannot strand anything.
         /// </summary>
-        public List<ulong> InitiatorItems { get; } = new List<ulong>();
-        public List<ulong> TargetItems { get; } = new List<ulong>();
+        public List<OfferedItem> InitiatorItems { get; } = new List<OfferedItem>();
+        public List<OfferedItem> TargetItems { get; } = new List<OfferedItem>();
 
         public bool IsInitiator(Client client) => client == Initiator;
 
-        public List<ulong> ItemsOf(Client client) => client == Initiator ? InitiatorItems : TargetItems;
+        public List<OfferedItem> ItemsOf(Client client) => client == Initiator ? InitiatorItems : TargetItems;
 
         public Client PartnerOf(Client client) => client == Initiator ? Target : Initiator;
 
@@ -69,6 +69,42 @@ namespace Rasa.Structures
                 InitiatorConfirmed = confirmed;
             else
                 TargetConfirmed = confirmed;
+        }
+
+        /// <summary>
+        /// One item on the table, as it was when it was put there.
+        ///
+        /// The entity id alone was not enough to hold anyone to their offer. What the other
+        /// player reads before they confirm is the stack size and the condition, and neither is
+        /// fixed while the window is open: a stack can be split, spent on a reload, sold in part
+        /// at a vendor, fed to a crafting job or destroyed down to one, and none of those go
+        /// anywhere near the trade handlers, so none of them clears a confirmation. A hundred
+        /// rounds offered, confirmed by the buyer, then destroyed down to one and confirmed by
+        /// the seller handed over the one - the exchange took the item as it stood at that
+        /// moment. Complete measures the live item against this.
+        /// </summary>
+        public class OfferedItem
+        {
+            public ulong EntityId { get; }
+
+            /// <summary>The size of the stack when it was offered.</summary>
+            public uint StackSize { get; }
+
+            /// <summary>Its condition when it was offered; the window shows it as a percentage.</summary>
+            public int CurrentHitPoints { get; }
+
+            public OfferedItem(Item item)
+            {
+                EntityId = item.EntityId;
+                StackSize = item.StackSize;
+                CurrentHitPoints = item.CurrentHitPoints;
+            }
+
+            /// <summary>Whether the item is still what was offered, rather than what is left of it.</summary>
+            public bool Matches(Item item)
+            {
+                return item != null && item.StackSize == StackSize && item.CurrentHitPoints == CurrentHitPoints;
+            }
         }
     }
 }

@@ -653,13 +653,27 @@ namespace Rasa.Managers
                     return;
                 }
 
+                int listings;
+
                 using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
                 {
                     unitOfWork.CharacterAppearances.DeleteForChar(charactersBySlot.Id);
+
+                    // An auction row names its seller by id and carries no foreign key, so a
+                    // character deleted with listings running used to leave them standing:
+                    // still in other players' browse results, still buyable, and still naming
+                    // the character the proceeds were meant to go to. They go in the same
+                    // SaveChanges as the character row, so the two cannot come apart.
+                    listings = unitOfWork.Auctions.DeleteAuctionsBySeller(charactersBySlot.Id);
+
                     // TODO delete ClanMember entry
                     unitOfWork.Characters.Delete(charactersBySlot.Id);
                     unitOfWork.Complete();
                 }
+
+                if (listings > 0)
+                    Logger.WriteLog(LogType.Debug,
+                        $"Character {charactersBySlot.Id} was deleted with {listings} auction(s) running; the listings were taken down with it.");
 
                 // Client.Player still points at the character that was just deleted - it is left
                 // loaded when the player returns to character selection. Client.SaveCharacter

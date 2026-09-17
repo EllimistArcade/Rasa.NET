@@ -22,5 +22,13 @@ namespace Rasa.Repositories.Char.Auction
         List<AuctionEntry> GetAuctions();
 
         void DeleteAuction(uint itemId);
+
+        /// <summary>
+        /// Takes down everything one character has listed and says how many rows went, on the
+        /// unit of work's next Complete rather than immediately. For a character that is being
+        /// deleted: an auction row carries no foreign key, so it would otherwise outlive its
+        /// seller and stay in the browse results as a listing nobody can be paid for.
+        /// </summary>
+        int DeleteAuctionsBySeller(uint sellerId);
     }
 }

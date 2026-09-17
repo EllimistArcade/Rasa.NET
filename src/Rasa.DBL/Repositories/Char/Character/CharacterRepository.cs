@@ -62,6 +62,19 @@ namespace Rasa.Repositories.Char.Character
             return _charContext.FindEnsuring(query, id);
         }
 
+        /// <summary>
+        /// The character with this id, or null when there is no such row. Get throws instead,
+        /// which is right for a caller holding an id it has just read off a live session, and
+        /// wrong for one holding an id that outlived the character: a deleted character leaves
+        /// rows behind that still name it, and those callers need an answer rather than an
+        /// exception thrown through them.
+        /// </summary>
+        public CharacterEntry Find(uint id)
+        {
+            var query = CreateCharacterQuery();
+            return _charContext.Find(query, id);
+        }
+
         public IDictionary<byte, CharacterEntry> GetByAccountId(uint accountEntryId)
         {
             var query = CreateCharacterQuery();

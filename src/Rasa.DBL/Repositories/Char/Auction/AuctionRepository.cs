@@ -68,6 +68,22 @@ namespace Rasa.Repositories.Char.Auction
             return query.OrderBy(a => a.CreatedAt).ToList();
         }
 
+        public int DeleteAuctionsBySeller(uint sellerId)
+        {
+            var entries = _charContext.CreateTrackingQuery(_charContext.AuctionEntries)
+                .Where(a => a.SellerId == sellerId)
+                .ToList();
+
+            // Marked, not saved - unlike DeleteAuction, which is called from paths that have no
+            // unit of work to complete. This one is called while a character is being deleted,
+            // beside CharacterAppearances.DeleteForChar, and the rows have to go in the same
+            // SaveChanges as the character row: committing them separately would take a
+            // player's listings down and then leave the character standing if the delete failed.
+            _charContext.AuctionEntries.RemoveRange(entries);
+
+            return entries.Count;
+        }
+
         public void DeleteAuction(uint itemId)
         {
             var query = _charContext.CreateNoTrackingQuery(_charContext.AuctionEntries);

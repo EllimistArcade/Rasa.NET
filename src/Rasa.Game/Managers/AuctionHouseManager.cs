@@ -16,8 +16,9 @@ namespace Rasa.Managers
     using Structures.Char;
 
     /// <summary>
-    /// The auction house: listing items, showing the seller their own auctions, and taking a
-    /// listing back down. Bidding, buyout, expiry and the browse tab are still stubs.
+    /// The auction house: listing items, browsing and buying them out, showing the seller their
+    /// own auctions, taking a listing back down, and returning what ran out. There is no
+    /// bidding - the client offers a buyout price and nothing else.
     ///
     /// A listed item keeps its items row and its character_inventory row - the row's type just
     /// becomes AuctionInventory - so the item survives a restart exactly as a lockbox item does,
@@ -65,6 +66,9 @@ namespace Rasa.Managers
 
         /// <summary>Hours each duration id runs for: 12 hours, then one, two and three days.</summary>
         private static readonly uint[] DurationHours = { 12, 24, 48, 72 };
+
+        /// <summary>How many rows may fail in a row before a sweep is taken to be pointless.</summary>
+        private const int MaxConsecutiveExpiryFailures = 5;
 
         public static AuctionHouseManager Instance
         {
@@ -440,30 +444,16 @@ namespace Rasa.Managers
         public void ExpireAuctions()
         {
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
-            var now = DateTime.UtcNow;
 
-            foreach (var auction in unitOfWork.Auctions.GetAuctions())
-            {
-                if (auction.RemainingHours(now) > 0)
-                    continue;
-
-                Expire(unitOfWork, auction);
-            }
+            ExpireAll(unitOfWork, unitOfWork.Auctions.GetAuctions());
         }
 
         /// <summary>Expires just this character's auctions, on their way into the world.</summary>
         public void ExpireAuctionsFor(Client client)
         {
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
-            var now = DateTime.UtcNow;
 
-            foreach (var auction in unitOfWork.Auctions.GetAuctionsBySeller(client.Player.Id))
-            {
-                if (auction.RemainingHours(now) > 0)
-                    continue;
-
-                Expire(unitOfWork, auction);
-            }
+            ExpireAll(unitOfWork, unitOfWork.Auctions.GetAuctionsBySeller(client.Player.Id));
         }
 
         #endregion
@@ -518,12 +508,77 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// Expires everything in a list that has run out, with what one row throws kept to that
+        /// row.
+        ///
+        /// A sweep walks auctions in one loop and the timer that drives it only catches at the
+        /// top (Timer.ReportFault), so an exception from any one row used to abandon the rest of
+        /// the pass. Rows come back oldest first, so the same row was reached at the same point
+        /// of every sweep, and everything listed after it stopped expiring for as long as the
+        /// server ran.
+        ///
+        /// Everything expiry can expect - a seller who is gone, an item that is gone, a full
+        /// inbox - is answered in Expire without throwing, so a throw here is something
+        /// unforeseen. A few in a row are taken to be the database rather than the rows, and the
+        /// pass gives up instead of writing a line per auction; the next one is five minutes
+        /// away.
+        /// </summary>
+        private void ExpireAll(ICharUnitOfWork unitOfWork, List<AuctionEntry> auctions)
+        {
+            var now = DateTime.UtcNow;
+            var consecutiveFailures = 0;
+
+            foreach (var auction in auctions)
+            {
+                if (auction.RemainingHours(now) > 0)
+                    continue;
+
+                try
+                {
+                    Expire(unitOfWork, auction);
+                    consecutiveFailures = 0;
+                }
+                catch (Exception e)
+                {
+                    Logger.WriteLog(LogType.Error, $"Auction on item {auction.ItemId} could not be expired: {e}");
+
+                    if (++consecutiveFailures < MaxConsecutiveExpiryFailures)
+                        continue;
+
+                    Logger.WriteLog(LogType.Error,
+                        $"{consecutiveFailures} auctions in a row failed to expire; the rest of this pass is left to the next one.");
+
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
         /// Moves one expired auction's item back to its seller's inbox and deletes the row. An
         /// inbox that is full leaves the auction standing rather than destroying the item - it
         /// is simply retried on the next sweep, once the seller has made room.
+        ///
+        /// Every way this can fail to return the item is answered here rather than thrown, so
+        /// that one auction cannot take the sweep down with it.
         /// </summary>
         private void Expire(ICharUnitOfWork unitOfWork, AuctionEntry auction)
         {
+            var accountId = AccountOf(auction.SellerId, unitOfWork);
+
+            // Asked before the item is looked for, because this is the case where there is
+            // nothing to look for it on behalf of. A character deleted with auctions running
+            // leaves the rows behind (they carry no foreign key), and an item cannot be
+            // returned to an inbox that no character owns - the row would be written against
+            // account 0 and never load again. The listing is simply taken down.
+            if (accountId == null)
+            {
+                Logger.WriteLog(LogType.Error,
+                    $"Auction on item {auction.ItemId} has expired but its seller {auction.SellerName} ({auction.SellerId}) no longer exists; the listing is removed.");
+
+                unitOfWork.Auctions.DeleteAuction(auction.ItemId);
+                return;
+            }
+
             var item = FindAuctionedItem(auction);
 
             if (item == null)
@@ -532,9 +587,7 @@ namespace Rasa.Managers
                 return;
             }
 
-            var accountId = AccountOf(auction.SellerId, unitOfWork, item);
-
-            if (!InventoryManager.Instance.DeliverToInbox(unitOfWork, accountId, auction.SellerId, item))
+            if (!InventoryManager.Instance.DeliverToInbox(unitOfWork, accountId.Value, auction.SellerId, item))
             {
                 Logger.WriteLog(LogType.Debug, $"Auction on item {auction.ItemId} has expired but {auction.SellerName}'s inbox is full; it will be retried.");
                 return;
@@ -559,8 +612,12 @@ namespace Rasa.Managers
                 return;
             }
 
-            var character = unitOfWork.Characters.Get(auction.SellerId);
+            var character = unitOfWork.Characters.Find(auction.SellerId);
 
+            // A listing outlives a deleted seller until the expiry sweep reaches it, so it can
+            // still be bought in the meantime. The buyer has the item and has been charged for
+            // it by this point; there is simply nobody left to pay, so the credits are destroyed
+            // rather than conjured onto a row that is not there.
             if (character == null)
             {
                 Logger.WriteLog(LogType.Error, $"Auction on item {auction.ItemId} sold but seller {auction.SellerId} no longer exists; proceeds dropped.");
@@ -617,19 +674,22 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Which account the seller's rows belong to. Their character_inventory rows are keyed by
-        /// account, and an offline seller has no Client to read it from.
+        /// Which account the seller's rows belong to, or null when the seller's character is
+        /// gone. Their character_inventory rows are keyed by account, and an offline seller has
+        /// no Client to read it from.
+        ///
+        /// Characters.Find rather than Characters.Get: Get throws on a missing row, so the null
+        /// this and PaySeller were written to return was never reached - the throw went up
+        /// through the expiry sweep and the buyout handler instead.
         /// </summary>
-        private static uint AccountOf(uint sellerId, ICharUnitOfWork unitOfWork, Item item)
+        private static uint? AccountOf(uint sellerId, ICharUnitOfWork unitOfWork)
         {
             var seller = OnlineSeller(sellerId);
 
             if (seller != null)
                 return seller.AccountEntry.Id;
 
-            var character = unitOfWork.Characters.Get(sellerId);
-
-            return character?.AccountId ?? 0;
+            return unitOfWork.Characters.Find(sellerId)?.AccountId;
         }
 
         /// <summary>The experience level an item asks for, or zero when it asks for none.</summary>

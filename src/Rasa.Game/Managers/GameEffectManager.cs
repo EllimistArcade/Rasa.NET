@@ -147,10 +147,20 @@ namespace Rasa.Managers
                 UpdateMovementMod(mapChannel, actor);
         }
 
-        /// <summary>Ends every effect on an actor without telling anyone: the actor is leaving the map.</summary>
+        /// <summary>
+        /// Ends every effect on an actor without telling anyone: the actor is leaving the map.
+        ///
+        /// The speed they gave goes with them. MovementSpeed is what the effects make it (see
+        /// <see cref="UpdateMovementMod"/>), and the ActorInfo a player is sent on arriving at a
+        /// map hands it to their client as its movement modifier. Clearing the effects but not
+        /// the speed sent a player who crossed a zone line mid-sprint into the next map running at
+        /// sprint speed with no sprint behind it: nothing drained adrenaline, nothing ran out, and
+        /// no buff was there to turn off, until a later sprint ended and worked the speed out again.
+        /// </summary>
         public void ClearEffects(Actor actor)
         {
             actor.ActiveEffects.Clear();
+            actor.MovementSpeed = 1.0d;
         }
 
         public void DoWork(MapChannel mapChannel, long passedTime)
@@ -212,8 +222,9 @@ namespace Rasa.Managers
                 if (effect.MovementModifierPercent > 0)
                     movementMod *= effect.MovementModifierPercent / 100.0;
 
-            // ActorInfo carries MovementSpeed to anyone who comes into view later, so it has to
-            // say the same thing as the change everyone present is told about now.
+            // ActorInfo carries MovementSpeed later - to whoever a creature comes into view for, and
+            // to a player's own client each time they arrive on a map - so it has to say the same
+            // thing as the change everyone present is told about now.
             actor.MovementSpeed = movementMod;
             CellManager.Instance.CellCallMethod(mapChannel, actor, new MovementModChangePacket(movementMod));
         }

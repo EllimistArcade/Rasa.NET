@@ -419,6 +419,15 @@ namespace Rasa.Managers
                                 case ClientState.Ingame:
                                     CellManager.Instance.RemoveFromWorld(dropship.Client);
                                     dropship.Client.Player.MapChannel.ClientList.Remove(dropship.Client);
+
+                                    // Effects end with the map, as MapChannelManager.RemovePlayer ends them - a
+                                    // dropship ride never goes through it. A sprint used to ride along: the arrival
+                                    // introduced the player to everyone without it, their own client included, while
+                                    // the arrival's ActorInfo gave that client the sprint's speed and its drain picked
+                                    // up again, under an effect id handed out by the map they had left and with no
+                                    // buff on any screen to show for it.
+                                    GameEffectManager.Instance.ClearEffects(dropship.Client.Player);
+
                                     CommunicatorManager.Instance.LeaveMapChannels(dropship.Client);
                                     dropship.Client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());
                                     dropship.Client.CallMethod(SysEntity.ClientMethodId, new PreWonkavatePacket());

@@ -206,14 +206,43 @@ namespace Rasa.Managers
                 */
         }
 
+        /// <summary>
+        /// Lands the missiles whose flight time has run out, and only those.
+        ///
+        /// Every queued missile used to be triggered on the pass after it was launched, whatever
+        /// its trigger time said - the distance to the target was measured, written on the
+        /// missile and never read. It rarely showed: the world loop runs every 100 ms and the
+        /// longest shot in range flies for 64, so the tick a missile was due on was almost always
+        /// the tick it got. It is the second half that mattered: the queue was emptied after the
+        /// loop rather than as it was walked, so a missile that threw on the way in took the
+        /// emptying with it, left every queued missile where it was, and threw again on the next
+        /// pass - out of the map worker, which abandons the rest of that tick and every map after
+        /// it, for as long as the server ran. A missile comes off the queue before it is
+        /// triggered now, and a trigger that fails costs only itself.
+        /// </summary>
         public void DoWork(MapChannel mapChannel, long delta)
         {
-            // ToDo: add check for triggerMissile timer
-            foreach (var missile in mapChannel.QueuedMissiles)
-                MissileTrigger(mapChannel, missile);
+            for (var i = mapChannel.QueuedMissiles.Count - 1; i >= 0; i--)
+            {
+                var missile = mapChannel.QueuedMissiles[i];
 
-            // empty List
-            mapChannel.QueuedMissiles.Clear();
+                missile.TriggerTime -= delta;
+
+                if (missile.TriggerTime > 0)
+                    continue;
+
+                mapChannel.QueuedMissiles.RemoveAt(i);
+
+                try
+                {
+                    MissileTrigger(mapChannel, missile);
+                }
+                catch (Exception e)
+                {
+                    Logger.WriteLog(LogType.Error,
+                        $"Missile {missile.ActionId} from {missile.Source?.EntityId} at {missile.TargetEntityId} on map {mapChannel.MapInfo.MapContextId} threw and was dropped: {e}");
+                }
+            }
         }
 
         public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage)

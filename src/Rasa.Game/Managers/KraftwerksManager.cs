@@ -209,12 +209,22 @@ namespace Rasa.Managers
 
         #region Using a station
 
-        /// <summary>RequestUseObject on a station: the windup, the Use the client opens its window on, and the player's jobs there.</summary>
-        internal void Use(Client client, DynamicObject station, ActionId actionId, uint actionArgId)
+        /// <summary>
+        /// RequestUseObject on a station: the windup, the Use the client opens its window on, and
+        /// the player's jobs there.
+        ///
+        /// The action is a use of this station - <see cref="ActionId.UseObject"/>, which
+        /// DynamicObjectManager has established before this is reached. It used to be whatever
+        /// action id the packet named, which made a station a way to have any action at all
+        /// performed on the player. The arg id is still the client's, because the client matches
+        /// the windup and recovery it gets against the ones it sent (every one of the 39 station
+        /// classes carries <see cref="UseObjectArgId"/> as its own).
+        /// </summary>
+        internal void Use(Client client, DynamicObject station, uint actionArgId)
         {
-            client.CallMethod(client.Player.EntityId, new PerformWindupPacket(PerformType.TwoArgs, actionId, actionArgId));
+            client.CallMethod(client.Player.EntityId, new PerformWindupPacket(PerformType.TwoArgs, ActionId.UseObject, actionArgId));
             client.CallMethod(station.EntityId, new UsePacket(client.Player.EntityId, station.StateId, UseWindupMs));
-            client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, actionId, actionArgId, UseWindupMs));
+            client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.UseObject, actionArgId, UseWindupMs));
             station.TriggeredByPlayers.Add(client);
 
             SendStatus(client, station);

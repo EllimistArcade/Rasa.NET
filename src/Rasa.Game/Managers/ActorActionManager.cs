@@ -118,16 +118,16 @@ namespace Rasa.Managers
                     CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformRecoveryPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
                     switch (action.ActionArgId)
                     {
-                        case 1:
+                        case DynamicObjectManager.FootlockerUseArgId:
                             DynamicObjectManager.Instance.FootlockerRecovery(mapChannel, action);
                             break;
                         case KraftwerksManager.UseObjectArgId:
                             KraftwerksManager.Instance.UseRecovery(mapChannel, action);
                             break;
-                        case 6:
+                        case DynamicObjectManager.LogosUseArgId:
                             DynamicObjectManager.Instance.LogosRecovery(mapChannel, action);
                             break;
-                        case 7:
+                        case DynamicObjectManager.ControlPointUseArgId:
                             DynamicObjectManager.Instance.CaptureControlPointRecovery(mapChannel, action);
                             break;
                         default:

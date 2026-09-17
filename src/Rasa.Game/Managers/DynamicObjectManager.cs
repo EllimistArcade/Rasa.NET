@@ -26,6 +26,21 @@ namespace Rasa.Managers
 
         public readonly Dictionary<ulong, Dropship> Dropships = new Dictionary<ulong, Dropship>();
         public readonly Dictionary<ulong, DynamicObject> Teleporters = new Dictionary<ulong, DynamicObject>();
+
+        /// <summary>
+        /// The UseObject arg id each kind of object is used with, which is what picks the recovery
+        /// in ActorActionManager. The client reads it off the object's own usabledata row
+        /// (client/augmentations/usable.py, defaulting to 1 for a class with no row), and it
+        /// matches the object here: all 35 footlocker classes carry 1, all 39 station classes 5,
+        /// 163 of the 166 logos classes 6, and the control point 7.
+        /// </summary>
+        public const uint FootlockerUseArgId = 1;
+
+        /// <inheritdoc cref="FootlockerUseArgId"/>
+        public const uint LogosUseArgId = 6;
+
+        /// <inheritdoc cref="FootlockerUseArgId"/>
+        public const uint ControlPointUseArgId = 7;
         public static DynamicObjectManager Instance
         {
             get
@@ -67,6 +82,28 @@ namespace Rasa.Managers
         {
             var obj = EntityManager.Instance.GetObject(packet.EntityId);
 
+            // Using an object is the only thing a use request may ask for. The queued action
+            // carried the packet's own action id to ActorActionManager.PerformRecovery, which
+            // performs whatever that id names, on the player, as soon as the windup has run - so
+            // any footlocker or crafting station was a hundred milliseconds of free choice over
+            // the whole action table. WeaponReload filled the clip and cleared a jam with no
+            // reload asked for and none of its time served, and anything AbilityManager can
+            // resolve landed as an ability: its recovery is the half that takes the skill, the
+            // cost, the cooldown and the range as read, because the request half checked them.
+            //
+            // The arg id is left as it arrived. It only picks which of the four use-object
+            // recoveries runs, and each of those acts on an object that holds this player in its
+            // TriggeredByPlayers - the list this request adds them to - so one that does not
+            // match the object it was sent to finds nothing to do. It also has to go back
+            // unchanged: the client files its pending action under (actionId, actionArgId) and
+            // does not recognise its own windup or recovery under any other arg.
+            if (packet.ActionId != ActionId.UseObject)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{client.Player.FamilyName} sent {packet.ActionId}/{packet.ActionArgId} to use object {packet.EntityId}; an object is used with {ActionId.UseObject}. Ignored.");
+                return;
+            }
+
             switch (obj.DynamicObjectType)
             {
                 case DynamicObjectType.ControlPoint:
@@ -100,7 +137,7 @@ namespace Rasa.Managers
                         break;
                     }
                 case DynamicObjectType.Kraftwerks:
-                    KraftwerksManager.Instance.Use(client, obj, packet.ActionId, packet.ActionArgId);
+                    KraftwerksManager.Instance.Use(client, obj, packet.ActionArgId);
                     break;
                 default:
                     Logger.WriteLog(LogType.Debug, $"ToDo: RequestUseObjectPacket: unsuported object type {obj.DynamicObjectType}");

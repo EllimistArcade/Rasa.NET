@@ -1356,9 +1356,29 @@ namespace Rasa.Managers
                 new DisplayClientMessagePacket(reason, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
         }
 
+        /// <summary>
+        /// Firing an armed ability. Queues the action for ActorActionManager, which is where the
+        /// few that are implemented resolve; the rest log that they are unsupported.
+        ///
+        /// The map channel is checked because this arrives from the wire: a player mid-teleport
+        /// or mid-logout has none, and the NullReferenceException that used to raise was caught
+        /// as a malformed packet and closed the connection.
+        ///
+        /// Only an entity target is carried through, and no check is needed for that: ActionTarget
+        /// leaves EntityId at 0 unless it actually read one, so an ability aimed at the ground or
+        /// at nothing arrives here as 0 on its own. The position itself is dropped - ActionData
+        /// has nowhere to put one and nothing downstream reads it yet.
+        /// </summary>
         public void RequestPerformAbility(Client client, RequestPerformAbilityPacket packet)
         {
-            client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, packet.ActionId, (uint)packet.ActionArgId, packet.Target, 0));
+            var mapChannel = client.Player?.MapChannel;
+
+            if (mapChannel == null)
+                return;
+
+            mapChannel.PerformRecovery.Add(
+                new ActionData(client.Player, packet.ActionId, (uint)packet.ActionArgId,
+                    packet.Target.EntityId, 0));
         }
 
         public void RequestToggleRun(Client client)

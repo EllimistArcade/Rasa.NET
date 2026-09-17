@@ -310,6 +310,26 @@ namespace Rasa.Memory
             return Reader.CheckedLength(count, what + " count");
         }
 
+        /// <summary>
+        /// One number, in whichever form it marshalled as. Python has no fixed width here and
+        /// the client writes whatever is smallest: a coordinate or an angle that lands on a whole
+        /// number arrives as an int rather than a double, so a reader that insists on doubles
+        /// throws on a player standing on an exact metre or facing due north - and a throw out of
+        /// Read closes the connection. None and the structs that share its nibble read as 0.
+        /// </summary>
+        public double ReadNumber()
+        {
+            switch (PeekType())
+            {
+                case PythonType.Double: return ReadDouble();
+                case PythonType.Int: return ReadInt();
+                case PythonType.Long: return ReadLong();
+                default:
+                    ReadUnkStruct();
+                    return 0;
+            }
+        }
+
         public T ReadStruct<T>()
             where T : IPythonDataStruct, new()
         {

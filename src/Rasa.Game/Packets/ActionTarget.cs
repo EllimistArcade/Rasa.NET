@@ -95,7 +95,7 @@ namespace Rasa.Packets
             // after the sequence and the terminator check still lands where it should.
             for (var i = 0; i < count; i++)
             {
-                var value = ReadNumber(pr);
+                var value = pr.ReadNumber();
 
                 if (i < values.Length)
                     values[i] = value;
@@ -106,23 +106,6 @@ namespace Rasa.Packets
 
             return new ActionTarget(ActionTargetKind.Location, 0,
                 new Vector3((float)values[0], (float)values[1], (float)values[2]));
-        }
-
-        /// <summary>
-        /// One coordinate. A whole number marshals as an int rather than a double, so a player
-        /// standing on an exact metre sends a form that ReadDouble alone would reject.
-        /// </summary>
-        private static double ReadNumber(PythonReader pr)
-        {
-            switch (pr.PeekType())
-            {
-                case PythonType.Double: return pr.ReadDouble();
-                case PythonType.Int: return pr.ReadInt();
-                case PythonType.Long: return pr.ReadLong();
-                default:
-                    pr.ReadUnkStruct();
-                    return 0;
-            }
         }
     }
 }

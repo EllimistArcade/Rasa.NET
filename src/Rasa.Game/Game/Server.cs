@@ -207,6 +207,8 @@ namespace Rasa.Game
 
                 if (_clientsToRemove.Count > 0)
                 {
+                    List<Client> dropped;
+
                     lock (_clientsToRemove)
                     {
                         foreach (var client in _clientsToRemove)
@@ -225,8 +227,17 @@ namespace Rasa.Game
                             }
                         }
 
+                        dropped = new List<Client>(_clientsToRemove);
                         _clientsToRemove.Clear();
                     }
+
+                    // Any of those whose character is still in the world, on no map's list where a
+                    // map worker would find it. Outside the lock: removing a player reaches into
+                    // every manager, and a connection closed from any of them comes back through
+                    // Disconnect for this lock - as one closed on a socket thread does, holding
+                    // that connection's own lock while it waits.
+                    foreach (var client in dropped)
+                        MapChannelManager.Instance.RemoveStrandedPlayer(client);
                 }
             }
         }

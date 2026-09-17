@@ -426,6 +426,7 @@ namespace Rasa.Managers
                                     dropship.Client.Player.Position = dropship.Destination;
                                     dropship.Client.Player.Target = 0;
                                     dropship.Client.State = ClientState.Teleporting;
+                                    dropship.Client.AwaitingMapLoaded = true;
                                     break;
                                 case ClientState.Teleporting:
                                     dropship.Client.State = ClientState.Ingame;

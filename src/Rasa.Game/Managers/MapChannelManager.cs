@@ -265,6 +265,33 @@ namespace Rasa.Managers
 
         public void MapLoaded(Client client)
         {
+            // Only in answer to a Wonkavate, and once for each. Nothing was checked, and this is
+            // one of the methods a connection may call from outside the world - the loading
+            // screen is where it comes from - so it could be sent from anywhere, any number of
+            // times, and every path below assumes a player who is arriving.
+            //
+            // From the character screen after a logout it put the character back in the world:
+            // registered, in its old map's cells and introduced to everyone there, but on no map's
+            // client list, which is the only place the removal that follows a dropped connection is
+            // looked for. Once the connection closed, the character stayed where it was, frozen,
+            // for as long as the server ran. A second one during a dropship arrival built a second
+            // arrival dropship; the first landed the player, and the second found them already in
+            // the world and took itself for a departure with nowhere to go - MapChannelArray[0], a
+            // KeyNotFoundException at the top of the map channel worker, on every tick after,
+            // because the dropship was only removed at the end of the phase that threw.
+            //
+            // The state has to agree as well as the flag: a pending load can be overtaken by
+            // something else changing the state before the client answers.
+            if (!client.AwaitingMapLoaded
+                || (client.State != ClientState.Loading && client.State != ClientState.Teleporting))
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry?.Id} sent MapLoaded in state {client.State} with {(client.AwaitingMapLoaded ? "a" : "no")} map load pending; ignored.");
+                return;
+            }
+
+            client.AwaitingMapLoaded = false;
+
             if (client.State == ClientState.Teleporting)
             {
                 var dropship = new Dropship(Factions.AFS, DropshipType.Teleporter, client);
@@ -361,6 +388,7 @@ namespace Rasa.Managers
 
             client.State = ClientState.Loading;
             client.State = ClientState.Loading;
+            client.AwaitingMapLoaded = true;
             client.Player.MapChannel.QueuedClients.Enqueue(client);
         }
 
@@ -412,6 +440,7 @@ namespace Rasa.Managers
                 orientation);
 
             client.CallMethod(SysEntity.CurrentInputStateId, packet);
+            client.AwaitingMapLoaded = true;
             CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Position, packet);
             mapChannel.ClientList.Add(client);
 
@@ -499,6 +528,46 @@ namespace Rasa.Managers
                 }
             }
 
+        }
+
+        /// <summary>
+        /// Takes a disconnected player out of the world when no map channel is going to.
+        ///
+        /// Close() only flags a departing player; the map channel worker acts on the flag, and
+        /// looks for it among the clients on its own map's list. A player on no map's list is
+        /// never looked at. A dropship journey is exactly that: the departure takes the client
+        /// off its map's list when it sends the Wonkavate, and only MapLoaded puts it on the
+        /// arrival map's, keeping the manifestation and its items registered in between. A
+        /// connection that dropped on that loading screen - a crash, Alt+F4 - left them all
+        /// registered for as long as the server ran.
+        ///
+        /// Called on the main loop for each connection it drops. A player still registered and
+        /// on no map's list or login queue is removed here, the way the worker would have; any
+        /// other is left alone, so nobody is removed twice.
+        /// </summary>
+        public void RemoveStrandedPlayer(Client client)
+        {
+            var player = client.Player;
+
+            if (player == null
+                || !EntityManager.Instance.Players.TryGetValue(player.EntityId, out var registered)
+                || registered != player)
+                return;
+
+            foreach (var mapChannel in MapChannelArray.Values)
+                if (mapChannel.ClientList.Contains(client) || mapChannel.QueuedClients.Contains(client))
+                    return;
+
+            player.RemoveFromMap = false;
+
+            try
+            {
+                RemovePlayer(client, true);
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Failed to remove disconnected player {player.FamilyName}, who was on no map's client list: {e}");
+            }
         }
 
         public void RequestLogout(Client client)

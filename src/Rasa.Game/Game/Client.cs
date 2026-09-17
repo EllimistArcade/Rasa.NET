@@ -37,6 +37,16 @@ namespace Rasa.Game
         public ClientCryptData Data { get; private set; }
         public GameAccountEntry AccountEntry { get; private set; }
         public uint LoadingMap { get; set; }
+
+        /// <summary>
+        /// A Wonkavate has gone to this client and the MapLoaded that answers it has not come
+        /// back. The client sends MapLoaded once per load, when its loading screen ends
+        /// (wonkavator.py HandleLoadingScreenEnd), so each Wonkavate allows exactly one. Set by
+        /// everything that sends one - PassClientToMapInstance, ChangeMap, a departing dropship -
+        /// and cleared by MapChannelManager.MapLoaded.
+        /// </summary>
+        internal bool AwaitingMapLoaded { get; set; }
+
         public ClientState State { get; set; }
         public Manifestation Player = new();
         public Movement Movement { get; set; }

@@ -355,6 +355,12 @@ namespace Rasa.Managers
                 new UsableInfoPacket(dynamicObject.IsEnabled, dynamicObject.StateId, 0, dynamicObject.WindupTime, dynamicObject.ActivateMission)
         };
 
+            // Only for an object that actually has a lock. An unlocked usable is the default the
+            // client already assumes, and sending a lock of zeroes would tell it the same thing
+            // at the cost of a packet per object per client.
+            if (dynamicObject.Lock != null)
+                entityData.Add(new LockInfoPacket(dynamicObject.Lock));
+
             client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(dynamicObject.EntityId, dynamicObject.EntityClassId, entityData));
         }
 

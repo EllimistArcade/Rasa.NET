@@ -78,16 +78,17 @@ namespace Rasa.Managers
         };
 
         /// <summary>
-        /// The four that do something. The cipher still needs the usable-hack flow, so it is
-        /// refused - but silently, since there is nothing wrong with asking. Nerfweapon has no
-        /// effect to apply at all.
+        /// The five that do something. Nerfweapon is the one left: it is the snowball launcher,
+        /// and there is no effect to apply. It is refused silently, since there is nothing wrong
+        /// with asking.
         /// </summary>
         public static readonly HashSet<ActionId> Applies = new HashSet<ActionId>
         {
             ActionId.ToolHealingDisc,
             ActionId.ToolFieldRepair,
             ActionId.ToolArmorAugmentation,
-            ActionId.ToolHarvest
+            ActionId.ToolHarvest,
+            ActionId.ToolCipher
         };
 
         /// <summary>
@@ -164,11 +165,11 @@ namespace Rasa.Managers
                 return;
             }
 
-            // The cipher and the snowball launcher still do nothing, so they are refused silently
-            // - with msgId None. The client cancels the action and pops it off
-            // __unresolvedActions either way; what it skips is the message, which is deliberate:
-            // the player did nothing wrong, and telling them off on every click of a tool that is
-            // simply not finished says less than nothing.
+            // The snowball launcher still does nothing, so it is refused silently - with msgId
+            // None. The client cancels the action and pops it off __unresolvedActions either way;
+            // what it skips is the message, which is deliberate: the player did nothing wrong,
+            // and telling them off on every click of a tool that is simply not finished says less
+            // than nothing.
             if (!Applies.Contains(packet.ActionId))
             {
                 Fail(client, packet, null);
@@ -220,10 +221,18 @@ namespace Rasa.Managers
                 return;
             }
 
-            // Every one of these tools has min damage equal to max on every class it has, so the
-            // amount is flat rather than a roll - and it is the number the client's own tooltip
-            // shows, since _AddWeaponToolInfo is handed maxDamage as its maxAmt.
-            var amount = classInfo.MaxDamage;
+            // What the tool is worth, which is an amount for the three that put a number back and
+            // a percentage for the two that roll. Min equals max on every class of all five of
+            // those, so which column is read has never mattered - and _AddWeaponToolInfo is
+            // handed maxDamage as its maxAmt, so max is the one the client prints.
+            //
+            // The cipher is the one place the two differ. Its ten classes run 55 to 100 in min -
+            // the same ladder salvage and tissue extraction use for their chance, rising with the
+            // tool's level - against a max that climbs 588 to 29025 and is a percentage of
+            // nothing. So min is the decode chance, and the tooltip prints the other one.
+            var amount = packet.ActionId == ActionId.ToolCipher
+                ? classInfo.MinDamage
+                : classInfo.MaxDamage;
 
             SpendShot(client, tool);
 
@@ -317,6 +326,21 @@ namespace Rasa.Managers
             var stillArmed = classInfo != null
                              && classInfo.WeaponAttackActionId == action.ActionId
                              && classInfo.WeaponAttackArgId == action.ActionArgId;
+
+            // The cipher's target is a usable rather than an actor, so it never goes through
+            // ResolveTarget - and like harvesting it resolves with a message or with nothing,
+            // never with hit data, since cipher.py's DoHits reads none.
+            if (action.ActionId == ActionId.ToolCipher)
+            {
+                var cipherRefusal = stillArmed ? Decoded(client, action) : null;
+
+                if (cipherRefusal != null)
+                    Tell(client, action, cipherRefusal.Value);
+                else
+                    Resolve(mapChannel, action, new List<ToolHit>());
+
+                return;
+            }
 
             // The windup gives the target 800ms to die, be looted away, or log out.
             var target = ResolveTarget(action.TargetId);
@@ -479,6 +503,117 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// One decode attempt, resolved.
+        ///
+        /// Everything the request checked is checked again, through the same method, because the
+        /// windup gives the world time to change underneath a claim that was true when it was
+        /// made: someone else can have opened the lock, the object can have been put out of
+        /// order, and the player can have walked away.
+        ///
+        /// Sharing <see cref="CanCipher"/> with the request rather than writing the checks out
+        /// twice is deliberate here. Harvesting has two copies because the two halves genuinely
+        /// read different things - a packet on one side, an ActionData on the other. A lock needs
+        /// neither, so one method cannot drift from itself.
+        /// </summary>
+        private PlayerMessage? Decoded(Client client, ActionData action)
+        {
+            var obj = EntityManager.Instance.DynamicObjects.TryGetValue(action.TargetId, out var found)
+                ? found
+                : null;
+
+            var refusal = CanCipher(client, obj);
+
+            if (refusal != null)
+                return refusal;
+
+            // Spent before the roll, so that a failure costs the same as a success. Without this
+            // the decode chance is decoration: a 55% cipher retried until it lands is a 100%
+            // cipher that takes longer, and the tool levels stop meaning anything.
+            obj.Lock.CipherAttemptsLeft--;
+
+            // The chance is the tool class's min damage - 55 at level 5, 100 at 50.
+            if (Next(100) >= (int)action.Args)
+                return PlayerMessage.PmUseObjectUsableLocked;
+
+            Unlock(obj);
+            return null;
+        }
+
+        /// <summary>
+        /// Whether this player may cipher this object right now, or the reason they may not.
+        /// cipher.py's CheckAction and usable.py's CanCipher() behind it, server-side: the client
+        /// runs both, and both read the client's own copy of the world.
+        /// </summary>
+        private static PlayerMessage? CanCipher(Client client, DynamicObject obj)
+        {
+            // "if not isinstance(target, Usable) ... PM_TARGET_INVALID". An id that resolves to
+            // no object at all lands here too, which covers a request naming a creature, an item,
+            // or a number nothing answers to.
+            if (obj == null)
+                return PlayerMessage.PmTargetInvalid;
+
+            // On the same map. Entity ids are unique across the server, so without this a client
+            // could name an object on a map it is not standing on.
+            if (obj.MapContextId != client.Player.MapContextId)
+                return PlayerMessage.PmTargetInvalid;
+
+            // _SetEnabled(0) takes a usable out of service; it is not a lock to be picked.
+            if (!obj.IsEnabled)
+                return PlayerMessage.PmTargetInvalid;
+
+            var usableLock = obj.Lock;
+
+            // "not target.IsCipherable()" - no lock, no cipher level, already open, or sitting in
+            // a state its lock does not apply to. All four are the same refusal to the player,
+            // which is what the client would have said.
+            if (usableLock == null || !usableLock.IsCipherableIn(obj.StateId))
+                return PlayerMessage.PmTargetInvalid;
+
+            // Already worked over. Checked before the range and skill rules so that a lock nobody
+            // can open any more says so rather than sending the player off to train.
+            if (usableLock.CipherAttemptsLeft <= 0)
+                return PlayerMessage.PmUseObjectUsableLocked;
+
+            // Standing at it. The client will not aim past the tool's range, but the entity id
+            // arrives over the wire and nothing else on this path checks a distance.
+            if (Vector3.Distance(client.Player.Position, obj.Position)
+                > Cipher.MaxRange + Cipher.RangeTolerance)
+                return PlayerMessage.PmTargetOutOfRange;
+
+            // CanCipher(): "skillLevel >= self.__lockCipherLevel", where skillLevel is the
+            // player's in the tool's own skill. That the armed tool is a cipher at all was
+            // settled by the action-pair check, and all 22 cipher templates require this skill at
+            // level 1 - so what is left to check is the level against the lock's.
+            if (SkillLevel(client, SkillId.SpecialistTools) < usableLock.CipherLevel)
+                return PlayerMessage.PmCipherFailSkillTooLow;
+
+            return null;
+        }
+
+        /// <summary>
+        /// The lock gives. Told to everyone in the cells rather than to the player who opened it,
+        /// because a door that opened is open for the room - and the lock is marked open rather
+        /// than merely moved, so an object that later cycles back through its locked state does
+        /// not silently re-lock itself.
+        /// </summary>
+        private static void Unlock(DynamicObject obj)
+        {
+            obj.Lock.Unlocked = true;
+
+            // A lock with no unlocked state is one whose opening is the point rather than any
+            // movement - the object stays where it is and simply stops refusing.
+            if (obj.Lock.UnlockedStateId != 0)
+            {
+                obj.StateId = obj.Lock.UnlockedStateId;
+                CellManager.Instance.CellCallMethod(obj, new ForceStatePacket(obj.StateId, 0));
+            }
+
+            // Resent so every client's own IsLocked() agrees with the server's. Without it the
+            // object would look open and still answer "locked" to the next thing that asked.
+            CellManager.Instance.CellCallMethod(obj, new LockInfoPacket(obj.Lock));
+        }
+
+        /// <summary>
         /// Resolves the action with a reason. harvest.py's DoHits does nothing with hit data, so
         /// what a player sees of a harvest is the message and the item - but the action still has
         /// to be resolved, or the client keeps it in __unresolvedActions forever.
@@ -617,7 +752,7 @@ namespace Rasa.Managers
             var targetId = packet.Target.EntityId;
 
             if (packet.ActionId == ActionId.ToolCipher)
-                return ValidateCipherTarget(targetId);
+                return ValidateCipherTarget(client, targetId);
 
             var creature = EntityManager.Instance.GetCreature(targetId);
             var player = EntityManager.Instance.Players.TryGetValue(targetId, out var targetPlayer)
@@ -670,7 +805,7 @@ namespace Rasa.Managers
             // The arg id says which harvest this is, and it is the class's own - the action-pair
             // check above already refused anything else - so this only rejects the one broken
             // weapon_class row that carries a harvest action with an arg that is not a skill.
-            if (packet.ActionArgId != (uint)SkillId.Salvage && packet.ActionArgId != (uint)SkillId.TissueExtraction)
+            if (packet.ActionArgId != Harvest.SalvageArg && packet.ActionArgId != Harvest.TissueExtractionArg)
                 return PlayerMessage.PmHarvestFailNotHarvestable;
 
             // Whose kill it was. Corpse looting is already owner-only and harvesting hands out
@@ -700,10 +835,10 @@ namespace Rasa.Managers
             if (substance == null)
                 return PlayerMessage.PmHarvestFailNotHarvestable;
 
-            if (packet.ActionArgId == (uint)SkillId.Salvage && substance == CreatureFlag.Biological)
+            if (packet.ActionArgId == Harvest.SalvageArg && substance == CreatureFlag.Biological)
                 return PlayerMessage.PmTargetInvalid;
 
-            if (packet.ActionArgId == (uint)SkillId.TissueExtraction && substance == CreatureFlag.Mechanical)
+            if (packet.ActionArgId == Harvest.TissueExtractionArg && substance == CreatureFlag.Mechanical)
                 return PlayerMessage.PmTargetInvalid;
 
             // Nothing is known to come off this species. Refused before the roll so the player is
@@ -711,30 +846,29 @@ namespace Rasa.Managers
             if (species == null || !HarvestYield.Has(species.Value))
                 return PlayerMessage.PmHarvestFailNotHarvestable;
 
-            // The skill the tool needs is the one its arg names, and the tool's own level is
-            // already gated by the item's requirements - this is the player having trained it at
-            // all.
-            if (!client.Player.Skills.ContainsKey((SkillId)packet.ActionArgId))
-                return PlayerMessage.PmHarvestFailSkillTooLow;
-
+            // No skill check. There is nothing to check: harvest.py has none, none of the 48
+            // harvest tool templates carry a skill requirement, and 168 and 169 are arg ids
+            // rather than skill ids whatever harvest.py calls its constants - skilldata has no
+            // such skills, so a check for one refused every harvest ever made. What gates a
+            // harvest is holding the tool, and the item requirements gate that.
             return null;
         }
 
-        private static PlayerMessage? ValidateCipherTarget(ulong targetId)
+        private static PlayerMessage? ValidateCipherTarget(Client client, ulong targetId)
         {
-            // cipher.py wants a Usable that IsCipherable(). Dynamic objects are the closest thing
-            // the server has to a usable; ToDo: a cipherable flag, and CanCipher()'s skill check,
-            // which would refuse with PmCipherFailSkillTooLow instead.
-            if (!EntityManager.Instance.DynamicObjects.ContainsKey(targetId))
-                return PlayerMessage.PmTargetInvalid;
-
-            return null;
+            return CanCipher(client,
+                EntityManager.Instance.DynamicObjects.TryGetValue(targetId, out var obj) ? obj : null);
         }
 
         private static bool CanTargetCorpse(Client client)
         {
-            return client.Player.Skills.TryGetValue(SkillId.Healing, out var healing)
-                   && healing.SkillLevel >= CorpseTargetHealingSkill;
+            return SkillLevel(client, SkillId.SpecialistTools) >= CorpseTargetHealingSkill;
+        }
+
+        /// <summary>This player's level in a skill, or 0 if they have never trained it.</summary>
+        private static int SkillLevel(Client client, SkillId skillId)
+        {
+            return client.Player.Skills.TryGetValue(skillId, out var skill) ? skill.SkillLevel : 0;
         }
 
         private static void Fail(Client client, RequestToolActionPacket packet, PlayerMessage? message)

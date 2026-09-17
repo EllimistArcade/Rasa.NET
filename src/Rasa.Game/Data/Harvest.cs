@@ -50,5 +50,18 @@ namespace Rasa.Data
         /// queueing while one is still running.
         /// </summary>
         public const int MaxQueuedPerPlayer = 2;
+
+        /// <summary>
+        /// The arg ids that tell the two harvests apart, from harvest.py's own SKILL_SALVAGE and
+        /// SKILL_TISSUE_EXTRACTION. Both tools share action id 172 and the arg is what decides
+        /// which one this is.
+        ///
+        /// The client's names call them skills and they are not: skilldata has no 168 or 169,
+        /// none of the 48 harvest tool templates require a skill, and harvest.py checks none.
+        /// They were briefly entries in SkillId here, which made the server refuse every harvest
+        /// for a skill no character could ever hold.
+        /// </summary>
+        public const uint SalvageArg = 168;
+        public const uint TissueExtractionArg = 169;
     }
 }

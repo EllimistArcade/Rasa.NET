@@ -139,6 +139,7 @@ namespace Rasa.Managers
                 case ActionId.ToolFieldRepair:
                 case ActionId.ToolArmorAugmentation:
                 case ActionId.ToolHarvest:
+                case ActionId.ToolCipher:
                     ToolActionManager.Instance.PerformRecovery(mapChannel, action);
                     break;
                 case ActionId.WeaponAttack:

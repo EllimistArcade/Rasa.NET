@@ -1584,8 +1584,13 @@ namespace Rasa.Managers
 
         public void InitClanInventory(Client client)
         {
-            for (uint i = 0; i < 500; i++)
-                client.Player.Inventory.ClanInventory.Add(0);
+            // Emptied first, as InitCharacterInventory empties the character's lists. This runs on
+            // every world entry - the login and each map change after it, on the same manifestation
+            // - and appended another 500 slots each time. SetupLocalClanInventory only fills the
+            // first 500, and the list goes out whole in InventoryCreate here and in the
+            // InventoryReload every lockbox change sends the clan, so each map change added 500
+            // entries to both, until they outgrew the 8192-byte send buffer and were dropped.
+            client.Player.Inventory.ResetClanInventory();
 
             SetupLocalClanInventory(client);
         }

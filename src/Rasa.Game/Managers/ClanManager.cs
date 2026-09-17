@@ -584,8 +584,11 @@ namespace Rasa.Managers
 
         internal void CleanupClan(Client client)
         {
-            for (int i = 0; i < 500; i++)
-                client.Player.Inventory.ClanInventory[i] = 0;
+            // Rebuilt rather than zeroed slot by slot. A member on the loading screen of their login
+            // has no clan lockbox list yet - InitClanInventory builds it at MapLoaded - and a kick or
+            // a disband reaching them there indexed the empty list and threw out of the handler half
+            // way through, disconnecting whoever sent it with the rows deleted and the cache not.
+            client.Player.Inventory.ResetClanInventory();
 
             client.Player.ClanId = 0;
         }

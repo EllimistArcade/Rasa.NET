@@ -2,6 +2,8 @@
 
 namespace Rasa.Structures
 {
+    using Data;
+
     public class Inventory
     {
         // 0-49 Equipment, 50-99 Consumables, 100-149 Crafting, 150-199 Mission, 200-249 Misc
@@ -48,5 +50,19 @@ namespace Rasa.Structures
 
         /// <summary>shared.gameconstants.MAX_INBOX_ITEMS; the client refuses a thirty-first.</summary>
         public const int MaxInboxItems = 30;
+
+        /// <summary>
+        /// Empties the clan lockbox list to exactly <see cref="ClanLockboxTab.TotalSlots"/> empty
+        /// slots, however many it held before - none at all for a character still on the loading
+        /// screen of their login. Every clan lockbox handler indexes the list by slot, and the
+        /// InventoryCreate and InventoryReload packets send it whole.
+        /// </summary>
+        public void ResetClanInventory()
+        {
+            ClanInventory.Clear();
+
+            for (var i = 0; i < ClanLockboxTab.TotalSlots; i++)
+                ClanInventory.Add(0);
+        }
     }
 }

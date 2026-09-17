@@ -6,6 +6,7 @@ namespace Rasa.Repositories.World
     public interface ICreatureRepository
     {
         List<CreatureEntry> Get();
+        List<CreatureClassFlagEntry> GetClassFlags();
         CreatureStatEntry GetCreatureStats(uint creatureId);
         CreatureActionEntry GetCreatureActionById(uint id);
         Dictionary<uint, CreatureActionEntry> GetCreatureActions();

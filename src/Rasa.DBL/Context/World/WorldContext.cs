@@ -33,6 +33,7 @@ namespace Rasa.Context.World
         public DbSet<CreatureActionEntry> CreatureActionEntries { get; set; }
         public DbSet<CreatureAppearanceEntry> CreatureAppearanceEntries { get; set; }
         public DbSet<CreatureStatEntry> CreatureStatEntries { get; set; }
+        public DbSet<CreatureClassFlagEntry> CreatureClassFlagEntries { get; set; }
         public DbSet<ExperienceForLevelEntry> ExperienceForLevelEntries { get; set; }
         public DbSet<EntityClassEntry> EntityClassEntries { get; set; }
         public DbSet<EquipableClassEntry> EquipableClassEntries { get; set; }
@@ -76,6 +77,7 @@ namespace Rasa.Context.World
             SetupRandomName(modelBuilder);
             SetupItemTemplateItemClass(modelBuilder);
             SetupMapMarker(modelBuilder);
+            SetupCreatureClassFlag(modelBuilder);
         }
 
         /// <summary>
@@ -87,6 +89,16 @@ namespace Rasa.Context.World
         {
             modelBuilder.Entity<MapMarkerEntry>()
                 .HasKey(e => new { e.MarkerEntityId, e.MapContextId });
+        }
+
+        /// <summary>
+        /// A class carries several flags, so the row is the pair. Composite keys cannot be
+        /// declared with [Key] attributes - EF refuses the model outright - so it is set here.
+        /// </summary>
+        private static void SetupCreatureClassFlag(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<CreatureClassFlagEntry>()
+                .HasKey(e => new { e.ClassId, e.FlagId });
         }
 
         private void SetupExperienceForLevel(ModelBuilder modelBuilder)

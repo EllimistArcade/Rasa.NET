@@ -85,6 +85,13 @@ namespace Rasa.Managers
             foreach (var equipableClass in equipableClassList)
                 LoadedEntityClasses[(EntityClasses)equipableClass.Id].EquipableClassInfo = new EquipableClassInfo((EquipmentData)equipableClass.SlotId);
 
+            // Load creature flags. Keyed by class, and a class that is not a creature simply
+            // has none - so this is a plain fold rather than a lookup per creature.
+            var creatureFlagList = unitOfWork.Creatures.GetClassFlags();
+            foreach (var flag in creatureFlagList)
+                if (LoadedEntityClasses.TryGetValue((EntityClasses)flag.ClassId, out var entityClass))
+                    entityClass.CreatureFlags.Add((CreatureFlag)flag.FlagId);
+
             // Load ItemTemplates
             ItemManager.Instance.LoadItemTemplates();
 
@@ -93,6 +100,7 @@ namespace Rasa.Managers
             Logger.WriteLog(LogType.Initialize, $"Loaded {equipableClassList.Count} EquipableClasses");
             Logger.WriteLog(LogType.Initialize, $"Loaded {armorClassList.Count} ArmorClasses");
             Logger.WriteLog(LogType.Initialize, $"Loaded {weaponClassList.Count} WeaponClasses");
+            Logger.WriteLog(LogType.Initialize, $"Loaded {creatureFlagList.Count} CreatureClassFlags");
         }
 
         public EntityClass GetClassInfo(EntityClasses entityClassId)

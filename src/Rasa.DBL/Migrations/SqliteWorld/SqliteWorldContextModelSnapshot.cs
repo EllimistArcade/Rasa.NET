@@ -351,6 +351,21 @@ namespace Rasa.Migrations.SqliteWorld
                     b.ToTable("creature");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.World.CreatureClassFlagEntry", b =>
+                {
+                    b.Property<uint>("ClassId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("class_id");
+
+                    b.Property<uint>("FlagId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("flag_id");
+
+                    b.HasKey("ClassId", "FlagId");
+
+                    b.ToTable("creature_class_flag");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.CreatureStatEntry", b =>
                 {
                     b.Property<uint>("Id")

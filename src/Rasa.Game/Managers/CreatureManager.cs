@@ -52,6 +52,23 @@ namespace Rasa.Managers
             _gameUnitOfWorkFactory = gameUnitOfWorkFactory;
         }
 
+        /// <summary>
+        /// What this creature is, for CreatureInfo. Flags belong to the entity class, so every
+        /// creature of a species carries the same list and a class with none - anything that is
+        /// not a creature, and the 128 creature classes no species could be matched to - sends
+        /// an empty one, which is what the client got for every creature before.
+        /// </summary>
+        public static List<int> CreatureFlagsOf(Creature creature)
+        {
+            if (creature == null)
+                return new List<int>();
+
+            return EntityClassManager.Instance.LoadedEntityClasses
+                .TryGetValue(creature.EntityClass, out var entityClass) && entityClass != null
+                ? entityClass.CreatureFlags.ConvertAll(f => (int)f)
+                : new List<int>();
+        }
+
         // 1 creature to n client's
         public void CellIntroduceCreatureToClients(MapChannel mapChannel, Creature creature, List<Client> clientList)
         {
@@ -277,7 +294,7 @@ namespace Rasa.Managers
                 new WorldLocationDescriptorPacket(creature.Position, creature.Rotation),
                 new BodyAttributesPacket(creature.Scale, hue, 0, 0, hue2),
                 // Creature augmentation
-                new CreatureInfoPacket(creature.NameId, false, new List<int>()),    // ToDo add creature flags
+                new CreatureInfoPacket(creature.NameId, false, CreatureFlagsOf(creature)),
                 // Actor augmentation
                 new ActorInfoPacket(creature),
                 new AppearanceDataPacket(creature.AppearanceData),

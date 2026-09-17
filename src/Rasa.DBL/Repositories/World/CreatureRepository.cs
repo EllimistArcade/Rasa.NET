@@ -23,6 +23,17 @@ namespace Rasa.Repositories.World
             return creatureEntries;
         }
 
+        /// <summary>
+        /// Every creature class's flags, in one read. Keyed by class rather than by creature, so
+        /// this is loaded once with the entity classes rather than per spawn.
+        /// </summary>
+        public List<CreatureClassFlagEntry> GetClassFlags()
+        {
+            var query = _worldContext.CreateNoTrackingQuery(_worldContext.CreatureClassFlagEntries);
+
+            return query.ToList();
+        }
+
         public CreatureStatEntry GetCreatureStats(uint creatureId)
         {
             var query = _worldContext.CreateNoTrackingQuery(_worldContext.CreatureStatEntries);

@@ -26,6 +26,13 @@ namespace Rasa.Structures
         public int TargetPickOverride { get; set; }
         public int HasServerSkeleton { get; set; }
 
+        /// <summary>
+        /// What a creature of this class is, from creature_class_flag. Empty for everything that
+        /// is not a creature, and for the creature classes no species could be matched to.
+        /// CreatureInfo sends it as it stands.
+        /// </summary>
+        public List<CreatureFlag> CreatureFlags = new List<CreatureFlag>();
+
         public Dictionary<uint, ItemTemplate> ItemTemplates = new Dictionary<uint, ItemTemplate>();
         public ItemClassInfo ItemClassInfo { get; set; }
         public ArmorClassInfo ArmorClassInfo { get; set; }

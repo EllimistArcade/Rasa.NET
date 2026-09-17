@@ -194,7 +194,14 @@ namespace Rasa.Managers
             388, 389, 387, 380, 401, 430, 262, 421, 446
         };
 
+        /// <summary>
+        /// Points to reach each skill rank, cumulative. The index is the rank, so the array's
+        /// last index is the cap.
+        /// </summary>
         public readonly int[] requiredSkillLevelPoints = { 0, 1, 3, 6, 10, 15 };
+
+        /// <summary>The highest rank any skill goes to, which is what the client's own UI caps at.</summary>
+        public const int MaxSkillLevel = 5;
 
         #region Handlers
         public void AutoFireKeepAlive(Client client, int keepAliveDelay)
@@ -1205,19 +1212,123 @@ namespace Rasa.Managers
             return Math.Max(0, pointsAvailable);
         }
 
+        /// <summary>
+        /// Which class grants each skill and the level it takes, from the client's own
+        /// skillCharacter table. Loaded once at startup.
+        /// </summary>
+        private readonly Dictionary<SkillId, (CharacterClass Class, int Level)> _skillClasses = new();
+
+        public void LoadSkillClasses()
+        {
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateWorld();
+
+            foreach (var entry in unitOfWork.Actions.GetSkillCharacters())
+                _skillClasses[(SkillId)entry.Id] = ((CharacterClass)entry.ClassId, (int)entry.RequiredLevel);
+
+            Logger.WriteLog(LogType.Initialize, $"Loaded {_skillClasses.Count} skill class requirements.");
+        }
+
+        /// <summary>
+        /// Why this request may not be honoured, or null if it may.
+        ///
+        /// The client runs all of this before it will even draw the spend buttons - the skills
+        /// window shows them only when IsCharacterClass(skill's class, player's class) holds, and
+        /// only up to the levels the player has - but none of it constrains the wire. Without a
+        /// copy here, the only cost of training a Tier 4 skill on a level 1 Recruit was the skill
+        /// points, and abilities are granted by the skills a player holds: AbilityManager.Owns
+        /// walks Player.Skills and asks nothing about how they got there.
+        ///
+        /// Checked as a whole before anything is written, because the request is a set: a list
+        /// that is good up to its fifth entry must not leave the first four trained.
+        /// </summary>
+        private string ValidateSkillLevels(Client client, LevelSkillsPacket packet)
+        {
+            if (packet.SkillIds == null || packet.SkillLevels == null)
+                return "a request with no skill list at all";
+
+            if (packet.ListLenght < 0 || packet.ListLenght > packet.SkillIds.Length
+                                      || packet.ListLenght > packet.SkillLevels.Length)
+                return "a list length that does not match the list";
+
+            var playerClass = (CharacterClass)client.Player.Class;
+            var seen = new HashSet<SkillId>();
+            var pointsAvailable = GetSkillPointsAvailable(client.Player);
+
+            for (var i = 0; i < packet.ListLenght; i++)
+            {
+                var rawId = packet.SkillIds[i];
+                var skillId = (SkillId)rawId;
+
+                // GetSkillIndexById answers -1 for an id outside the table, and the index went
+                // straight into SkillIdx2AbilityId - so a skill id of 0, or anything past 199,
+                // was an IndexOutOfRangeException out of the handler, which is a disconnect.
+                var index = GetSkillIndexById(rawId);
+
+                if (index < 0 || index >= SkillIdx2AbilityId.Length)
+                    return $"skill id {rawId}, which is not in the skill table";
+
+                // The same id twice would be counted once against the points and written twice.
+                if (!seen.Add(skillId))
+                    return $"skill {rawId} twice in one request";
+
+                if (!_skillClasses.TryGetValue(skillId, out var requirement))
+                    return $"skill {rawId}, which no class grants";
+
+                // gameuiutil's IsCharacterClass: the skill's class has to be the player's own or
+                // one they advanced through. A Commando keeps their Soldier and Recruit skills
+                // and can never train a Ranger's.
+                if (!CharacterClassTree.Is(playerClass, requirement.Class))
+                    return $"skill {rawId}, which belongs to {requirement.Class} and not to {playerClass}";
+
+                if (client.Player.Level < requirement.Level)
+                    return $"skill {rawId} at level {client.Player.Level}, which needs {requirement.Level}";
+
+                var newSkillLevel = packet.SkillLevels[i];
+                var oldSkillLevel = client.Player.Skills.TryGetValue(skillId, out var held) ? held.SkillLevel : 0;
+
+                if (newSkillLevel < 0 || newSkillLevel > MaxSkillLevel)
+                    return $"skill {rawId} at rank {newSkillLevel}";
+
+                // Levelling a skill down is not a refund, it is a way to spend the same points
+                // twice - the points come back and the ranks already bought stay.
+                if (newSkillLevel < oldSkillLevel)
+                    return $"skill {rawId} lowered from {oldSkillLevel} to {newSkillLevel}";
+
+                pointsAvailable -= requiredSkillLevelPoints[newSkillLevel] - requiredSkillLevelPoints[oldSkillLevel];
+            }
+
+            if (pointsAvailable < 0)
+                return "more skill points than this character has";
+
+            return null;
+        }
+
         public void LevelSkills(Client client, LevelSkillsPacket packet)
         {
-            var skillPointsAvailable = GetSkillPointsAvailable(client.Player);
             var skillLevelupArray = new Dictionary<SkillId, SkillsData>(); // used to temporarily safe skill level updates
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+
+            // Refused rather than thrown. Every one of these used to be an exception out of a
+            // packet handler, which Client.Update catches as a malformed packet and answers by
+            // closing the connection - so a client one version out of step, or one repeating a
+            // request the player had already spent the points on, was disconnected rather than
+            // told no.
+            var refusal = ValidateSkillLevels(client, packet);
+
+            if (refusal != null)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{client.Player.FamilyName} sent a LevelSkills this character may not have: {refusal}. Ignored.");
+
+                // Their copy of the skills is now ahead of ours; put it back.
+                client.CallMethod(client.Player.EntityId, new SkillsPacket(client.Player.Skills));
+                SendAvailableAllocationPoints(client);
+                return;
+            }
 
             for (var i = 0; i < packet.ListLenght; i++)
             {
                 var skillId = (SkillId)packet.SkillIds[i];
-
-                if (skillId == SkillId.None)
-                    throw new Exception("LevelSkills: Invalid skillId received. Modified or outdated client?");
-
                 var oldSkillLevel = 0;
                 var abilityId = SkillIdx2AbilityId[GetSkillIndexById(packet.SkillIds[i])];
 
@@ -1231,18 +1342,8 @@ namespace Rasa.Managers
 
                 var newSkillLevel = packet.SkillLevels[i];
 
-                if (newSkillLevel < oldSkillLevel || newSkillLevel > 5)
-                    throw new Exception("LevelSkills: Invalid skill level received\n");
-
-                var additionalSkillPointsRequired = requiredSkillLevelPoints[newSkillLevel] - requiredSkillLevelPoints[oldSkillLevel];
-
-                skillPointsAvailable -= additionalSkillPointsRequired;
                 skillLevelupArray.Add(skillId, new SkillsData(skillId, abilityId, newSkillLevel - oldSkillLevel));
-
             }
-            // do we have enough skill points for the skill level ups?
-            if (skillPointsAvailable < 0)
-                throw new Exception("PlayerManager.LevelSkills: Not enough skill points. Modified or outdated client?\n");
             // everything ok, update skills!
             foreach (var skill in skillLevelupArray)
                 client.Player.Skills[skill.Value.SkillId].SkillLevel += skillLevelupArray[skill.Value.SkillId].SkillLevel;

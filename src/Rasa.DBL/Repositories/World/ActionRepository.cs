@@ -14,6 +14,7 @@ namespace Rasa.Repositories.World
         List<ActionPropertyEntry> GetActionProperties();
         List<ActionItemRequirementEntry> GetActionItemRequirements();
         List<ItemTemplateActionEntry> GetItemTemplateActions();
+        List<SkillCharacterEntry> GetSkillCharacters();
     }
 
     public class ActionRepository : IActionRepository
@@ -53,6 +54,15 @@ namespace Rasa.Repositories.World
         public List<ItemTemplateActionEntry> GetItemTemplateActions()
         {
             return _worldContext.CreateNoTrackingQuery(_worldContext.ItemTemplateActionEntries).ToList();
+        }
+
+        /// <summary>
+        /// Which class grants each skill and the level it takes, in one read. Loaded once at
+        /// startup: 73 rows that never change.
+        /// </summary>
+        public List<SkillCharacterEntry> GetSkillCharacters()
+        {
+            return _worldContext.CreateNoTrackingQuery(_worldContext.SkillCharacterEntries).ToList();
         }
     }
 }

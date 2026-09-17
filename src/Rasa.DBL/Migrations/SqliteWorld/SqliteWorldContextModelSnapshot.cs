@@ -1393,6 +1393,25 @@ namespace Rasa.Migrations.SqliteWorld
                     b.ToTable("spawnpool");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.World.SkillCharacterEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("ClassId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("class_id");
+
+                    b.Property<uint>("RequiredLevel")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("required_level");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("skill_character");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.TeleporterEntry", b =>
                 {
                     b.Property<uint>("Id")

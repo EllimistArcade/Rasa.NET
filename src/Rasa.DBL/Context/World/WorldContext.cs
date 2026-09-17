@@ -34,6 +34,7 @@ namespace Rasa.Context.World
         public DbSet<CreatureAppearanceEntry> CreatureAppearanceEntries { get; set; }
         public DbSet<CreatureStatEntry> CreatureStatEntries { get; set; }
         public DbSet<CreatureClassFlagEntry> CreatureClassFlagEntries { get; set; }
+        public DbSet<SkillCharacterEntry> SkillCharacterEntries { get; set; }
         public DbSet<ExperienceForLevelEntry> ExperienceForLevelEntries { get; set; }
         public DbSet<EntityClassEntry> EntityClassEntries { get; set; }
         public DbSet<EquipableClassEntry> EquipableClassEntries { get; set; }
@@ -78,6 +79,7 @@ namespace Rasa.Context.World
             SetupItemTemplateItemClass(modelBuilder);
             SetupMapMarker(modelBuilder);
             SetupCreatureClassFlag(modelBuilder);
+            SetupSkillCharacter(modelBuilder);
         }
 
         /// <summary>
@@ -125,6 +127,18 @@ namespace Rasa.Context.World
                 .AsUnsignedTinyInt(_dbContextPropertyModifier, 3);
 
             modelBuilder.Entity<RandomNameEntry>().HasKey(e => new { e.Name, e.Type, e.Gender });
+        }
+
+        /// <summary>
+        /// The skill id is the client's own and is inserted as it stands, so it is a key rather
+        /// than something the database hands out.
+        /// </summary>
+        private void SetupSkillCharacter(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<SkillCharacterEntry>()
+                .Property(e => e.Id)
+                .AsIdColumn(_dbContextPropertyModifier)
+                .HasAnnotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None);
         }
 
         private void SetupItemTemplateItemClass(ModelBuilder modelBuilder)

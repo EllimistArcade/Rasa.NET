@@ -339,6 +339,7 @@ namespace Rasa.Game
             MapMarkerManager.Instance.MapMarkerInit();
             RecipeManager.Instance.RecipeInit();
             AbilityManager.Instance.AbilityInit();
+            ManifestationManager.Instance.LoadSkillClasses();
 
             return true;
         }

@@ -5,6 +5,7 @@ using System.Linq;
 namespace Rasa.Managers
 {
     using Data;
+    using Memory;
     using Packets.Inventory.Server;
     using Packets.MapChannel.Server;
     using Rasa.Game;
@@ -341,7 +342,7 @@ namespace Rasa.Managers
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             var now = DateTime.UtcNow;
-            var results = new List<AuctionItem>();
+            var matches = new List<(AuctionEntry Auction, Item Item, int Level)>();
 
             foreach (var auction in unitOfWork.Auctions.GetAuctions())
             {
@@ -364,38 +365,70 @@ namespace Rasa.Managers
                 if (!MatchesCategory(item, category))
                     continue;
 
-                // The buyer has never seen this item, so its entity has to exist on their client
-                // before the row can draw a name, an icon or a tooltip.
-                ItemManager.Instance.SendItemDataToClient(client, item, false);
-
-                var modules = item.ItemTemplate.ItemInfo?.ModuleIds ?? new List<int>();
-
-                results.Add(new AuctionItem
-                {
-                    ItemId = (uint)item.EntityId,
-                    Sellername = auction.SellerName,
-                    BidPrice = 0,
-                    BuyoutPrice = auction.Price,
-                    RemainingDuration = auction.RemainingHours(now),
-                    ItemTemplateId = item.ItemTemplate.ItemTemplateId,
-                    StackSize = item.StackSize,
-                    LootModuleId1 = modules.Count > 0 ? (uint)modules[0] : 0,
-                    LootModuleId2 = modules.Count > 1 ? (uint)modules[1] : 0,
-                    LootModuleId3 = modules.Count > 2 ? (uint)modules[2] : 0,
-                    LootModuleId4 = modules.Count > 3 ? (uint)modules[3] : 0,
-                    QualitiId = (uint)item.ItemTemplate.QualityId,
-                    LevelRequirement = (uint)level
-                });
+                matches.Add((auction, item, level));
             }
 
-            if (results.Count == 0)
+            if (matches.Count == 0)
             {
                 QueryFailed(client, PlayerMessage.PmAuctionNoResultsFound);
                 return;
             }
 
             var reply = new QuerySuccessPacket();
-            reply.AuctionItemList.AddRange(results);
+
+            // The envelope: tuple + list header. Rows are added while they still fit.
+            //
+            // Every match used to go into this one reply. A reply is written into a single pool
+            // block, so past about a hundred rows the write threw inside Send, LengthedSocket
+            // logged that it was skipping the packet, and the searcher was left looking at an
+            // empty browse tab - the busier the category, the more certainly it returned nothing.
+            var size = PythonSize.Of(pw => reply.Write(pw));
+
+            // Cheapest first, because that is the half of a full category a buyer wants, and
+            // because an item priced out of the page today comes into it as the ones under it
+            // sell. By auction id - which is the order they arrive in - the newest listings would
+            // be the ones nobody could ever see.
+            foreach (var match in matches.OrderBy(m => m.Auction.Price))
+            {
+                var modules = match.Item.ItemTemplate.ItemInfo?.ModuleIds ?? new List<int>();
+
+                var row = new AuctionItem
+                {
+                    ItemId = (uint)match.Item.EntityId,
+                    Sellername = match.Auction.SellerName,
+                    BidPrice = 0,
+                    BuyoutPrice = match.Auction.Price,
+                    RemainingDuration = match.Auction.RemainingHours(now),
+                    ItemTemplateId = match.Item.ItemTemplate.ItemTemplateId,
+                    StackSize = match.Item.StackSize,
+                    LootModuleId1 = modules.Count > 0 ? (uint)modules[0] : 0,
+                    LootModuleId2 = modules.Count > 1 ? (uint)modules[1] : 0,
+                    LootModuleId3 = modules.Count > 2 ? (uint)modules[2] : 0,
+                    LootModuleId4 = modules.Count > 3 ? (uint)modules[3] : 0,
+                    QualitiId = (uint)match.Item.ItemTemplate.QualityId,
+                    LevelRequirement = (uint)match.Level
+                };
+
+                var rowSize = PythonSize.Of(row);
+
+                if (size + rowSize + PythonSize.ListHeaderSlack > PythonSize.PayloadBudget)
+                    break;
+
+                size += rowSize;
+
+                // The buyer has never seen this item, so its entity has to exist on their client
+                // before the row can draw a name, an icon or a tooltip. Only for the rows that go:
+                // a search of a busy category used to create an entity on the searcher's client
+                // for every match, including the hundreds that were never in the reply.
+                ItemManager.Instance.SendItemDataToClient(client, match.Item, false);
+
+                reply.AuctionItemList.Add(row);
+            }
+
+            if (reply.AuctionItemList.Count < matches.Count)
+                Logger.WriteLog(LogType.Debug,
+                    $"Auction search by {client.Player.FamilyName} matched {matches.Count} auctions in {category}; the {reply.AuctionItemList.Count} cheapest fit the reply.");
+
             client.CallMethod(SysEntity.ClientAuctionHouseManagerId, reply);
         }
 

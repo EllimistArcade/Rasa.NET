@@ -1,9 +1,11 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace Rasa.Managers
 {
     using Data;
     using Game;
+    using Memory;
     using Packets.Social.Client;
     using Packets.Social.Server;
     using Rasa.Repositories.UnitOfWork;
@@ -223,7 +225,64 @@ namespace Rasa.Managers
                 }
             }
 
-            client.CallMethod(SysEntity.ClientSocialManagerId, new SetSocialContactListPacket(frinedList, ignoreList));
+            client.CallMethod(SysEntity.ClientSocialManagerId, ContactListFor(client, frinedList, ignoreList));
+        }
+
+        /// <summary>
+        /// As much of the two lists as one message can carry.
+        ///
+        /// The client rebuilds both windows from this single call - Recv_SetSocialContactList
+        /// (client/social.py:148) replaces both of its dictionaries - so it cannot be sent in
+        /// pieces, and a piece too many is worse than a list cut short: a reply is written into
+        /// one pool block, so an oversized one throws inside Send and LengthedSocket logs that it
+        /// is skipping the packet. The player is then shown an empty friend list and an empty
+        /// ignore list, at every login and every map change, with nothing on their side to say
+        /// anything was sent. Two hundred friends and fifty ignored players are what this server
+        /// lets an account collect, and a friend row carries two names, a level and a map, so the
+        /// full pair is around ten kilobytes against a budget of seven.
+        ///
+        /// Ignored players go in first: there are at most fifty of them, and one that does not
+        /// arrive is a player who goes on being heard rather than a name missing from a window.
+        /// Friends follow, the ones who are online first, so a list that has to stop short keeps
+        /// the half worth having. Nothing here touches what the server knows: Player.Friends and
+        /// Player.IgnoredPlayers hold every id either way, so ignoring and friend status go on
+        /// working for the entries that did not fit.
+        /// </summary>
+        private static SetSocialContactListPacket ContactListFor(Client client, List<Friend> friends, List<IgnoredPlayer> ignored)
+        {
+            var contacts = new SetSocialContactListPacket(new List<Friend>(), new List<IgnoredPlayer>());
+
+            // The envelope: tuple + the two list headers, measured empty. Rows go in while they fit.
+            var size = PythonSize.Of(pw => contacts.Write(pw));
+
+            foreach (var player in ignored)
+            {
+                var rowSize = PythonSize.Of(player);
+
+                if (size + rowSize + PythonSize.ListHeaderSlack > PythonSize.PayloadBudget)
+                    break;
+
+                size += rowSize;
+                contacts.IgnoreList.Add(player);
+            }
+
+            foreach (var friend in friends.OrderByDescending(f => f.IsOnline))
+            {
+                var rowSize = PythonSize.Of(friend);
+
+                if (size + rowSize + PythonSize.ListHeaderSlack > PythonSize.PayloadBudget)
+                    break;
+
+                size += rowSize;
+                contacts.FriendList.Add(friend);
+            }
+
+            if (contacts.FriendList.Count < friends.Count || contacts.IgnoreList.Count < ignored.Count)
+                Logger.WriteLog(LogType.Network,
+                    $"{client.Player.FamilyName} has {friends.Count} friends and {ignored.Count} ignored players; "
+                    + $"{contacts.FriendList.Count} and {contacts.IgnoreList.Count} of them fit the contact list message.");
+
+            return contacts;
         }
 
         #region Helper Functions

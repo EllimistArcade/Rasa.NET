@@ -433,6 +433,12 @@
             NpcManager.Instance.RequestVendorSale(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.RequestToolAction)]
+        private void RequestToolAction(RequestToolActionPacket packet)
+        {
+            ToolActionManager.Instance.RequestToolAction(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestVisualCombatMode)]
         private void RequestVisualCombatMode(RequestVisualCombatModePacket packet)
         {

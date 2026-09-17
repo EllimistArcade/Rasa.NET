@@ -131,8 +131,10 @@ namespace Rasa.Managers
                 SetClanData(client, clanData);
                 SetClanMemberData(client, clanData);
 
-                SetClanDataForOnlineMembers(clanData.Id, client.Player.Id);
-                SetMemberDataForOnlineMembers(clanData.Id, client.Player.Id);
+                // The rest of the clan already holds the roster; what changed is this member's line -
+                // online now, and on this map. Every login and zone crossing used to rebuild the whole
+                // roster for every member online, and send them the clan's own data again besides.
+                SendMemberData(MemberDataFor(client, member, true), client.Player.Id);
 
                 // The lockbox window draws whatever it was last told and asks for nothing, so
                 // its tab count and history have to be pushed on the way in.
@@ -429,9 +431,11 @@ namespace Rasa.Managers
             if (clan == null)
                 return;
 
-            // Built after the checks, not before them: it reads the target's character and
-            // account rows, which for an id that named nobody dereferenced the null it got back.
-            ClanMemberData memberToBeKickedData = CreateClanMemberData(new ClanData(clan), memberToBeKicked.CharacterId, memberToBeKicked.Rank, memberToBeKicked.Note);
+            // Read after the checks, not before them, and before the row it reads is deleted.
+            ClanMemberData memberToBeKickedData = GetMemberData(memberToBeKicked.CharacterId);
+
+            if (memberToBeKickedData == null)
+                return;
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
@@ -447,8 +451,9 @@ namespace Rasa.Managers
 
             UnregisterClanMember(memberToBeKicked);
 
-            SetMemberDataForOnlineMembers(member.ClanId, packet.CharacterId);
-
+            // PlayerLeftClan takes the member out of each client's roster by itself
+            // (client/clan.py _RemoveClanMemberFromLists); the whole roster used to be rebuilt and
+            // sent to everyone first.
             CallMethodForOnlineMembers(member.ClanId, (uint)SysEntity.ClientClanManagerId,
                 new PlayerLeftClanPacket(memberToBeKickedData.CharacterId, memberToBeKickedData.CharacterName, memberToBeKickedData.FamilyName, memberToBeKickedData.ClanId, true),
                 packet.CharacterId);
@@ -831,10 +836,25 @@ namespace Rasa.Managers
             var clanId = client.Player.ClanId;
             if (clanId > 0)
             {
+                // A map change comes through here too - MapChannelManager.ChangeMap takes the player
+                // off the old map, already Loading, before sending them to the new one - and a member
+                // crossing a zone border has not left anything. MapLoaded tells the clan where they
+                // arrived. This used to unregister them regardless, and unregistering runs CleanupClan
+                // on the member's own client: whoever walked through a map link or was summoned came
+                // out the other side with ClanId 0 and an empty clan lockbox, and clan chat, the
+                // lockbox and every rank action refused them as clanless until they relogged.
+                if (client.State == ClientState.Loading)
+                    return;
+
                 ClanMemberEntry member = GetClanMember(clanId, client.Player.Id);
+
+                if (member == null)
+                    return;
+
                 UnregisterClanMember(member);
 
-                SetMemberDataForOnlineMembers(clanId, client.Player.Id);
+                // The rest of the clan sees this member go offline: one line each.
+                SendMemberData(MemberDataFor(client, member, false), client.Player.Id);
             }
         }
 
@@ -957,32 +977,16 @@ namespace Rasa.Managers
                 new DisplayClanMessagePacket((int)reason, new Dictionary<string, string>()));
         }
 
-        private ClanMemberData CreateClanMemberData(ClanData clanData, uint characterId, byte rank = 0, string note = "")
-        {
-            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
-
-            CharacterEntry character = unitOfWork.Characters.Get(characterId);
-            GameAccountEntry account = unitOfWork.GameAccounts.Get(character.AccountId);
-
-            return new ClanMemberData
-            {               
-                CharacterId = character.Id,
-                ContextId = character.MapContextId,
-                Level = character.Level,
-                CharacterName = character.Name,
-                FamilyName = account.FamilyName,
-                UserId = account.Id,
-                ClanId = clanData.Id,
-                Rank = rank,
-                Note = note,
-            };
-        }
-
+        /// <summary>
+        /// A member's line as it goes to everyone but that member. The entity id is left out: it
+        /// belongs only in the copy their own client reads (<see cref="ForReader"/>), and in this one
+        /// it went into PlayerJoinedClan, so every other member filed the newcomer under their entity
+        /// id - a key no later update and no clan window action could ever match.
+        /// </summary>
         private ClanMemberData CreateClanMemberData(ClanData clanData, Client client, byte rank = 0, string note = "")
         {
             return new ClanMemberData
             {
-                CharacterEntityId = client.Player.EntityId,
                 CharacterId = client.Player.Id,
                 ContextId = client.Player.MapContextId,
                 Level = client.Player.Level,
@@ -995,29 +999,31 @@ namespace Rasa.Managers
             };
         }
 
+        /// <summary>
+        /// The whole roster, to one client - one who has just come into the world, founded the clan
+        /// or joined it. ClanMembersRosterBegin clears the client's copy and the lines fill it again.
+        ///
+        /// One query for all of it. This read each member separately, twice - the whole character with
+        /// its appearance and clan, then the whole account with all its characters - each in a unit of
+        /// work of its own.
+        /// </summary>
         private void SetClanMemberData(Client client, ClanData clanData)
         {
-            Manifestation player = client.Player;
+            List<ClanRosterEntry> roster;
+
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+                roster = unitOfWork.ClanMembers.GetRoster(clanData.Id);
+
+            var online = OnlineCharacters();
 
             client.CallMethod(SysEntity.ClientClanManagerId, new ClanMembersRosterBeginPacket(clanData.Id));
 
-            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
-
-            List<ClanMemberEntry> clanMemberEntries = unitOfWork.ClanMembers.GetAllClanMembersByClanId(clanData.Id);
-
-            foreach (ClanMemberEntry member in clanMemberEntries)
+            foreach (var entry in roster)
             {
-                ClanMemberData clanMemberData = CreateClanMemberData(clanData, member.CharacterId, member.Rank, member.Note);
-                clanMemberData.IsOnline = Server.Clients.Contains(Server.Clients.Find(c => c.Player.Id == member.CharacterId));
-                
-                if (player.Id == member.CharacterId)
-                {
-                    // The game is expecting the characterId to be the manifestationId for the current player                    
-                    clanMemberData.CharacterEntityId = player.EntityId;
-                    clanMemberData.CharacterId = player.Id;
-                }
+                online.TryGetValue(entry.CharacterId, out var inWorld);
 
-                client.CallMethod(SysEntity.ClientClanManagerId, new SetClanMemberDataPacket(SetClanMemberDataPacket.NameKey, clanMemberData));
+                client.CallMethod(SysEntity.ClientClanManagerId,
+                    new SetClanMemberDataPacket(SetClanMemberDataPacket.NameKey, ForReader(ToMemberData(entry, inWorld), client)));
             }
 
             client.CallMethod(SysEntity.ClientClanManagerId, new ClanMembersRosterEndPacket(clanData.Id));
@@ -1100,11 +1106,128 @@ namespace Rasa.Managers
             return unitOfWork.Clans.GetClanByName(clanName) != null;
         }
 
-        private void SetMemberDataForOnlineMembers(uint clanId, uint skipCharacterId = 0)
+        /// <summary>
+        /// Sends one member's line to the other members of the clan who are online.
+        ///
+        /// This rebuilt and resent the whole roster to every member online instead, two queries per
+        /// member per recipient and a packet per member each, on the main loop - for every login,
+        /// logout, join, kick and rank change, and twice for a map change. A 100-member clan with 30
+        /// online paid about 6,000 queries and 3,000 packets in one tick for each of those. The client files a
+        /// SetClanMemberData under the member's id and replaces whatever it had there
+        /// (client/clan.py _AddClanMemberToLists), so the member that changed is all it needs.
+        /// </summary>
+        private void SetMemberDataForOnlineMembers(uint clanId, uint characterId)
         {
-            var clanData = new ClanData(Clans.GetValueOrDefault(clanId).Value);
+            var member = GetMemberData(characterId);
 
-            CallMethodForOnlineMembers(clanId, (client) => SetClanMemberData(client, clanData), skipCharacterId);
+            if (member == null || member.ClanId != clanId)
+                return;
+
+            SendMemberData(member, characterId);
+        }
+
+        /// <summary>One member's line to every member of their clan who is online, each in the form their own client files it under.</summary>
+        private void SendMemberData(ClanMemberData member, uint skipCharacterId = 0)
+        {
+            CallMethodForOnlineMembers(member.ClanId,
+                reader => reader.CallMethod(SysEntity.ClientClanManagerId, new SetClanMemberDataPacket(SetClanMemberDataPacket.NameKey, ForReader(member, reader))),
+                skipCharacterId);
+        }
+
+        /// <summary>
+        /// A member's line for one reader. Their own line carries their manifestation's entity id and
+        /// everyone else's the character id (<see cref="ClanMemberData.Write"/>). A copy per reader
+        /// rather than one line changed in place: packets are written when they are sent, which is
+        /// after every reader's has been queued.
+        /// </summary>
+        private static ClanMemberData ForReader(ClanMemberData member, Client reader)
+        {
+            return new ClanMemberData
+            {
+                UserId = member.UserId,
+                CharacterId = member.CharacterId,
+                CharacterEntityId = reader.Player.Id == member.CharacterId ? reader.Player.EntityId : 0,
+                CharacterName = member.CharacterName,
+                FamilyName = member.FamilyName,
+                ClanId = member.ClanId,
+                Level = member.Level,
+                ContextId = member.ContextId,
+                Rank = member.Rank,
+                IsOnline = member.IsOnline,
+                IsAfk = member.IsAfk,
+                Note = member.Note
+            };
+        }
+
+        /// <summary>A member's line from their live character: one who has just come into the world, or is leaving it.</summary>
+        private static ClanMemberData MemberDataFor(Client client, ClanMemberEntry member, bool isOnline)
+        {
+            return new ClanMemberData
+            {
+                UserId = client.AccountEntry.Id,
+                CharacterId = client.Player.Id,
+                CharacterName = client.Player.Name,
+                FamilyName = client.Player.FamilyName,
+                ClanId = member.ClanId,
+                Level = client.Player.Level,
+                ContextId = client.Player.MapContextId,
+                Rank = member.Rank,
+                Note = member.Note,
+                IsOnline = isOnline
+            };
+        }
+
+        /// <summary>A member's line as the database has it, live where they are online; null for a character in no clan.</summary>
+        private ClanMemberData GetMemberData(uint characterId)
+        {
+            ClanRosterEntry entry;
+
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+                entry = unitOfWork.ClanMembers.GetRosterEntry(characterId);
+
+            return entry == null ? null : ToMemberData(entry, Server.Clients.Find(c => CountsAsOnline(c) && c.Player.Id == characterId));
+        }
+
+        private static ClanMemberData ToMemberData(ClanRosterEntry entry, Client inWorld)
+        {
+            return new ClanMemberData
+            {
+                UserId = entry.AccountId,
+                CharacterId = entry.CharacterId,
+                CharacterName = entry.CharacterName,
+                FamilyName = entry.FamilyName,
+                ClanId = entry.ClanId,
+                // The row is only as new as the character's last save; an online member is read live.
+                Level = inWorld?.Player.Level ?? entry.Level,
+                ContextId = inWorld?.Player.MapContextId ?? entry.MapContextId,
+                Rank = entry.Rank,
+                Note = entry.Note,
+                IsOnline = inWorld != null
+            };
+        }
+
+        /// <summary>
+        /// Whether a connection's character counts as online to their clan: in the world, or on the
+        /// loading screen into it. The roster used to call anyone connected online, and a player back
+        /// at character selection still has the character they last played on the connection.
+        /// </summary>
+        private static bool CountsAsOnline(Client client)
+        {
+            return client.Player != null
+                && client.Player.Id != 0
+                && (client.State == ClientState.Ingame || client.State == ClientState.Teleporting || client.State == ClientState.Loading);
+        }
+
+        /// <summary>Every character online, by character id, from one pass over the connections.</summary>
+        private static Dictionary<uint, Client> OnlineCharacters()
+        {
+            var online = new Dictionary<uint, Client>();
+
+            foreach (var client in Server.Clients)
+                if (CountsAsOnline(client))
+                    online.TryAdd(client.Player.Id, client);
+
+            return online;
         }
 
         private void SetClanDataForOnlineMembers(uint clanId, uint skipCharacterId = 0)
@@ -1162,74 +1285,70 @@ namespace Rasa.Managers
 
         private void UpdateClanMemberRank(ClanMemberEntry member, byte newRank)
         {
-            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            var promoted = newRank > member.Rank;
 
-            unitOfWork.ClanMembers.UpdateRankByCharacterId(newRank, member.CharacterId);
-            CharacterEntry character = unitOfWork.Characters.Get(member.CharacterId);
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+                unitOfWork.ClanMembers.UpdateRankByCharacterId(newRank, member.CharacterId);
 
-            // By the character's account, not by the character id. GameAccounts.Get throws when
-            // nothing carries that id, and character ids run past account ids as soon as one
-            // account has a second character - so a promotion wrote the new rank to the database,
-            // threw here, and disconnected the leader with the cached rank never brought up to
-            // date behind it.
-            GameAccountEntry account = unitOfWork.GameAccounts.Get(character.AccountId);
+            // The cached rank is the one every later rank check reads, so it moves with the row
+            // before anything else is done.
+            member.Rank = newRank;
+            RegisterClanMember(member.ClanId, member);
 
-            // AddOrUpdate the game clients 
-            SetMemberDataForOnlineMembers(member.ClanId);
+            var memberData = GetMemberData(member.CharacterId);
 
-            string newRankTitle = GetRankTitleForRank(member.ClanId, newRank);
+            if (memberData == null)
+                return;
+
+            // The member's line, to everyone online - the member included: their own clan window
+            // offers them what their rank allows.
+            SendMemberData(memberData);
 
             var messageArgs = new Dictionary<string, string>
             {
-                { "firstname", character.Name },
-                { "lastname", account.FamilyName },
-                { "rankname", newRankTitle },
+                { "firstname", memberData.CharacterName },
+                { "lastname", memberData.FamilyName },
+                { "rankname", GetRankTitleForRank(member.ClanId, newRank) },
             };
 
-            if (newRank > member.Rank)
-            {
-                CallMethodForOnlineMembers(member.ClanId, (uint)SysEntity.ClientClanManagerId,
-                    new DisplayClanMessagePacket((int)PlayerMessage.PmClanPlayerPromoted, messageArgs));
-            }
-            else
-            {
-                CallMethodForOnlineMembers(member.ClanId, (uint)SysEntity.ClientClanManagerId,
-                    new DisplayClanMessagePacket((int)PlayerMessage.PmClanPlayerDemoted, messageArgs));
-            }
-
-            // Refresh the cached member
-            member.Rank = (byte)newRank;
-            RegisterClanMember(member.ClanId, member);
+            CallMethodForOnlineMembers(member.ClanId, (uint)SysEntity.ClientClanManagerId,
+                new DisplayClanMessagePacket((int)(promoted ? PlayerMessage.PmClanPlayerPromoted : PlayerMessage.PmClanPlayerDemoted), messageArgs));
         }
 
         private void UpdateClanLeader(ClanMemberEntry member, ClanMemberEntry leaderMember)
         {
-            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+            {
+                unitOfWork.ClanMembers.UpdateRankByCharacterId(_clankRankLeader, member.CharacterId);
+                unitOfWork.ClanMembers.UpdateRankByCharacterId((byte)(_clankRankLeader - 1), leaderMember.CharacterId);
+            }
 
-            unitOfWork.ClanMembers.UpdateRankByCharacterId(_clankRankLeader, member.CharacterId);
-            unitOfWork.ClanMembers.UpdateRankByCharacterId((byte)(_clankRankLeader - 1), leaderMember.CharacterId);
-            CharacterEntry memberCharacter = unitOfWork.Characters.Get(member.CharacterId);
-            GameAccountEntry account = unitOfWork.GameAccounts.Get(memberCharacter.AccountId);
+            member.Rank = _clankRankLeader;
+            RegisterClanMember(member.ClanId, member);
 
-            // AddOrUpdate the game clients 
-            SetMemberDataForOnlineMembers(member.ClanId);
+            leaderMember.Rank = (byte)(_clankRankLeader - 1);
+            RegisterClanMember(leaderMember.ClanId, leaderMember);
+
+            var newLeader = GetMemberData(member.CharacterId);
+            var oldLeader = GetMemberData(leaderMember.CharacterId);
+
+            // Both lines changed.
+            if (oldLeader != null)
+                SendMemberData(oldLeader);
+
+            if (newLeader == null)
+                return;
+
+            SendMemberData(newLeader);
 
             var messageArgs = new Dictionary<string, string>
             {
-                { "leadername", $"{memberCharacter.Name} {account.FamilyName}" },
+                { "leadername", $"{newLeader.CharacterName} {newLeader.FamilyName}" },
                 { "clanname", GetClan(member.ClanId).Name },
             };
 
             CallMethodForOnlineMembers(member.ClanId, (uint)SysEntity.ClientClanManagerId,
                 new DisplayClanMessagePacket((int)PlayerMessage.PmClanNewLeader, messageArgs));
-
-            // Refresh the cached member
-            member.Rank = _clankRankLeader;
-            RegisterClanMember(member.ClanId, member);
-
-            // Refresh the old leader
-            leaderMember.Rank = (byte)(_clankRankLeader - 1);
-            RegisterClanMember(leaderMember.ClanId, leaderMember);
         }
 
         private string GetRankTitleForRank(uint clanId, uint newRank)

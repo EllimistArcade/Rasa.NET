@@ -671,13 +671,26 @@ namespace Rasa.Managers
         #region World entry and exit
 
         /// <summary>
-        /// MapChannelManager.RemovePlayer: logout, inactivity logout, dropped connection, and
-        /// the GM teleport between maps. The member's spot is held rather than given up.
+        /// MapChannelManager.RemovePlayer: logout, inactivity logout and dropped connection, where
+        /// the member's spot is held rather than given up - and every map change, which is not
+        /// leaving the world at all (see <see cref="MemberChangingMap"/>).
         /// </summary>
         public void RemovePlayer(Client client)
         {
             if (client.AccountEntry == null)
                 return;
+
+            // MapChannelManager.ChangeMap takes the player off the old map already Loading - a map
+            // link, a summon, a GM teleport. Every one of those used to be a logout: the squad was
+            // told they had logged out and then logged in again, a leader lost the lead to whoever
+            // was next and did not get it back, their open invitations and join requests were
+            // cancelled as if they had gone, and their own client was told on arrival that they had
+            // left the squad before being put back in it.
+            if (client.State == ClientState.Loading)
+            {
+                MemberChangingMap(client);
+                return;
+            }
 
             DropInvites(client.AccountEntry.Id);
 
@@ -707,6 +720,26 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A member on their way to another map. As far as the squad goes they are still online: no
+        /// spot is held, a leader keeps the lead, and invitations and join requests to and from them
+        /// stand. Squad traffic keeps reaching them on the loading screen (<see cref="FindMember"/>).
+        /// What the rest of the squad loses is their manifestation, which has just left this map, so
+        /// they are greyed out until PlayerEnteredWorld puts them back when the new map has loaded.
+        /// </summary>
+        private void MemberChangingMap(Client client)
+        {
+            var party = FindPartyOfAccount(client.AccountEntry.Id);
+            var member = party?.Find(client.AccountEntry.Id);
+
+            if (member == null || !member.IsOnline)
+                return;
+
+            foreach (var other in OnlineClients(party))
+                if (other != client)
+                    other.CallMethod(SysEntity.ClientPartyManagerId, new RemoveSquadMemberPacket(member.UserId, member.EntityId));
+        }
+
+        /// <summary>
         /// MapChannelManager.MapLoaded, when a character enters the world (not on a dropship
         /// teleport, which keeps the same manifestation). Rejoins a held spot, or clears any
         /// party the client still remembers from before it left the world.
@@ -723,6 +756,10 @@ namespace Rasa.Managers
 
             var member = party.Find(client.AccountEntry.Id);
 
+            // Still online means this is the end of a map change, not a login: a member leaving the
+            // world has their entity id cleared in RemovePlayer, and one changing maps does not.
+            var changedMap = member.IsOnline;
+
             member.Refresh(client);
             member.OfflineSinceTick = 0;
             client.Player.PartyId = party.Id;
@@ -736,10 +773,17 @@ namespace Rasa.Managers
                 other.CallMethod(SysEntity.ClientPartyManagerId, new AddSquadMemberPacket(member.UserId, member.EntityId));
             }
 
-            // The returning member is not told they logged in; everyone else is.
-            MessageParty(party, PlayerMessage.PmPartyMemberLoggedIn, "player", member.MemberName, client);
+            // Arriving from another map, the member's client has the squad already: it was never
+            // told it had left, and it went on hearing about the squad while the map loaded.
+            // SendPartyState would start by clearing its party id, which it announces as having left
+            // the squad.
+            if (!changedMap)
+            {
+                // The returning member is not told they logged in; everyone else is.
+                MessageParty(party, PlayerMessage.PmPartyMemberLoggedIn, "player", member.MemberName, client);
 
-            SendPartyState(party, client);
+                SendPartyState(party, client);
+            }
 
             if (party.Find(party.PartyLeaderId)?.IsOnline != true)
                 PassLeadership(party);
@@ -1282,7 +1326,7 @@ namespace Rasa.Managers
                 if (!member.IsOnline)
                     continue;
 
-                var client = FindIngame(member.UserId);
+                var client = FindMember(member.UserId);
 
                 if (client != null)
                     clients.Add(client);
@@ -1358,6 +1402,21 @@ namespace Rasa.Managers
 
         private static Client FindIngame(uint accountId) =>
             Server.Clients.Find(c => c.State == ClientState.Ingame && c.Player != null && c.AccountEntry != null && c.AccountEntry.Id == accountId);
+
+        /// <summary>
+        /// A squad member's connection while their character is in the world, including between
+        /// maps - loading into the next one, or riding a dropship - where FindIngame does not see
+        /// them. Squad traffic goes on reaching them there, which is what lets a map change leave
+        /// their squad alone: the squad they arrive in is the one they left, and nothing has to be
+        /// sent again. A dropship rider was never sent anything again either, and used to miss
+        /// whatever happened to the squad during the ride.
+        ///
+        /// For squad broadcasts only, to members the squad counts online. A member logging in from a
+        /// held spot is on a loading screen too, but not online, and is sent the whole squad on arrival.
+        /// </summary>
+        private static Client FindMember(uint accountId) =>
+            Server.Clients.Find(c => (c.State == ClientState.Ingame || c.State == ClientState.Teleporting || c.State == ClientState.Loading)
+                                     && c.Player != null && c.AccountEntry != null && c.AccountEntry.Id == accountId);
 
         private static Client FindIngame(string familyName) =>
             string.IsNullOrEmpty(familyName)

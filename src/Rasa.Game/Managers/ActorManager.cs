@@ -183,6 +183,42 @@ namespace Rasa.Managers
             return Heal(target, health.CurrentMax, sourceEntityId);
         }
 
+        /// <summary>
+        /// Raises an actor's armour and tells everyone who can see them, returning how much went
+        /// back on. The armour counterpart of <see cref="Heal"/>, and the same reasoning applies
+        /// to all of it: one place for the clamp, one for the broadcast, and the dead are
+        /// refused - MissileManager zeroes armour and its regeneration on death, so putting a
+        /// number back would leave a corpse wearing armour that never ticks.
+        ///
+        /// <paramref name="sourceEntityId"/> works as it does for healing: an entity the client
+        /// knows means the client leaves the announcement to whatever that entity is doing.
+        /// </summary>
+        public int RestoreArmor(Actor target, int amount, ulong sourceEntityId = 0)
+        {
+            if (target == null || amount <= 0)
+                return 0;
+
+            if (!target.Attributes.TryGetValue(Attributes.Armor, out var armor))
+                return 0;
+
+            if (target.State == CharacterState.Dead)
+                return 0;
+
+            var applied = Math.Min(amount, armor.CurrentMax - armor.Current);
+
+            if (applied <= 0)
+                return 0;
+
+            armor.Current += applied;
+
+            var mapChannel = MapChannelManager.Instance.FindByContextId(target.MapContextId);
+
+            if (mapChannel != null)
+                CellManager.Instance.CellCallMethod(mapChannel, target, new UpdateArmorPacket(armor, target.EntityId));
+
+            return applied;
+        }
+
         #endregion
     }
 }

@@ -25,7 +25,19 @@
             pw.WriteUInt(Item.ItemTemplate.WeaponInfo.ReloadTime);
             pw.WriteUInt(Item.ItemTemplate.WeaponInfo.AltActionId);
             pw.WriteUInt(Item.ItemTemplate.WeaponInfo.AltActionArgId);
-            pw.WriteUInt(Item.ItemTemplate.WeaponInfo.AeType);
+
+            // None rather than 0 when the weapon has no area effect. The aetypes table starts at
+            // 1, so 0 is the column's way of saying "none" and the client's checks are written
+            // for a null - most read it as "not CONE" either way, but basetoolaction.py does
+            // "if aeType is not None: targetType = TARGET_NONE; SetTarget(None)", and 0 is not
+            // None. Sending the 0 through made every tool in the game an area tool with no
+            // target, so a healing disc could not be aimed at anyone.
+            // ItemTemplateTooltipInfo already writes it this way.
+            if (Item.ItemTemplate.WeaponInfo.AeType == 0)
+                pw.WriteNoneStruct();
+            else
+                pw.WriteUInt(Item.ItemTemplate.WeaponInfo.AeType);
+
             pw.WriteUInt(Item.ItemTemplate.WeaponInfo.AeRadius);
             pw.WriteUInt(Item.ItemTemplate.WeaponInfo.RecoilAmount);
             pw.WriteNoneStruct();       // ReuseOverride ToDo

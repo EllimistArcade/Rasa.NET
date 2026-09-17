@@ -94,9 +94,17 @@ namespace Rasa.Managers
             client.Player.LogoutActive = false;
         }
 
+        /// <summary>
+        /// The map channel with this context id, or null. A context id that names no channel is
+        /// an ordinary thing to ask about - an actor whose map was torn down, or one that never
+        /// had one - and callers already treat the answer as optional: ActorManager.Heal guards
+        /// "if (mapChannel != null)" before broadcasting, which the throw this used to do made
+        /// unreachable. The world loop drives those callers, so the exception took the process
+        /// down rather than the one heal.
+        /// </summary>
         public MapChannel FindByContextId(uint contextId)
         {
-            return MapChannelArray[contextId];
+            return MapChannelArray.TryGetValue(contextId, out var mapChannel) ? mapChannel : null;
         }
 
         public Dictionary<int, AbilityDrawerData> GetPlayerAbilities(uint characterId)

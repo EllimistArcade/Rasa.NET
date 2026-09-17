@@ -118,9 +118,23 @@ namespace Rasa.Managers
             return LoadedEntityClasses[armor.ItemTemplate.Class].ArmorClassInfo;
         }
 
+        /// <summary>
+        /// Which equipment slot an item is worn in, or null for no item, a class that was never
+        /// loaded, and a class that is not equipment at all - a consumable, an ammo stack, a
+        /// crafting part. The last is an ordinary answer rather than a fault: the equip handlers
+        /// ask precisely to find out, and every caller tests the result.
+        /// </summary>
         public EquipableClassInfo GetEquipableClassInfo(Item equipment)
         {
-            return LoadedEntityClasses[equipment.ItemTemplate.Class].EquipableClassInfo;
+            if (equipment?.ItemTemplate == null)
+                return null;
+
+            if (LoadedEntityClasses.TryGetValue(equipment.ItemTemplate.Class, out var entityClass))
+                return entityClass.EquipableClassInfo;
+
+            Logger.WriteLog(LogType.Error, $"entityClassId  {equipment.ItemTemplate.Class} is not present in LoadedEntityClasses");
+
+            return null;
         }
 
         public ItemClassInfo GetItemClassInfo(Item item)

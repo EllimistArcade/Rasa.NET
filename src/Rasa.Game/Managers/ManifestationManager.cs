@@ -635,6 +635,19 @@ namespace Rasa.Managers
 
             var weapon = EntityManager.Instance.GetItem(client.Player.Inventory.WeaponDrawer[client.Player.ActiveWeapon]);
 
+            // A drawer slot holding something that is not a weapon is armed as an empty one.
+            // RequestEquipWeapon refuses to put anything else there now, but a drawer loaded
+            // before it did still has to be survivable: arming that slot used to ask for an
+            // appearance the class has none of and disconnect the player, which made the slot a
+            // trap they could not clear from in front of it.
+            if (weapon != null && EntityClassManager.Instance.GetEquipableClassInfo(weapon)?.EquipmentSlotId != EquipmentData.Weapon)
+            {
+                Logger.WriteLog(LogType.Error,
+                    $"{client.Player.Name} has {weapon.ItemTemplate.Class} in weapon drawer slot {requestedWeaponDrawerSlot}, which is not a weapon; armed as empty.");
+
+                weapon = null;
+            }
+
             // The weapon in hand follows the active slot, empty included: arming an empty slot
             // used to leave the previous weapon in EquippedInventory[13], so the player kept
             // firing a weapon they had put away.
@@ -1292,6 +1305,13 @@ namespace Rasa.Managers
             if (equipmentSlotId == 0)
                 return;
 
+            // A slot nothing was ever shown in is already clear. SetAppearanceItem is what adds
+            // the key, so a slot whose item never got that far - one holding something with no
+            // appearance at all - has no entry, and the indexer threw where there was simply
+            // nothing to remove.
+            if (!client.Player.AppearanceData.ContainsKey(equipmentSlotId))
+                return;
+
             client.Player.AppearanceData[equipmentSlotId].Class = 0;
             // update appearance data in database
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
@@ -1697,7 +1717,19 @@ namespace Rasa.Managers
 
         public void SetAppearanceItem(Client client, Item item)
         {
-            var equipmentSlotId = EntityClassManager.Instance.GetEquipableClassInfo(item).EquipmentSlotId;
+            var equipable = EntityClassManager.Instance.GetEquipableClassInfo(item);
+
+            // Only equipment is worn. Every caller establishes that before asking, so reaching
+            // here without it is a caller that stopped checking rather than something a player
+            // did - said plainly instead of thrown, which used to take the connection down.
+            if (equipable == null)
+            {
+                Logger.WriteLog(LogType.Error,
+                    $"SetAppearanceItem was given {item?.ItemTemplate?.Class.ToString() ?? "no item"}, which has no equipment slot; appearance unchanged.");
+                return;
+            }
+
+            var equipmentSlotId = equipable.EquipmentSlotId;
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             if (!client.Player.AppearanceData.ContainsKey(equipmentSlotId))

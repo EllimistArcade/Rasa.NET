@@ -304,7 +304,7 @@ namespace Rasa.Managers
                 // index in the equipped list is the equipment slot id. Nothing checked this, so
                 // any category-0 item could be put in any of the 22 slots - the same chest piece
                 // in all of them - and UpdateStatsValues sums ArmorValue over every slot.
-                var equipable = EntityClassManager.Instance.LoadedEntityClasses[itemToEquip.ItemTemplate.Class].EquipableClassInfo;
+                var equipable = EntityClassManager.Instance.GetEquipableClassInfo(itemToEquip);
 
                 if (equipable == null || (uint) equipable.EquipmentSlotId != packet.DestSlot)
                 {
@@ -334,10 +334,11 @@ namespace Rasa.Managers
             // update appearance
             if (itemToEquip == null)
             {
-                // remove item graphic if dequipped
-                var prevEquippedItem = EntityManager.Instance.GetItem(entityIdEquippedItem);
-                var equipableClassInfo = EntityClassManager.Instance.GetEquipableClassInfo(prevEquippedItem);
-                ManifestationManager.Instance.RemoveAppearanceItem(client, equipableClassInfo.EquipmentSlotId);
+                // The slot being cleared is the one the item was taken out of: an equipped index
+                // is the equipment slot id, which is what the check above holds incoming items
+                // to. Reading it back off the outgoing item threw for anything that is not
+                // equipment, and an active weapon that is not one can sit in index 13.
+                ManifestationManager.Instance.RemoveAppearanceItem(client, (EquipmentData)packet.DestSlot);
             }
             else
                 ManifestationManager.Instance.SetAppearanceItem(client, itemToEquip);
@@ -358,29 +359,60 @@ namespace Rasa.Managers
 
             if (invType != InventoryType.Personal)
             {
-                Console.WriteLine("unsuported inventory");
+                Logger.WriteLog(LogType.Debug, $"Unsupported inventory => {invType}");
                 return;
             }
 
-            if (srcSlot < 0 || srcSlot >= 50)
+            // Both slots arrive as uint, so only the upper bound is worth testing. Weapons come
+            // out of the equipment half of the personal inventory, the same fifty slots the
+            // armor handler reads from.
+            if (srcSlot >= 50)
                 return;
 
-            if (destSlot < 0 || destSlot >= 5)
+            // The drawer has five slots; the old check spelled that as a literal.
+            if (destSlot >= client.Player.Inventory.WeaponDrawer.Count)
                 return;
 
             // equip item
             var entityIdEquippedItem = client.Player.Inventory.WeaponDrawer[(int)destSlot]; // the old equipped item (can be none)
             var entityIdInventoryItem = client.Player.Inventory.PersonalInventory[(int)srcSlot]; // the new equipped item (can be none)
 
+            // Nothing coming in and nothing going out: there is no swap to make, and the dequip
+            // path below would clear an appearance slot that nothing had filled.
+            if (entityIdInventoryItem == 0 && entityIdEquippedItem == 0)
+                return;
+
             // can we equip the item
             var itemToEquip = EntityManager.Instance.GetItem(entityIdInventoryItem);
-            var canEquip = ValidateItemEquip(client, itemToEquip);
 
-            if (itemToEquip == null && canEquip == false)
+            if (entityIdInventoryItem != 0 && itemToEquip == null)
+            {
+                Logger.WriteLog(LogType.Error, $"RequestEquipWeapon: slot {srcSlot} holds entity {entityIdInventoryItem} but no item is registered for it.");
                 return;
+            }
 
-            if (canEquip == false)
-                return;
+            if (itemToEquip != null)
+            {
+                // Only a weapon goes in the weapon drawer. This is the rule the client draws the
+                // drawer by - weapondrawerwindow._IsEntityWeapon accepts a drop only where
+                // equipableClassEquipmentSlot[classId] is WEAPON - and nothing on this side
+                // checked it: ValidateItemEquip asks about level, attributes, race and skill,
+                // none of which a consumable or an ammo stack carries, so any of them passed and
+                // was written into the drawer and its character_inventory row. Arming that slot
+                // then dereferenced an EquipableClassInfo the class does not have.
+                var equipable = EntityClassManager.Instance.GetEquipableClassInfo(itemToEquip);
+
+                if (equipable == null || equipable.EquipmentSlotId != EquipmentData.Weapon)
+                {
+                    Logger.WriteLog(LogType.Security,
+                        $"AccountId = {client.AccountEntry.Id} tried to put {itemToEquip.ItemTemplate.Class} in weapon drawer slot {destSlot}"
+                        + (equipable == null ? ", which is not equipment." : $", which is for {equipable.EquipmentSlotId}."));
+                    return;
+                }
+
+                if (!ValidateItemEquip(client, itemToEquip))
+                    return;
+            }
 
             // swap items on the client and server
             if (client.Player.Inventory.PersonalInventory[(int)srcSlot] != 0)
@@ -395,12 +427,13 @@ namespace Rasa.Managers
             if (destSlot == client.Player.ActiveWeapon)
                 if (itemToEquip == null)
                 {
-                    // remove item graphic if dequipped
-                    var prevEquippedItem = EntityManager.Instance.GetItem(entityIdEquippedItem);
-                    var equipableClassInfo = EntityClassManager.Instance.GetEquipableClassInfo(prevEquippedItem);
-
+                    // The slot being cleared is the weapon slot - this is the weapon drawer, so
+                    // it can only ever have been that one. It used to be read back off the item
+                    // coming out, which threw for an item that is not equipment: a drawer that
+                    // had been loaded with junk before the check above existed could not be
+                    // emptied from the active slot without disconnecting the player.
                     RemoveItemBySlot(client, InventoryType.EquipedInventory, 13);
-                    ManifestationManager.Instance.RemoveAppearanceItem(client, equipableClassInfo.EquipmentSlotId);
+                    ManifestationManager.Instance.RemoveAppearanceItem(client, EquipmentData.Weapon);
 
                     // we dont have weapon, set weaponReady to false
                     if (client.Player.WeaponReady)

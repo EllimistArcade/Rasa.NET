@@ -24,8 +24,12 @@ namespace Rasa.Managers
     /// - LookingForGroupSearchResults        => implemented
     /// - DisplayLookingForGroupMessage       => implemented
     ///
-    /// Ads live only as long as the server process; the client re-places one after a
-    /// relog because g_currentPlacedLFGAdInfo is module state that dies with it.
+    /// Ads live only as long as the server process, and each one only while its placer is in
+    /// the world. That is how long the client shows it placed: the status indicator goes when
+    /// LookingForGroupAdRemoved arrives, or when the game UI is reset on leaving the world for
+    /// character selection or the login screen (client/gameui.py Reset posts UI_RESET, and the
+    /// status updater clears its indicators on it). A map change resets nothing, so an ad
+    /// outlives one.
     /// </summary>
     public class LookingForGroupManager
     {
@@ -159,8 +163,7 @@ namespace Rasa.Managers
                 if (ad.AccountId == client.AccountEntry.Id)
                     continue;
 
-                var leader = Server.Clients.FirstOrDefault(
-                    c => c.State == ClientState.Ingame && c.AccountEntry?.Id == ad.AccountId);
+                var leader = FindInWorld(ad.AccountId);
 
                 // The placer is gone but their ad outlived them - a logout path that did not
                 // run RemovePlayer. Drop it rather than advertise a squad nobody can join.
@@ -198,6 +201,14 @@ namespace Rasa.Managers
             if (client.AccountEntry == null)
                 return;
 
+            // MapChannelManager.ChangeMap takes the player off the old map already Loading - a map
+            // link, a summon, a GM teleport - and that is not leaving the world. The ad went with
+            // every one of them, silently: nothing is sent when it goes from here, so the placer's
+            // client went on showing it placed, and nothing on the client places an ad again, while
+            // no search could find it. A dropship ride never came through here and always kept it.
+            if (client.State == ClientState.Loading)
+                return;
+
             _ads.Remove(client.AccountEntry.Id);
         }
 
@@ -214,7 +225,7 @@ namespace Rasa.Managers
             if (!_ads.TryGetValue(accountId, out var ad))
                 return;
 
-            var placer = FindIngame(accountId);
+            var placer = FindInWorld(accountId);
 
             // Out of the world: RemovePlayer has the ad, or is about to.
             if (placer == null)
@@ -251,8 +262,17 @@ namespace Rasa.Managers
             DisplayMessage(placer, why);
         }
 
-        private static Client FindIngame(uint accountId) =>
-            Server.Clients.FirstOrDefault(c => c.State == ClientState.Ingame
+        /// <summary>
+        /// The account's connection while its character is in the world, which includes the
+        /// loading screen of a map change and a dropship ride - an ad lasts through both (see
+        /// <see cref="RemovePlayer"/>). For that time a search goes on listing the ad and
+        /// PartyChanged goes on checking it, rather than taking the placer for gone; the roster
+        /// reads a squadmate between maps off the live player as well.
+        /// </summary>
+        private static Client FindInWorld(uint accountId) =>
+            Server.Clients.FirstOrDefault(c => (c.State == ClientState.Ingame
+                                                || c.State == ClientState.Teleporting
+                                                || c.State == ClientState.Loading)
                                                && c.Player != null
                                                && c.AccountEntry?.Id == accountId);
 
@@ -345,8 +365,7 @@ namespace Rasa.Managers
                 // Party.Members caches IsAfk at the moment the member joined - PartyMember's
                 // Client constructor hardcodes it to false - so read it off the live player
                 // where there is one. The details window greys out AFK names.
-                var online = Server.Clients.FirstOrDefault(
-                    c => c.State == ClientState.Ingame && c.AccountEntry != null && c.AccountEntry.Id == member.UserId);
+                var online = FindInWorld(member.UserId);
 
                 roster.Add(online != null ? Snapshot(online) : member);
             }

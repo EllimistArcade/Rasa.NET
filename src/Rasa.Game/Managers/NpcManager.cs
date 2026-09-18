@@ -346,6 +346,22 @@ namespace Rasa.Managers
                 }
             }*/
 
+            // is NPC a class trainer?
+            //
+            // This is what makes a trainer clickable at all. npc.py's _GetUseAction offers the
+            // CONVERSE action only while convoStatus != CONVO_STATUS_NONE, and convoStatus comes
+            // from this packet alone - so a trainer left at None has no use action, the client
+            // never sends RequestNPCConverse, and nothing in the Converse reply can matter.
+            // It also puts the trainer pip over their head, which is how a player finds one.
+            //
+            // Before Vending, mirroring npc.py's own Converse order, where training is offered
+            // ahead of a vendor package.
+            if (creature.Npc.NpcIsTrainer && statusSet == false)
+            {
+                client.CallMethod(creature.EntityId, new NPCConversationStatusPacket(ConversationStatus.Train, new List<uint>())); // status - train
+                statusSet = true;
+            }
+
             // is NPC vendor?
             if (vendor != null && statusSet == false)
             {

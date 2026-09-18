@@ -139,9 +139,11 @@ namespace Rasa.Packets.MapChannel.Server
                     case ConversationType.Training:
                         var training = (TrainingConverse)entry.Value;
 
-                        pw.WriteTuple(2);
+                        // One element, not two. conversationwindow.py unpacks this branch as
+                        // "(bCanTrain,) = convoData", so a second element raises inside the
+                        // client's own conversation handler and the window never opens.
+                        pw.WriteTuple(1);
                         pw.WriteBool(training.CanTrain);
-                        pw.WriteInt(training.DialogId);
 
                         break;
 

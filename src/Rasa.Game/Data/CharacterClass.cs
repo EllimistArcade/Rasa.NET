@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Rasa.Data
 {
     /// <summary>
@@ -139,6 +141,45 @@ namespace Rasa.Data
             var tier = TierOf(characterClass);
 
             return tier == 0 ? 0 : TierLevels[tier];
+        }
+
+        /// <summary>
+        /// gameuiutil's <c>IsTrainableClass(currentClassId, classId)</c>: whether a character of
+        /// <paramref name="playerClass"/> may advance into <paramref name="into"/>.
+        ///
+        /// The client's rule is one line - the target's parent has to be the class you are now -
+        /// so advancement is one step at a time and there is no skipping a tier. A Recruit picks
+        /// Soldier or Specialist and nothing else, whatever their level.
+        ///
+        /// Note this is not <see cref="Is"/>. That one walks the whole line upward and answers
+        /// what a character already counts as; this one looks at a single link and answers where
+        /// they may go next.
+        /// </summary>
+        public static bool CanAdvanceTo(CharacterClass playerClass, CharacterClass into)
+        {
+            return Exists(playerClass) && Exists(into) && Parent(into) == playerClass;
+        }
+
+        /// <summary>
+        /// The classes a character of this class and level may advance into: the direct children,
+        /// once their tier's level is reached. Empty at tier 4, which is the end of the tree.
+        /// </summary>
+        public static List<CharacterClass> AdvancementsFor(CharacterClass playerClass, int level)
+        {
+            var available = new List<CharacterClass>();
+
+            if (!Exists(playerClass))
+                return available;
+
+            for (var id = 1; id < Parents.Length; id++)
+            {
+                var candidate = (CharacterClass)id;
+
+                if (CanAdvanceTo(playerClass, candidate) && level >= LevelFor(candidate))
+                    available.Add(candidate);
+            }
+
+            return available;
         }
     }
 }

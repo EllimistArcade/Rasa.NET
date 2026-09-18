@@ -410,6 +410,9 @@ namespace Rasa.Managers
                 if (isAuctioneer)
                     creature.Npc.NpcIsAuctioneer = true;
 
+                if (isNpc != null && ClassTrainers.Trains(data.Id))
+                    creature.Npc.NpcIsTrainer = true;
+
                 if (isClanManager)
                     creature.Npc.NpcIsClanMaster = true;
 

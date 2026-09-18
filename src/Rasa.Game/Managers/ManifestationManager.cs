@@ -1010,7 +1010,11 @@ namespace Rasa.Managers
                 new TargetCategoryPacket(Factions.AFS),
                 new PlayerFlagsPacket(),
                 new IsTrialAccountPacket(player.IsTrialAccount),
-                new EquipmentInfoPacket(client.Player.Inventory.EquippedInventory)
+                new EquipmentInfoPacket(client.Player.Inventory.EquippedInventory),
+                // "Received because the manifestation was loaded on the server", and only ever
+                // for the player's own. It is what fills the advancement tracker; it offers
+                // nothing, so it goes out whether the list is empty or not.
+                new TierAdvancementInfoPacket(AvailableClassIds(player))
             };
 
             return entityData;
@@ -1078,6 +1082,15 @@ namespace Rasa.Managers
                     UpdateStatsValues(client, true);
                     client.CallMethod(client.Player.EntityId, new AttributeInfoPacket(client.Player.Attributes));
                     SendAvailableAllocationPoints(client);
+
+                    // Reaching 5, 15 or 30 is what opens the next tier. This is the packet that
+                    // posts TIER_SELECTION_AVAILABLE - the offer, as against TierAdvancementInfo
+                    // which is only state - and the client's own note says the list should never
+                    // be empty, so it goes only when something actually opened.
+                    var opened = AvailableClassIds(client.Player);
+
+                    if (opened.Count > 0 && CharacterClassTree.LevelFor((CharacterClass)opened[0]) == client.Player.Level)
+                        client.CallMethod(client.Player.EntityId, new AvailableCharacterClassesPacket(opened));
                 }
                 else
                     break;
@@ -1129,6 +1142,84 @@ namespace Rasa.Managers
             var regenPercent = player.Attributes.TryGetValue(Attributes.Regen, out var regen) ? regen.CurrentMax : 100;
 
             return (int)Math.Round(chi.CurrentMax * AdrenalinePerKillPercent / 100D * regenPercent / 100D);
+        }
+
+        /// <summary>
+        /// The classes this character may advance into right now: the direct children of their
+        /// own class, once the level that tier opens at is reached.
+        /// </summary>
+        public List<uint> AvailableClassIds(Manifestation player)
+        {
+            var available = new List<uint>();
+
+            foreach (var characterClass in CharacterClassTree.AdvancementsFor((CharacterClass)player.Class, player.Level))
+                available.Add((uint)characterClass);
+
+            return available;
+        }
+
+        /// <summary>Whether there is an advancement waiting - what the trainer's Train button reads.</summary>
+        public bool CanAdvance(Manifestation player)
+        {
+            return AvailableClassIds(player).Count > 0;
+        }
+
+        /// <summary>
+        /// The Train button in the tier select window.
+        ///
+        /// One-way, as it was live: there is no route back down the tree and no way to swap to
+        /// the sibling class. Cloning is the respec - a clone credit copies the character with
+        /// its skills reset - and that is already wired.
+        ///
+        /// Refused rather than thrown, for the reason LevelSkills is: an exception out of a
+        /// packet handler is a closed connection, and a client that offers a class the server
+        /// will not grant should be told no rather than dropped.
+        /// </summary>
+        public void SelectNewCharacterClass(Client client, SelectNewCharacterClassPacket packet)
+        {
+            var player = client.Player;
+            var current = (CharacterClass)player.Class;
+            var chosen = (CharacterClass)packet.ClassId;
+
+            string refusal = null;
+
+            if (!CharacterClassTree.Exists(chosen))
+                refusal = $"class {packet.ClassId}, which is not a character class";
+            else if (!CharacterClassTree.CanAdvanceTo(current, chosen))
+                refusal = $"{chosen}, which does not advance from {current}";
+            else if (player.Level < CharacterClassTree.LevelFor(chosen))
+                refusal = $"{chosen} at level {player.Level}, which opens at {CharacterClassTree.LevelFor(chosen)}";
+
+            if (refusal != null)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{player.FamilyName} asked to advance into {refusal}. Ignored.");
+
+                // Put their client back where the server is.
+                client.CallMethod(player.EntityId, new CharacterClassPacket(player.Class));
+                client.CallMethod(player.EntityId, new TierAdvancementInfoPacket(AvailableClassIds(player)));
+                return;
+            }
+
+            player.Class = (uint)chosen;
+            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Class, player.Class);
+
+            Logger.WriteLog(LogType.Debug, $"{player.FamilyName} advanced from {current} to {chosen}.");
+
+            client.CallMethod(player.EntityId, new CharacterClassPacket(player.Class));
+
+            // The skills the new class grants become trainable through the gate in
+            // ValidateSkillLevels, which reads Player.Class - so nothing else has to change for
+            // them to unlock. Resending the skills and the points is what makes the window
+            // redraw with them in it.
+            client.CallMethod(player.EntityId, new SkillsPacket(player.Skills));
+            SendAvailableAllocationPoints(client);
+
+            // What is ahead from here: the next tier's pair, or nothing at tier 4.
+            client.CallMethod(player.EntityId, new TierAdvancementInfoPacket(AvailableClassIds(player)));
+
+            // Class is the third field of the party tuple, as DebugChgPlayerClass notes.
+            PartyManager.Instance.MemberInfoChanged(client);
         }
 
         public void DebugChgPlayerClass(Client client, uint newClassId)

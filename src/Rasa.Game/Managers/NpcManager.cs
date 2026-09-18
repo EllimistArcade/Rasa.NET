@@ -126,6 +126,14 @@ namespace Rasa.Managers
             if (creature.Npc.NpcIsClanMaster)
                 convoDataDict.Add(ConversationType.Clan, true);
 
+            // Training = 10. CanTrain is what enables the window's Train button, so it is the
+            // whole of the offer: the client checks only that the class is a direct child of the
+            // player's, and asks nothing about level. Sent on every trainer, true or false, so a
+            // player who is not due an advancement still gets the window and can read the tree.
+            if (creature.Npc.NpcIsTrainer)
+                convoDataDict.Add(ConversationType.Training,
+                    new TrainingConverse(ManifestationManager.Instance.CanAdvance(client.Player), 0));
+
             /*
             // Greeting = 0
             var greetingId = 19;

@@ -39,6 +39,12 @@
             ManifestationManager.Instance.AllocateAttributePoints(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.SelectNewCharacterClass)]
+        private void SelectNewCharacterClass(SelectNewCharacterClassPacket packet)
+        {
+            ManifestationManager.Instance.SelectNewCharacterClass(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.AssignNPCMission)]
         private void AssignNPCMission(AssignNPCMissionPacket packet)
         {

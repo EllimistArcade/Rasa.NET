@@ -1680,9 +1680,27 @@ namespace Rasa.Managers
             if (weaponClassInfo == null)
                 return;
 
-            mapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponDraw, weaponClassInfo.DrawActionId, 500));
+            QueueWeaponReadyChange(mapChannel, new ActionData(client.Player, ActionId.WeaponDraw, weaponClassInfo.DrawActionId, 500));
 
             WeaponReady(client, true);
+        }
+
+        /// <summary>
+        /// Puts a draw or a stow in the queue as the only one this actor has.
+        ///
+        /// Both handlers used to add one per packet with nothing to stop them. The client sends
+        /// one per keypress, so a client sending them in a loop grew the map's recovery list
+        /// without bound - a list walked on every tick of the map's worker, each entry coming
+        /// due with its own PerformRecovery to everyone in range. Only the last one asked for
+        /// means anything anyway: a stow that arrives while a draw is still playing replaces it
+        /// rather than lining up behind it, which is also what the player meant by sending it.
+        /// </summary>
+        private static void QueueWeaponReadyChange(MapChannel mapChannel, ActionData action)
+        {
+            mapChannel.PerformRecovery.RemoveAll(queued => queued.Actor == action.Actor
+                                                           && (queued.ActionId == ActionId.WeaponDraw || queued.ActionId == ActionId.WeaponStow));
+
+            mapChannel.PerformRecovery.Add(action);
         }
 
         /// <summary>
@@ -1814,7 +1832,7 @@ namespace Rasa.Managers
             var weaponClassInfo = EntityClassManager.Instance.GetWeaponClassInfo(InventoryManager.Instance.CurrentWeapon(client));
 
             if (weaponClassInfo != null)
-                mapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponStow, (uint)weaponClassInfo.StowActionId, 500));
+                QueueWeaponReadyChange(mapChannel, new ActionData(client.Player, ActionId.WeaponStow, (uint)weaponClassInfo.StowActionId, 500));
 
             WeaponReady(client, false);
         }

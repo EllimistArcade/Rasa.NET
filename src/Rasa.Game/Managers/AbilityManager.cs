@@ -461,6 +461,17 @@ namespace Rasa.Managers
                 return;
             }
 
+            // The request said they could start; this says it still lands. A windup is time the
+            // world goes on in, and everything the request weighed can have changed inside it.
+            var refusal = StillAllowed(mapChannel, client, player, action, info);
+
+            if (refusal.HasValue)
+            {
+                SendToOthers(mapChannel, player, new ActionInterruptPacket(player.EntityId, action.ActionId, action.ActionArgId));
+                Fail(client, action.ActionId, action.ActionArgId, refusal.Value);
+                return;
+            }
+
             // Paid on landing, not on asking. A sustained ability pays as it runs, through its
             // effect's drain, not here.
             if (!IsSustained(info))
@@ -495,6 +506,64 @@ namespace Rasa.Managers
             // Not reachable: RequestPerformAbility refuses what cannot be resolved. Finish the
             // client's action cleanly all the same.
             CellManager.Instance.CellCallMethod(mapChannel, player, new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
+        }
+
+        /// <summary>
+        /// Why a landing ability should not land after all, or null to let it through.
+        ///
+        /// The request weighs all of this and then the windup runs, which for some abilities is
+        /// seconds. The recovery took the request's word for every bit of it, and the one thing
+        /// it did repeat it repeated loosely: TakeCosts subtracts with Math.Max(0, ...), so an
+        /// ability that could no longer be paid for emptied the pool and went off anyway. Only
+        /// a second request for the same action replaces a pending one, so two different
+        /// abilities could be started against the same adrenaline and both land on one pool's
+        /// worth of it. A target could be walked out of reach during the windup and still be hit
+        /// at any distance, which with an unbounded Move is anything on the map. And the item
+        /// that granted the ability could be traded or sold in the meantime.
+        ///
+        /// What is not re-weighed: a target that died or despawned mid-windup. The ability was
+        /// performed, it costs what it costs, and it hits nothing - which is what happens now.
+        /// </summary>
+        private PlayerMessage? StillAllowed(MapChannel mapChannel, Client client, Manifestation player, ActionData action, ActionLevelInfo info)
+        {
+            // Asked for with an item, so it is the item that has to still grant it - a skill the
+            // player also happens to have does not stand in for the one they used.
+            var item = action.ItemId != 0 ? EntityManager.Instance.GetItem((ulong)action.ItemId) : null;
+
+            if (action.ItemId != 0 && item == null)
+                return PlayerMessage.PmMissingReqItem;
+
+            if (!Grants(player, action.ActionId, action.ActionArgId, item))
+                return PlayerMessage.PmCannotPerformActionNow;
+
+            // A sustained ability pays through its drain rather than up front, so all it needs
+            // is something left in the tank - the same test the request makes.
+            if (IsSustained(info))
+            {
+                if (!player.Attributes.TryGetValue(Attributes.Chi, out var chi) || chi.Current <= 0)
+                    return PlayerMessage.PmConsumableNotEnoughChi;
+            }
+            else
+            {
+                var shortfall = CostShortfall(player, info);
+
+                if (shortfall.HasValue)
+                    return shortfall.Value == Attributes.Power ? PlayerMessage.PmConsumableNotEnoughPower : PlayerMessage.PmConsumableNotEnoughChi;
+            }
+
+            foreach (var requirement in info.ItemRequirements)
+                if (InventoryManager.Instance.CountItemsByClass(client, requirement.ItemClass) < requirement.Quantity)
+                    return PlayerMessage.PmMissingReqItem;
+
+            if (action.TargetId != 0 && info.MaxRange > 0)
+            {
+                var target = ResolveTarget(mapChannel, action.TargetId);
+
+                if (target != null && Vector3.Distance(player.Position, target.Position) > info.MaxRange + RangeSlack)
+                    return PlayerMessage.PmTargetOutOfRange;
+            }
+
+            return null;
         }
 
         private static void TakeCosts(Client client, Manifestation player, ActionLevelInfo info)

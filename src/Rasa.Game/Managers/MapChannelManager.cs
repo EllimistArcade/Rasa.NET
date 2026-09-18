@@ -508,6 +508,15 @@ namespace Rasa.Managers
             // about them - and a sprint left running would keep draining adrenaline unseen.
             GameEffectManager.Instance.ClearEffects(client.Player);
 
+            // The weapon is put away with them. A manifestation arriving on a map starts with
+            // nothing in its hands - the client transitions to _no_tool and is never told
+            // otherwise, since nothing sends WeaponReady on map entry - while this flag lived on
+            // the Manifestation, which survives the change. The two then disagreed for the rest
+            // of the session: the server thought a weapon was out that the player could see was
+            // not, which let a tool action through that the client refuses (basetoolaction.py
+            // checks IsWeaponReady) and skipped the draw the fire path performs for itself.
+            client.Player.WeaponReady = false;
+
             // Before the player leaves the cells, while their minions can still be told to go:
             // "Player-controlled subordinates will teleport with their masters, but not change
             // maps." Leaving the map is leaving them behind, so they are dismissed, not orphaned.

@@ -39,7 +39,15 @@
 
             foreach (var entry in logosList)
             {
-                var mapChannel = MapChannelManager.Instance.MapChannelArray[entry.MapContextId];
+                // A shrine on a map the server does not have is a data error, not a reason to
+                // fail startup: record it against the map and carry on.
+                if (!MapChannelManager.Instance.MapChannelArray.TryGetValue(entry.MapContextId, out var mapChannel))
+                {
+                    MapErrorManager.Instance.Record(entry.MapContextId,
+                        $"Logos shrine {entry.Id} ({entry.Name}) is placed on map {entry.MapContextId}, which is not loaded.");
+                    continue;
+                }
+
                 mapChannel.DynamicObjects.Add(new Logos(entry));
             }
         }

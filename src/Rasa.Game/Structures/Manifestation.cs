@@ -64,6 +64,42 @@ namespace Rasa.Structures
         public bool InactiveWarningSent { get; set; }
 
         /// <summary>
+        /// Metres of movement the player has in hand, and when it was last topped up. A Move is
+        /// paid for out of this; it refills at the player's own speed, so a client cannot move
+        /// faster over any stretch of time than the character could have walked it.
+        /// </summary>
+        public double MoveBudget { get; set; }
+
+        /// <summary>Environment.TickCount64 when MoveBudget was last brought up to date.</summary>
+        public long MoveBudgetTick { get; set; } = Environment.TickCount64;
+
+        /// <summary>
+        /// Environment.TickCount64 of the last movement correction sent to this client, so a
+        /// client that keeps sending refused positions is snapped back and logged at a bounded
+        /// rate rather than once per packet.
+        /// </summary>
+        public long LastMoveCorrectionTick { get; set; }
+
+        /// <summary>How many Moves have been refused since the last one was reported.</summary>
+        public int RefusedMoves { get; set; }
+
+        /// <summary>
+        /// Puts the player somewhere because the server says so - a map change, a dropship, a
+        /// waypoint, a summon, /stuck, a GM command - rather than because the client claimed it.
+        ///
+        /// Always this and never a bare Position assignment, so that the movement check starts
+        /// again from where the server put them. Assigning Position alone leaves the check
+        /// measuring the client's next Move from wherever the player used to be, which reads as
+        /// one enormous step and refuses a move nobody made.
+        /// </summary>
+        public void PlaceAt(Vector3 position)
+        {
+            Position = position;
+            MoveBudget = 0;
+            MoveBudgetTick = Environment.TickCount64;
+        }
+
+        /// <summary>
         /// Always false: this server has no trial accounts. The single source for every packet
         /// that reports the flag (IsTrialAccount, WhoAck), so the client never shows the trial
         /// tag and no trial-only restriction - whisper, party or clan invites, trial chat

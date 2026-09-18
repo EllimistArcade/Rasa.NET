@@ -1235,7 +1235,15 @@ namespace Rasa.Managers
             if (float.TryParse(parts[1], out float posX))
                 if (float.TryParse(parts[2], out float posY))
                     if (float.TryParse(parts[3], out float posZ))
-                        _client.MoveObject(_client.Player.EntityId, new Movement(new Vector3(posX, posY, posZ), new Vector2(0f, 0f)));
+                    {
+                        // PlaceAt as well as MoveObject: this only ever told the client to move,
+                        // so the server went on holding the position the GM had left and every
+                        // range check on them was measured from it.
+                        var destination = new Vector3(posX, posY, posZ);
+
+                        _client.Player.PlaceAt(destination);
+                        _client.MoveObject(_client.Player.EntityId, new Movement(destination, new Vector2(0f, 0f)));
+                    }
         }
 
         private void TeleportCommand(string[] parts)
@@ -1270,7 +1278,12 @@ namespace Rasa.Managers
             }
 
             if (float.TryParse(parts[1], out float posY))
-                _client.MoveObject(_client.Player.EntityId, new Movement(new Vector3(_client.Movement.Position.X, posY, _client.Movement.Position.Z), _client.Movement.ViewDirection));
+            {
+                var destination = new Vector3(_client.Movement.Position.X, posY, _client.Movement.Position.Z);
+
+                _client.Player.PlaceAt(destination);
+                _client.MoveObject(_client.Player.EntityId, new Movement(destination, _client.Movement.ViewDirection));
+            }
         }
 
         private void SetCreatureAppearanceCommand(string[] parts)
@@ -1896,8 +1909,16 @@ namespace Rasa.Managers
             if (parts.Length == 2)
             {
                 if (double.TryParse(parts[1], out double speed))
+                {
+                    // The server's own figure as well as the client's. It only ever told the
+                    // client, so the two disagreed about how fast the GM was: the movement check
+                    // pays a Move out of a budget that refills at MovementSpeed, and a speed the
+                    // server had never heard of would have been refused as fast as it was used.
+                    _client.Player.MovementSpeed = speed;
+
                     // ToDO send on cell domain
                     _client.CallMethod(_client.Player.EntityId, new MovementModChangePacket(speed));
+                }
             }
             return;
         }

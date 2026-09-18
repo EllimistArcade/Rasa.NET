@@ -545,7 +545,7 @@ namespace Rasa.Managers
                                     dropship.Client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());
                                     dropship.Client.CallMethod(SysEntity.ClientMethodId, new PreWonkavatePacket());
                                     dropship.Client.CallMethod(SysEntity.CurrentInputStateId, new WonkavatePacket(dropship.DestinationMapId, 1, MapChannelManager.Instance.MapChannelArray[dropship.DestinationMapId].MapInfo.MapVersion, dropship.Destination, 0));
-                                    dropship.Client.Player.Position = dropship.Destination;
+                                    dropship.Client.Player.PlaceAt(dropship.Destination);
                                     dropship.Client.Player.Target = 0;
                                     dropship.Client.State = ClientState.Teleporting;
                                     dropship.Client.AwaitingMapLoaded = true;
@@ -841,6 +841,14 @@ namespace Rasa.Managers
                 0,
                 new Vector2((float)teleporter.Rotation, 0f)
             );
+
+            // The server goes where it is sending them. This is a teleport within one map, so
+            // there is no map change to carry the position across, and it never wrote one: the
+            // player was moved on every screen while the server went on holding the pad they left
+            // from, which is what every range check on them was measured from until their next
+            // Move happened to correct it.
+            client.Player.PlaceAt(movementData.Position);
+            client.Player.Rotation = (float)teleporter.Rotation;
 
             client.CellCallMethod(client, client.Player.EntityId, new PreTeleportPacket(TeleportType.Default));
             client.CallMethod(client.Player.EntityId, new TeleportPacket(teleporter.Position, teleporter.Rotation, TeleportType.Default, 5));

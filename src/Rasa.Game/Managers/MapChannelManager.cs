@@ -438,7 +438,7 @@ namespace Rasa.Managers
             // player to, and the position the cell matrix is built from.
             client.Player.MapChannel = mapChannel;
             client.Player.MapContextId = mapContextId;
-            client.Player.Position = position;
+            client.Player.PlaceAt(position);
             client.Player.Rotation = orientation;
             client.LoadingMap = mapContextId;
 

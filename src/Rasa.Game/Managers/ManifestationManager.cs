@@ -1468,6 +1468,190 @@ namespace Rasa.Managers
             Logger.WriteLog(LogType.Debug, $"ToDo: RequestCustomization");
         }
 
+        #region Movement
+
+        /// <summary>
+        /// How fast a character runs, in metres per second: the run rate the client reads for the
+        /// player avatar classes out of its own entitymovementrate table (HumanBaseMale and
+        /// HumanBaseFemale are both 0.0 stopped / 2.5 walking / 6.5 running), which is what its
+        /// movement manager drives the body at.
+        /// </summary>
+        private const double RunSpeed = 6.5d;
+
+        /// <summary>
+        /// Headroom on that speed. The client's own movement is not a constant 6.5 - momentum
+        /// down a slope, a jump arc, the blend out of an animation and plain float drift all
+        /// overshoot it - and none of that is worth refusing a move over. This is the factor by
+        /// which a player may beat their own top speed before the server stops believing it.
+        /// </summary>
+        private const double SpeedTolerance = 1.5d;
+
+        /// <summary>
+        /// The most movement a player may have saved up, in seconds of running.
+        ///
+        /// A budget that filled for as long as the player stood still would let them stand for a
+        /// minute and then cross half a zone in one packet. Ten seconds is chosen to be longer
+        /// than any ordinary stall - the connection is TCP, so a hitch delivers the whole burst
+        /// of Moves that piled up behind it and they all have to be payable - and short enough
+        /// that waiting is never a faster way to travel than walking.
+        /// </summary>
+        private const double MaxBankedSeconds = 10d;
+
+        /// <summary>
+        /// The furthest a player may move in one Move, in metres, whatever they have banked.
+        ///
+        /// The budget bounds the average speed but not a single step: a player who stood still
+        /// for a while could spend ten seconds of it at once. This is what keeps banked distance
+        /// something that still has to be walked, in steps, so the cheat is never faster than the
+        /// walk it replaces. Four seconds of running is far larger than any step a real client
+        /// sends and far smaller than the reach the exploit wants.
+        /// </summary>
+        private const double MaxStepDistance = RunSpeed * SpeedTolerance * 4d;
+
+        /// <summary>
+        /// How much of a step's budget a rise costs. Climbing is not faster than running, but a
+        /// jump is a short burst of it, and stairs and ramps add their rise to a step that was
+        /// paid for horizontally. Falling is not measured at all: gravity is faster than anything
+        /// a character does under its own power, and a player dropping off a cliff is not
+        /// cheating.
+        /// </summary>
+        private const double RiseFactor = 2.5d;
+
+        /// <summary>Quiet time between movement corrections for one player.</summary>
+        private const long MoveCorrectionQuietMs = 1000;
+
+        /// <summary>
+        /// Whether to believe where a client says it is.
+        ///
+        /// Position used to be taken as given: one Move set it to any point the wire format could
+        /// carry, and everything downstream reads it as the truth. That bought free travel - a
+        /// map link fires on proximity alone, and so does every waypoint and every dropship pad -
+        /// along with every range check on the server at once (use, harvest, cipher, craft,
+        /// trade, ability and missile range, aggro and leash), a remote entity scanner out of the
+        /// visibility system, and a hiding place: a player parked in an empty cell is dropped
+        /// from everyone else's view and from the creature scan, while still able to act on
+        /// anything they can name by entity id.
+        ///
+        /// What is checked is the movement rather than the position, which is the only thing the
+        /// server can honestly judge. It does not simulate the world, so it cannot know what is
+        /// walkable or what is solid; it does know how fast a character moves and how long it has
+        /// been since it last heard from this one. A step is paid for out of a budget that
+        /// refills at the player's own speed - their effects included, so a sprint pays for
+        /// itself - and no single step may be a long one however much has been banked. A client
+        /// cannot then travel faster than the character could have walked, whatever it claims,
+        /// which leaves the exploit worth no more than the walk it was trying to skip.
+        ///
+        /// A refused Move is not applied and the client is put back where the server last had the
+        /// player. Refusing without correcting would leave the two disagreeing for the rest of
+        /// the session, which is worse than the move was.
+        /// </summary>
+        public bool AcceptMove(Client client, Movement movement)
+        {
+            var player = client.Player;
+            var now = Environment.TickCount64;
+
+            var verdict = JudgeMove(player.Position, movement.Position, player.MovementSpeed,
+                now - player.MoveBudgetTick, player.MoveBudget);
+
+            player.MoveBudget = verdict.Budget;
+            player.MoveBudgetTick = now;
+
+            if (verdict.Accepted)
+                return true;
+
+            RefuseMove(client, movement, verdict.Refusal);
+            return false;
+        }
+
+        /// <summary>What <see cref="JudgeMove"/> made of a step.</summary>
+        public readonly struct MoveVerdict
+        {
+            public bool Accepted { get; }
+
+            /// <summary>What is left of the budget: the step's cost taken off, or untouched if it was refused.</summary>
+            public double Budget { get; }
+
+            /// <summary>Why not, in words, or null when it was accepted.</summary>
+            public string Refusal { get; }
+
+            public MoveVerdict(bool accepted, double budget, string refusal = null)
+            {
+                Accepted = accepted;
+                Budget = budget;
+                Refusal = refusal;
+            }
+        }
+
+        /// <summary>
+        /// The decision on its own, as arithmetic over what a step costs and what has been saved
+        /// up to pay for it. Kept apart from the connection it arrived on so that it can be
+        /// reasoned about, and tested, without one.
+        /// </summary>
+        public static MoveVerdict JudgeMove(Vector3 from, Vector3 to, double movementSpeed, long elapsedMs, double budget)
+        {
+            // Their own speed, effects included: MovementSpeed is the product of every movement
+            // modifier on them (GameEffectManager.UpdateMovementMod), so a sprint raises the
+            // budget by exactly what the sprint gave them and nothing here has to know that
+            // sprint exists. Never below 1, so a snare cannot tighten the check: being slowed is
+            // the client's business to obey, and holding a slowed player to their slowed speed
+            // would refuse them the moment the effect ended a step before the server said so.
+            var speed = RunSpeed * Math.Max(1.0d, movementSpeed) * SpeedTolerance;
+            var elapsed = Math.Max(0, elapsedMs) / 1000d;
+
+            budget = Math.Min(budget + elapsed * speed, speed * MaxBankedSeconds);
+
+            // Horizontal and vertical apart: a character's speed is a speed over the ground, and
+            // the rise of a step is its own thing.
+            var horizontal = Math.Sqrt((to.X - from.X) * (to.X - from.X) + (to.Z - from.Z) * (to.Z - from.Z));
+            var rise = Math.Max(0d, to.Y - from.Y);
+            var spend = Math.Max(horizontal, rise / RiseFactor);
+
+            // Every step is charged, however small. A step waved through below some threshold is
+            // not a tolerance, it is a hole: at ten packets a second, steps of "only" a metre and
+            // a half are three times running speed, and nothing would ever have been charged for
+            // them. Jitter is absorbed by the budget itself, which is what it is for - a packet
+            // that arrives late brings its neighbour's time with it.
+            if (spend > MaxStepDistance)
+                return new MoveVerdict(false, budget, $"{horizontal:F0} m across and {rise:F0} m up in one step");
+
+            if (spend > budget)
+                return new MoveVerdict(false, budget,
+                    $"{horizontal:F0} m across and {rise:F0} m up with {budget:F0} m in hand at speed {movementSpeed:F2}");
+
+            return new MoveVerdict(true, budget - spend);
+        }
+
+        /// <summary>
+        /// Drops a Move and puts the client back where the server has the player.
+        ///
+        /// Corrections and log lines are both rate limited per player. A client that is refused
+        /// once is usually about to be refused for as long as it keeps sending the same position,
+        /// and answering every one would be a packet out per packet in and a log line per packet,
+        /// which is a worse thing to be on the end of than the movement was.
+        /// </summary>
+        private static void RefuseMove(Client client, Movement movement, string what)
+        {
+            var player = client.Player;
+            var now = Environment.TickCount64;
+
+            player.RefusedMoves++;
+
+            if (now < player.LastMoveCorrectionTick + MoveCorrectionQuietMs)
+                return;
+
+            var repeat = player.RefusedMoves > 1 ? $" ({player.RefusedMoves} refused since the last of these)" : "";
+
+            Logger.WriteLog(LogType.Security,
+                $"{player.FamilyName} tried to move {what} on map {player.MapContextId}, from {player.Position} to {movement.Position}{repeat}; put back.");
+
+            player.LastMoveCorrectionTick = now;
+            player.RefusedMoves = 0;
+
+            client.MoveObject(player.EntityId, new Movement(player.Position, movement.ViewDirection));
+        }
+
+        #endregion
+
         /// <summary>
         /// /stuck. Moves a player who has become wedged in the world to the nearest place they
         /// can stand.
@@ -1503,7 +1687,7 @@ namespace Rasa.Managers
                 return;
             }
 
-            client.Player.Position = destination.Value;
+            client.Player.PlaceAt(destination.Value);
             client.MoveObject(client.Player.EntityId, new Movement(destination.Value, client.Movement.ViewDirection));
 
             // The message the live game showed for this command.

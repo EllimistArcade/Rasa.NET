@@ -415,6 +415,12 @@ namespace Rasa.Game
                     if (State != ClientState.Ingame)
                         return;
 
+                    // Where the client says it is, believed only as far as the character could
+                    // have walked since the last one. A refused Move is dropped and the client is
+                    // put back; everything below it reads Position as the truth.
+                    if (!ManifestationManager.Instance.AcceptMove(this, moveMessage.Movement))
+                        return;
+
                     Player.Position = moveMessage.Movement.Position;
                     Player.Rotation = moveMessage.Movement.ViewDirection.X;
                     Movement = moveMessage.Movement;

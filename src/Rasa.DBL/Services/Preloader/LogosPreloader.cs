@@ -17,7 +17,7 @@ namespace Rasa.Services.Preloader
         {
             yield return new object[] { 1, 7361, 1220, 363.872, 214.211, 619.304, "Area" };
             yield return new object[] { 2, 9538, 1220, 41.0646, 191.485, -332.566, "Attack" };
-            yield return new object[] { 3, 21403, 1148, 290.41016, 102.77344, -504.83984, "Backward" };
+            yield return new object[] { 3, 7289, 1148, 290.41016, 102.77344, -504.83984, "Backward" };
             yield return new object[] { 4, 12671, 1721, 23.980469, 74.828125, -20.121094, "Chaos" };
             yield return new object[] { 5, 12672, 1454, -74.90625, 224.51562, -719.9336, "Cloud" };
             yield return new object[] { 6, 7290, 1220, 406.0, 246.168, 441.0, "Damage" };
@@ -38,6 +38,7 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 25, 7303, 1759, -179.8789, 208.61719, 81.64453, "Return" };
             yield return new object[] { 27, 7305, 2051, -1407.2578, 254.14062, 158.21094, "Take" };
             yield return new object[] { 28, 12698, 1220, 795.107, 311.797, 70.8783, "Time" };
+            yield return new object[] { 30, 12678, 1743, -30.0, 58.25, 18.75, "Disperse" };
             yield return new object[] { 31, 12686, 1764, -623.6133, 466.7422, 336.45703, "Lightning" };
             yield return new object[] { 32, 12676, 1761, 692.09375, 264.8789, -25.410156, "Create" };
             yield return new object[] { 33, 12691, 1148, 745.16797, 100.58594, -5.2539062, "Negative" };
@@ -62,6 +63,7 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 57, 21330, 1497, -119.9375, 329.04688, -702.9492, "Past" };
             yield return new object[] { 58, 21222, 1416, 351.67188, 333.73047, 255.91016, "Future" };
             yield return new object[] { 63, 21181, 1465, 36.652344, 12.3515625, -16.0, "Distance" };
+            yield return new object[] { 64, 21210, 1429, 40.0, 111.8014907836914, -224.0, "Far" };
             yield return new object[] { 66, 21199, 1148, 621.4375, 83.96875, -12.933594, "Enlighten" };
             yield return new object[] { 68, 21372, 1148, 3.53126, 117.21875, 771.33594, "Star" };
             yield return new object[] { 72, 21101, 1454, 557.5625, 219.98828, -190.35838, "Ancestor" };
@@ -107,7 +109,7 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 198, 21248, 1304, -887.0508, 942.78516, 527.2422, "In" };
             yield return new object[] { 203, 21256, 1761, 899.66016, 272.01172, 219.23828, "Is" };
             yield return new object[] { 204, 21257, 1761, 211.17969, 331.3164, 531.52734, "It" };
-            yield return new object[] { 208, 21268, 1244, -289.9961, 162.6875, 984.0, "Knowledge" };
+            yield return new object[] { 208, 21261, 1244, -289.9961, 162.6875, 984.0, "Knowledge" };
             yield return new object[] { 214, 21267, 1759, -721.09375, 258.47266, 536.6406, "Location" };
             yield return new object[] { 216, 21275, 1764, -537.6836, 433.1836, -213.40625, "Looking" };
             yield return new object[] { 217, 21277, 1734, -101.01953, 335.78906, 21.902344, "Lost" };
@@ -155,7 +157,7 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 324, 21397, 1244, -520.8789, 190.84766, -41.390625, "Today" };
             yield return new object[] { 326, 21398, 1911, -150.09766, 406.23047, 403.71875, "Together" };
             yield return new object[] { 327, 21399, 1244, 834.33594, 155.64453, -398.08203, "Tomorrow" };
-            yield return new object[] { 331, 7289, 1148, -474.45312, 143.1914, 582.83594, "Transform" };
+            yield return new object[] { 331, 21403, 1148, -474.45312, 143.1914, 582.83594, "Transform" };
             yield return new object[] { 333, 21405, 1244, -423.64844, 150.48828, -417.02344, "True" };
             yield return new object[] { 341, 21414, 1148, -795.96484, 123.73475, 445.39062, "Victory" };
             yield return new object[] { 343, 21416, 1148, 357.98828, 88.75, 594.5508, "War" };

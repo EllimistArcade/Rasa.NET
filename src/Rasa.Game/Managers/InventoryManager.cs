@@ -551,11 +551,33 @@ namespace Rasa.Managers
             if (packet.SrcSlot < 0 || packet.SrcSlot >= 250)
                 return;
 
-            if (packet.DestSlot < 0 || packet.DestSlot >= ClanLockboxTab.TotalSlots)
-                return;
+            var unlocked = UnlockedClanSlots(client);
 
-            if (!ClanSlotIsUnlocked(client, (uint)packet.DestSlot))
-                return;
+            // Where in the lockbox this deposit may land. The second field of this packet is the
+            // tab the window is showing, not a slot - it was read as one, so the tab check here
+            // was asking whether slot 1 to 5 was unlocked and every tab id passed it. Placement
+            // then went to the first free slot of all five hundred, so a clan that filled its
+            // free tab went on depositing into the four it had never bought, and an item dropped
+            // on tab 3 landed in tab 1 whenever tab 1 had room.
+            var firstSlot = 0u;
+            var lastSlot = unlocked;
+
+            if (!packet.NoTabNamed)
+            {
+                var tabId = (uint)packet.DestTab;
+
+                if (!ClanLockboxTab.Exists(tabId))
+                    return;
+
+                (firstSlot, lastSlot) = ClanLockboxTab.SlotRange(tabId);
+
+                if (lastSlot > unlocked)
+                {
+                    Logger.WriteLog(LogType.Security,
+                        $"{client.AccountEntry.FamilyName} tried to deposit into clan lockbox tab {tabId} with {unlocked} slots unlocked.");
+                    return;
+                }
+            }
 
             var entityId = client.Player.Inventory.PersonalInventory[(int)packet.SrcSlot];
 
@@ -569,7 +591,7 @@ namespace Rasa.Managers
             // AddItemToClanInventory saves the stack sizes it changes, and deletes every row
             // of an item it merges away; updating tempItem here afterwards was redundant, and
             // after a full merge it was an update of a deleted row.
-            Item item = AddItemToClanInventory(client, tempItem);
+            Item item = AddItemToClanInventory(client, tempItem, firstSlot, lastSlot, unlocked);
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             if (item == null)
@@ -1020,6 +1042,14 @@ namespace Rasa.Managers
             return false;
         }
 
+        /// <summary>How many of the five hundred clan lockbox slots the clan has actually bought.</summary>
+        private static uint UnlockedClanSlots(Client client)
+        {
+            var clan = ClanManager.Instance.Clans.GetValueOrDefault(client.Player.ClanId)?.Value;
+
+            return ClanLockboxTab.UnlockedSlots(clan?.PurashedTabs ?? ClanLockboxTab.FreeTab);
+        }
+
         /// <summary>
         /// Whether the clan may put something in that lockbox slot. All 500 were addressable
         /// whatever the clan had unlocked, so the tabs bought nothing; the client hides the
@@ -1027,8 +1057,7 @@ namespace Rasa.Managers
         /// </summary>
         private static bool ClanSlotIsUnlocked(Client client, uint slot)
         {
-            var clan = ClanManager.Instance.Clans.GetValueOrDefault(client.Player.ClanId)?.Value;
-            var unlocked = ClanLockboxTab.UnlockedSlots(clan?.PurashedTabs ?? ClanLockboxTab.FreeTab);
+            var unlocked = UnlockedClanSlots(client);
 
             if (slot < unlocked)
                 return true;
@@ -1452,7 +1481,17 @@ namespace Rasa.Managers
             return null;
         }
 
-        public Item AddItemToClanInventory(Client client, Item item)
+        /// <summary>
+        /// Puts an item in the clan lockbox: merged into a stack of its own kind if there is room
+        /// in one, and otherwise in a free slot.
+        ///
+        /// Both used to walk all five hundred slots, which is what made the paid tabs
+        /// unenforceable on this path however carefully the handler checked. The merge may reach
+        /// anywhere the clan has bought - a stack is a stack wherever it sits - but a new slot is
+        /// taken only from the window the caller names, which is the tab the player dropped the
+        /// item on. A full tab returns null, as a full lockbox already did.
+        /// </summary>
+        public Item AddItemToClanInventory(Client client, Item item, uint firstSlot, uint lastSlot, uint unlockedSlots)
         {
             if (item == null)
                 return null;
@@ -1461,7 +1500,7 @@ namespace Rasa.Managers
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             var stackSizeChanged = false;
             // see if we can merge the item into an already existing item
-            for (var i = 0; i < 500; i++)
+            for (var i = 0; i < unlockedSlots; i++)
                 if (client.Player.Inventory.ClanInventory[i] != 0)
                 {
                     // get item
@@ -1514,9 +1553,9 @@ namespace Rasa.Managers
             }
 
             // find free slot
-            for (var i = 0; i < 500; i++)
+            for (var i = firstSlot; i < lastSlot; i++)
             {
-                if (client.Player.Inventory.ClanInventory[i] == 0)
+                if (client.Player.Inventory.ClanInventory[(int)i] == 0)
                 {
                     // AddItemBySlot sets OwnerId for the destination; SelectedSlot (a pod
                     // number) used to be stored here as if it were a character id.

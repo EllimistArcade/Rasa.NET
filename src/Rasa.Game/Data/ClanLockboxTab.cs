@@ -39,6 +39,21 @@
         public static uint Price(uint tabId) => Exists(tabId) ? Prices[tabId - FreeTab] : 0;
 
         /// <summary>
+        /// The slots <paramref name="tabId"/> covers, as a half-open [first, last) range. Tab 1
+        /// is the first hundred and so on, which is how the client lays them out
+        /// (inventory._GetSlotRangeForClanLockboxTab).
+        /// </summary>
+        public static (uint First, uint Last) SlotRange(uint tabId)
+        {
+            if (!Exists(tabId))
+                return (0, 0);
+
+            var first = (tabId - FreeTab) * SlotsPerTab;
+
+            return (first, first + SlotsPerTab);
+        }
+
+        /// <summary>
         /// How many clan lockbox slots a clan holding <paramref name="purchasedTabs"/> tabs may
         /// use. The client hides the rest; this is what stops them being addressed anyway.
         /// </summary>

@@ -304,7 +304,7 @@ namespace Rasa.Managers
 
             if (client.State == ClientState.Teleporting)
             {
-                var dropship = new Dropship(Factions.AFS, DropshipType.Teleporter, client);
+                var dropship = new Dropship(Factions.AFS, DropshipType.Teleporter, client, DropshipRole.Arrival);
                 var mapChannel = MapChannelArray[client.LoadingMap];
 
                 client.Player.MapChannel = mapChannel;

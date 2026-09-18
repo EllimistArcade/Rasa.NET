@@ -10,6 +10,7 @@
         MapTrigger          = 6,
         DropshipTeleporter  = 7,
         Logos               = 8,
-        Kraftwerks          = 9
+        Kraftwerks          = 9,
+        DropshipPad         = 10    // the hovering dropship and beam over a transport pad
     }
 }

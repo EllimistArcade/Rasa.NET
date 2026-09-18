@@ -20,7 +20,7 @@
         {
             pw.WriteTuple(2);
             pw.WriteUInt(WaypointId);
-            pw.WriteInt((int)WaypointType);
+            pw.WriteInt((int)WaypointType.ToClient());
         }
     }
 }

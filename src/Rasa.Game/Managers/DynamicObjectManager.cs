@@ -199,6 +199,10 @@ namespace Rasa.Managers
                 case DynamicObjectType.Kraftwerks:
                     KraftwerksManager.Instance.Use(client, obj, packet.ActionArgId);
                     break;
+                case DynamicObjectType.DropshipPad:
+                    // The hovering ship is a two-state switch to the client, so it offers a use;
+                    // there is nothing to do with one - the pad works by walking into the beam.
+                    break;
                 default:
                     Logger.WriteLog(LogType.Debug, $"ToDo: RequestUseObjectPacket: unsuported object type {obj.DynamicObjectType}");
                     break;
@@ -276,7 +280,7 @@ namespace Rasa.Managers
                 DynamicObjectProximityWorker(mapChannel, teleporter, delta);
             }
 
-            // dynamicObjects
+            // dynamicObjects: logos shrines and dropship pads
             foreach (var dynamicObject in mapChannel.DynamicObjects)
             {
                 // spawn object
@@ -286,10 +290,16 @@ namespace Rasa.Managers
 
                     if (dynamicObject.RespawnTime <= 0)
                     {
+                        // A shrine is built with no state and gets the usable default here; a
+                        // pad's dropship is built hovering (TsState1) and keeps it.
+                        if (dynamicObject.StateId == 0)
+                        {
+                            dynamicObject.StateId = UseObjectState.IdStateActive;
+                            dynamicObject.WindupTime = 10000;
+                        }
+
                         CellManager.Instance.AddToWorld(mapChannel, dynamicObject);
                         dynamicObject.IsInWorld = true;
-                        dynamicObject.StateId = UseObjectState.IdStateActive;
-                        dynamicObject.WindupTime = 10000;
                     }
                 }
             }
@@ -456,18 +466,42 @@ namespace Rasa.Managers
         #endregion
 
         #region Dropship
+
+        /// <summary>
+        /// Ticks every dropship in the world through its phases. A spawner dropship lands, drops
+        /// its creatures and leaves. A teleporter dropship is one end of a player's flight and
+        /// its role says which (<see cref="DropshipRole"/>): the departure lands beside the
+        /// player (Begin), hovers (Spawn) while they board - a PreTeleport hides them - then
+        /// lifts off (End) and, as it goes, either hands the client the destination map
+        /// (Wonkavate) or, for a pad on the same map, moves them there; either way an arrival
+        /// dropship is waiting at the far end, and it is the arrival's End that gives the
+        /// player their movement back and their Ingame state. Phase times are the client's
+        /// animation lengths, near enough.
+        /// </summary>
         public void DropshipsWorker(long timePassed)
         {
             // Dropships is server-wide; each one is removed from its own map, not from
             // whichever map the caller happened to be iterating.
-            foreach (var entry in Dropships)
+            foreach (var entry in Dropships.ToList())
             {
                 var dropship = entry.Value;
 
                 if (dropship.DropshipType != DropshipType.Spawner && dropship.DropshipType != DropshipType.Teleporter)
                 {
                     Logger.WriteLog(LogType.Debug, $"error dropshiptype {dropship.DropshipType}");
-                    return;
+                    Dropships.Remove(entry.Key);
+                    continue;
+                }
+
+                // A teleporter dropship whose passenger has gone (a dropped connection) has
+                // nothing left to do; take it out of the world rather than fly it into a null.
+                if (dropship.DropshipType == DropshipType.Teleporter && (dropship.Client?.Player == null || dropship.Client.Player.Disconected))
+                {
+                    if (MapChannelManager.Instance.MapChannelArray.TryGetValue(dropship.MapContextId, out var lostMap))
+                        CellManager.Instance.RemoveFromWorld(lostMap, dropship);
+
+                    Dropships.Remove(entry.Key);
+                    continue;
                 }
 
                 dropship.PhaseTimeleft -= timePassed;
@@ -491,13 +525,11 @@ namespace Rasa.Managers
                     case 2:
                         dropship.Phase = 3;
 
-                        if (dropship.DropshipType == DropshipType.Teleporter)
+                        if (dropship.DropshipType == DropshipType.Teleporter && dropship.Role == DropshipRole.Departure)
                         {
-                            if (dropship.Client.State == ClientState.Ingame)
-                            {
-                                CellManager.Instance.CellCallMethod(dropship.Client.Player.MapChannel, dropship.Client.Player, new PreTeleportPacket(TeleportType.Default));
-                                dropship.Client.CallMethod(SysEntity.ClientMethodId, new BeginTeleportPacket());
-                            }
+                            // Aboard: everyone sees the player fade, the player sees the teleport begin.
+                            CellManager.Instance.CellCallMethod(dropship.Client.Player.MapChannel, dropship.Client.Player, new PreTeleportPacket(TeleportType.Default));
+                            dropship.Client.CallMethod(SysEntity.ClientMethodId, new BeginTeleportPacket());
                         }
 
                         if (dropship.DropshipType == DropshipType.Spawner)
@@ -520,43 +552,18 @@ namespace Rasa.Managers
                         dropship.Phase = 5;
                         dropship.PhaseTimeleft = 5000;
 
-                        if (dropship.DropshipType == DropshipType.Teleporter)
-                            if (dropship.Client.State == ClientState.Teleporting)
-                                dropship.Client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());
+                        if (dropship.DropshipType == DropshipType.Teleporter && dropship.Role == DropshipRole.Arrival)
+                            dropship.Client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());
                         break;
                     case 5:
                         if (dropship.DropshipType == DropshipType.Teleporter)
                         {
-                            switch (dropship.Client.State)
+                            if (dropship.Role == DropshipRole.Departure)
+                                Depart(dropship);
+                            else
                             {
-                                case ClientState.Ingame:
-                                    CellManager.Instance.RemoveFromWorld(dropship.Client);
-                                    dropship.Client.Player.MapChannel.ClientList.Remove(dropship.Client);
-
-                                    // Effects end with the map, as MapChannelManager.RemovePlayer ends them - a
-                                    // dropship ride never goes through it. A sprint used to ride along: the arrival
-                                    // introduced the player to everyone without it, their own client included, while
-                                    // the arrival's ActorInfo gave that client the sprint's speed and its drain picked
-                                    // up again, under an effect id handed out by the map they had left and with no
-                                    // buff on any screen to show for it.
-                                    GameEffectManager.Instance.ClearEffects(dropship.Client.Player);
-
-                                    CommunicatorManager.Instance.LeaveMapChannels(dropship.Client);
-                                    dropship.Client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());
-                                    dropship.Client.CallMethod(SysEntity.ClientMethodId, new PreWonkavatePacket());
-                                    dropship.Client.CallMethod(SysEntity.CurrentInputStateId, new WonkavatePacket(dropship.DestinationMapId, 1, MapChannelManager.Instance.MapChannelArray[dropship.DestinationMapId].MapInfo.MapVersion, dropship.Destination, 0));
-                                    dropship.Client.Player.PlaceAt(dropship.Destination);
-                                    dropship.Client.Player.Target = 0;
-                                    dropship.Client.State = ClientState.Teleporting;
-                                    dropship.Client.AwaitingMapLoaded = true;
-                                    break;
-                                case ClientState.Teleporting:
-                                    dropship.Client.State = ClientState.Ingame;
-                                    ManifestationManager.Instance.ResetInactivity(dropship.Client);
-                                    break;
-                                default:
-                                    Logger.WriteLog(LogType.Error, $"Unsupported CLientState {dropship.Client.State}");
-                                    break;
+                                dropship.Client.State = ClientState.Ingame;
+                                ManifestationManager.Instance.ResetInactivity(dropship.Client);
                             }
                         }
 
@@ -575,6 +582,64 @@ namespace Rasa.Managers
                 }
             }
         }
+
+        /// <summary>
+        /// The departure has lifted off with the player aboard. To another map: the player leaves
+        /// this one and the client is handed the destination; MapChannelManager builds the
+        /// arrival when the client reports the map loaded. To a pad on this map: the player is
+        /// moved to it under the movement block and the arrival is built there now.
+        /// </summary>
+        private void Depart(Dropship dropship)
+        {
+            var client = dropship.Client;
+            var player = client.Player;
+
+            if (dropship.StaysOnMap)
+            {
+                var mapChannel = player.MapChannel;
+                var rotation = (float)dropship.DestinationRotation;
+
+                player.Target = 0;
+
+                // The server goes where it is sending them, and the movement check starts over
+                // from there (PlaceAt) - a bare Position would read the client's next Move as one
+                // enormous step.
+                player.PlaceAt(dropship.Destination);
+                player.Rotation = rotation;
+
+                // Teleport moves the client's own manifestation; MoveObject tells everyone else.
+                client.CallMethod(player.EntityId, new TeleportPacket(dropship.Destination, rotation, TeleportType.Default, 5));
+                client.CellMoveObject(client, new MoveObjectMessage(player.EntityId, new Models.Movement(dropship.Destination, 0f, 0, new Vector2(rotation, 0f))), false);
+
+                var arrival = new Dropship(Factions.AFS, DropshipType.Teleporter, client, DropshipRole.Arrival);
+
+                CellManager.Instance.AddToWorld(mapChannel, arrival);
+                Dropships.Add(arrival.EntityId, arrival);
+                return;
+            }
+
+            CellManager.Instance.RemoveFromWorld(client);
+            player.MapChannel.ClientList.Remove(client);
+
+            // Effects end with the map, as MapChannelManager.RemovePlayer ends them - a
+            // dropship ride never goes through it. A sprint used to ride along: the arrival
+            // introduced the player to everyone without it, their own client included, while
+            // the arrival's ActorInfo gave that client the sprint's speed and its drain picked
+            // up again, under an effect id handed out by the map they had left and with no
+            // buff on any screen to show for it.
+            GameEffectManager.Instance.ClearEffects(player);
+
+            CommunicatorManager.Instance.LeaveMapChannels(client);
+            client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());
+            client.CallMethod(SysEntity.ClientMethodId, new PreWonkavatePacket());
+            client.CallMethod(SysEntity.CurrentInputStateId, new WonkavatePacket(dropship.DestinationMapId, 1, MapChannelManager.Instance.MapChannelArray[dropship.DestinationMapId].MapInfo.MapVersion, dropship.Destination, 0));
+            player.PlaceAt(dropship.Destination);
+            player.Rotation = (float)dropship.DestinationRotation;
+            player.Target = 0;
+            client.State = ClientState.Teleporting;
+            client.AwaitingMapLoaded = true;
+        }
+
         #endregion
 
         #region Footlocker
@@ -645,8 +710,8 @@ namespace Rasa.Managers
                         var logosId = 0u;
                         foreach (var entry in mapChannel.DynamicObjects)
                         {
-                            var logos = entry as Logos;
-                            if (action.SourceId == logos.EntityId)
+                            // The list holds the dropship pads' hovering ships as well now.
+                            if (entry is Logos logos && action.SourceId == logos.EntityId)
                             {
                                 logosId = logos.Id;
                                 break;
@@ -708,7 +773,28 @@ namespace Rasa.Managers
                         newTeleporter.DynamicObjectType = DynamicObjectType.Wormhole;
                         break;
                     case 4:
+                        // A dropship pad is two things. The trigger is the 5 m circle on the pad
+                        // that opens the travel window and gains the pad for whoever walks into
+                        // it. The hovering dropship with its transporter beam is what the client
+                        // shows there - UsableTwoStateHumDropshipBeam in TsState1 is the ship
+                        // hovering with the beam on (TsState0 is an empty pad), which is how the
+                        // help text describes gaining one: "walking across the pad when a Dropship
+                        // is hovering with its transporter beam activated". The client's map has
+                        // the landing pad geometry itself; the ship was always the server's.
                         CellManager.Instance.AddToWorld(mapChannel, new MapTrigger(teleporter.Id, teleporter.Description, teleporter.Position, teleporter.Rotation, teleporter.MapContextId));
+
+                        mapChannel.DynamicObjects.Add(new DynamicObject
+                        {
+                            EntityId = EntityManager.Instance.GetEntityId,
+                            EntityClassId = EntityClasses.UsableTwoStateHumDropshipBeam,
+                            DynamicObjectType = DynamicObjectType.DropshipPad,
+                            Position = teleporter.Position,
+                            Rotation = teleporter.Rotation,
+                            MapContextId = teleporter.MapContextId,
+                            Faction = Factions.AFS,
+                            StateId = UseObjectState.TsState1,
+                            Comment = teleporter.Description
+                        });
                         break;
                     case 5:
                         break;
@@ -759,8 +845,10 @@ namespace Rasa.Managers
                 if ((WaypointType)waypoint.WaypointType != waypointType)
                     continue;
 
-                var teleporter = Teleporters[waypoint.WaypointId];
-                var teleporterData = teleporter.ObjectData as WaypointInfo;
+                // A gained id the table no longer has - a pad removed from the data, say - is
+                // not a reason to throw the window away.
+                if (!Teleporters.TryGetValue(waypoint.WaypointId, out var teleporter) || !(teleporter.ObjectData is WaypointInfo teleporterData))
+                    continue;
 
                 if (teleporterData.WaypointType == WaypointType.Waypoint && teleporter.MapContextId != mapChannel.MapInfo.MapContextId)
                     continue;
@@ -790,8 +878,8 @@ namespace Rasa.Managers
             // teleporter dictionaries, so an unknown map or waypoint id threw KeyNotFoundException
             // in the handler and the player was disconnected. Now the request is checked the way
             // the waypoint window itself is built: the player has to be standing at a waypoint,
-            // the destination has to exist, and it has to be one this character has gained
-            // (dropships are offered to everyone, see CreateListOfDropships).
+            // the destination has to exist, and it has to be one this character has gained - a
+            // dropship pad included, see CreateListOfDropships.
             if (client.Player == null || client.State != ClientState.Ingame)
                 return;
 
@@ -812,22 +900,64 @@ namespace Rasa.Managers
                 return;
             }
 
-            if (objData.WaypointType != WaypointType.Dropship
-                && !client.Player.GainedWaypoints.Any(w => w.WaypointId == objData.WaypointId))
+            // A dropship pad has to have been gained like any other waypoint, the one under the
+            // player's feet excepted - it is being gained as they stand there.
+            var standingOn = PadUnder(client);
+
+            if (!client.Player.GainedWaypoints.Any(w => w.WaypointId == objData.WaypointId)
+                && (objData.WaypointType != WaypointType.Dropship || standingOn == null || standingOn.TriggerId != objData.WaypointId))
             {
                 Logger.WriteLog(LogType.Debug, $"SelectWaypoint: {client.Player.Name} has not gained waypoint {objData.WaypointId}");
                 return;
             }
 
-            if (mapContextId != client.Player.MapContextId)
+            if (objData.WaypointType == WaypointType.Dropship)
             {
-                var dropship = new Dropship(Factions.AFS, DropshipType.Teleporter, client, teleporter.Position, mapContextId);
+                // A flight starts from a pad, not from a waypoint's window.
+                if (standingOn == null)
+                {
+                    Logger.WriteLog(LogType.Debug, $"SelectWaypoint: {client.Player.Name} asked for dropship pad {objData.WaypointId} without standing on a pad");
+                    return;
+                }
+
+                // One flight at a time: a second request while the departure is landing would
+                // build a second dropship for the same passenger.
+                if (Dropships.Values.Any(d => d.DropshipType == DropshipType.Teleporter && d.Client == client))
+                    return;
+
+                // The travel window only lists this planet's pads; a request for another
+                // planet's did not come from the window.
+                if (targetMap.MapInfo.Planet != client.Player.MapChannel.MapInfo.Planet)
+                {
+                    Logger.WriteLog(LogType.Security,
+                        $"SelectWaypoint: {client.Player.Name} asked for dropship pad {objData.WaypointId} on {targetMap.MapInfo.MapName}, another planet. Ignored.");
+                    return;
+                }
+
+                if (standingOn.TriggerId == objData.WaypointId)
+                    return; // the pad they are standing on: nowhere to go
+
+                // A flight, whether or not it crosses a map: the departure lands, takes the
+                // player aboard and leaves; where it leaves for is the dropship's business
+                // (DropshipsWorker). Movement stays blocked until the arrival sets them down.
+                var dropship = new Dropship(Factions.AFS, DropshipType.Teleporter, client, DropshipRole.Departure, teleporter.Position, mapContextId)
+                {
+                    DestinationRotation = teleporter.Rotation
+                };
 
                 CellManager.Instance.AddToWorld(client.Player.MapChannel, dropship);
                 Dropships.Add(dropship.EntityId, dropship);
                 client.CallMethod(SysEntity.ClientMethodId, new RequestMovementBlockPacket());
 
-                client.LoadingMap = mapContextId;
+                if (mapContextId != client.Player.MapContextId)
+                    client.LoadingMap = mapContextId;
+
+                return;
+            }
+
+            if (mapContextId != client.Player.MapContextId)
+            {
+                Logger.WriteLog(LogType.Debug, $"SelectWaypoint: {client.Player.Name} asked for waypoint {objData.WaypointId} on another map; only dropship pads cross maps");
                 return;
             }
 
@@ -874,12 +1004,9 @@ namespace Rasa.Managers
                 if (teleporter.TriggeredByPlayers.Contains(client))
                     return true;
 
-            if (mapChannel.MapCellInfo.Cells.TryGetValue(client.Player.Cells[2, 2], out var cell))
-                foreach (var trigger in cell.MapTriggers)
-                    if (trigger.TriggeredBy.Contains(client))
-                        return true;
-
-            return false;
+            // A pad's trigger lives in the cell its centre is in, which need not be the cell the
+            // player is in when they are within its 5 m of it.
+            return PadUnder(client) != null;
         }
 
         internal void TeleportAcknowledge(Client client)
@@ -936,40 +1063,91 @@ namespace Rasa.Managers
             }
         }
 
-        internal Dictionary<uint, MapWaypointInfoList> CreateListOfDropships()
-
+        /// <summary>
+        /// The dropship travel window for a player standing on a pad: every pad they have gained
+        /// on the same planet, plus the one they are standing on, grouped by map and placed where
+        /// it really is - the window plots each entry on that map's picture. Gaining is by
+        /// walking into a pad's beam (see <see cref="MapTriggerManager.PlayerEnterTriggerRange"/>),
+        /// as the client's help text says: "you must first travel to another map and gain access
+        /// to a Dropship Transport there before you can use this method of travel". Every pad on
+        /// both planets used to be offered, the first of each map at a made-up position.
+        /// </summary>
+        internal Dictionary<uint, MapWaypointInfoList> CreateListOfDropships(Client client, uint currentPadId)
         {
             var dropships = new Dictionary<uint, MapWaypointInfoList>();
+            var player = client?.Player;
 
-            // for now we add all dropships, ToDO: give player only gained dropships
-            foreach (var entry in Teleporters)
+            if (player?.MapChannel == null)
+                return dropships;
+
+            var planet = player.MapChannel.MapInfo.Planet;
+            var gained = new HashSet<uint>(player.GainedWaypoints.Select(w => w.WaypointId)) { currentPadId };
+
+            foreach (var teleporter in Teleporters.Values)
             {
-                var teleporter = entry.Value;
-                var teleporterInfo = teleporter.ObjectData as WaypointInfo;
+                if (!(teleporter.ObjectData is WaypointInfo info) || info.WaypointType != WaypointType.Dropship)
+                    continue;
 
-                if (teleporterInfo.WaypointType == WaypointType.Dropship)
+                if (!gained.Contains(info.WaypointId))
+                    continue;
+
+                var map = MapChannelManager.Instance.FindByContextId(teleporter.MapContextId);
+
+                if (map == null || map.MapInfo.Planet != planet)
+                    continue;
+
+                if (!dropships.TryGetValue(teleporter.MapContextId, out var list))
                 {
-                    if (dropships.ContainsKey(teleporter.MapContextId))
-                    {
-                        var map = dropships[teleporter.MapContextId];
-                        var waypoints = map.Waypoints;
+                    list = new MapWaypointInfoList(teleporter.MapContextId,
+                        new List<MapInstanceInfo> { new MapInstanceInfo(1, teleporter.MapContextId, MapInstanceStatus.Low) },
+                        new List<WaypointInfo>());
 
-                        waypoints.Add(new WaypointInfo(teleporterInfo.WaypointId, teleporterInfo.Contested, teleporter.Position, teleporterInfo.WaypointType));
-                    }
-                    else
-                    {
-                        //create new entry
-                        var instance = new List<MapInstanceInfo> { new MapInstanceInfo(1, teleporter.MapContextId, MapInstanceStatus.Low) };
-                        var waypoints = new List<WaypointInfo> { new WaypointInfo(teleporterInfo.WaypointId, teleporterInfo.Contested, new Vector3(-225.353f, 99.597f, -70.5246f), WaypointType.Dropship) };
-
-                        var mapWaypointInfoList = new MapWaypointInfoList(teleporter.MapContextId, instance, waypoints);
-
-                        dropships.Add(teleporter.MapContextId, mapWaypointInfoList);
-                    }
+                    dropships.Add(teleporter.MapContextId, list);
                 }
+
+                list.Waypoints.Add(new WaypointInfo(info.WaypointId, info.Contested, teleporter.Position, info.WaypointType));
             }
 
             return dropships;
+        }
+
+        /// <summary>The dropship pad trigger the player is standing in, or null.</summary>
+        internal static MapTrigger PadUnder(Client client)
+        {
+            var mapChannel = client?.Player?.MapChannel;
+
+            if (mapChannel == null)
+                return null;
+
+            foreach (var cell in CellManager.CellsIn(mapChannel, client.Player.Cells))
+                foreach (var trigger in cell.MapTriggers)
+                    if (trigger.TriggeredBy.Contains(client))
+                        return trigger;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gives the player every dropship pad in the world, the way walking into each beam
+        /// would. For testing a network that spans maps with nothing else on them yet.
+        /// </summary>
+        internal int GainAllDropshipPads(Client client)
+        {
+            var given = 0;
+
+            foreach (var teleporter in Teleporters.Values)
+            {
+                if (!(teleporter.ObjectData is WaypointInfo info) || info.WaypointType != WaypointType.Dropship)
+                    continue;
+
+                if (client.Player.GainedWaypoints.Any(w => w.WaypointId == info.WaypointId))
+                    continue;
+
+                CheckPlayerWaypoint(client, info);
+                given++;
+            }
+
+            return given;
         }
         #endregion
     }

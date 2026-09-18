@@ -166,6 +166,7 @@ namespace Rasa.Managers
             RegisterCommand(".givecredits", GmLevel.Admin, GiveCreditsCommand);
             RegisterCommand(".giveitem", GmLevel.Admin, GiveItemCommand);
             RegisterCommand(".givelogos", GmLevel.Admin, GiveLogosCommand);
+            RegisterCommand(".givepads", GmLevel.Admin, GivePadsCommand);
             RegisterCommand(".givexp", GmLevel.Admin, GiveXpCommand);
             RegisterCommand(".reloadcreatures", GmLevel.Admin, ReloadCreaturesCommand);
         }
@@ -958,6 +959,14 @@ namespace Rasa.Managers
                     }
 
             return;
+        }
+
+        /// <summary>Gains every dropship pad in the world, as walking into each beam would.</summary>
+        private void GivePadsCommand(string[] parts)
+        {
+            var given = DynamicObjectManager.Instance.GainAllDropshipPads(_client);
+
+            CommunicatorManager.Instance.SystemMessage(_client, $"{given} dropship pad{(given == 1 ? "" : "s")} gained; step onto a pad to see them.");
         }
 
         private void GiveLogosCommand(string[] parts)

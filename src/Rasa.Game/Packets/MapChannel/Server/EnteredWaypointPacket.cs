@@ -55,7 +55,7 @@ namespace Rasa.Packets.MapChannel.Server
                                 }
                     }
                 pw.WriteNoneStruct();                       //tempwormhole'
-                pw.WriteInt((int)WaypointTypeId);
+                pw.WriteInt((int)WaypointTypeId.ToClient());
                 if (CurrentWaypointId != 0)
                     pw.WriteUInt(CurrentWaypointId);
                 else

@@ -159,9 +159,6 @@ namespace Rasa.Managers
                 // register mapChannel
                 MapChannelArray.Add(mapInfo.Id, newMapChannel);
             }
-            Logger.WriteLog(LogType.Initialize, "");
-            Logger.WriteLog(LogType.Initialize, "Server ready!");
-
             Timer.Add("AutoFire", 100, true, null);
             Timer.Add("CheckForLogingClients", 1000, true, null);
             Timer.Add("CheckForObjects", 1000, true, null);

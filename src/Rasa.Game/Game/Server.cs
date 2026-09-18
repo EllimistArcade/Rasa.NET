@@ -341,6 +341,15 @@ namespace Rasa.Game
             AbilityManager.Instance.AbilityInit();
             ManifestationManager.Instance.LoadSkillClasses();
 
+            // Last line of Start(), and it has to stay last. It used to sit inside
+            // MapChannelInit, which is the sixth of the loaders above - so the navmesh, the
+            // clans, the dynamic objects, the map triggers, the map links, the regions, the
+            // map markers, the recipes, the abilities and the skill classes all loaded after
+            // the server had announced it was ready, and anyone reading the console had no way
+            // to tell a server still loading from one that was up.
+            Logger.WriteLog(LogType.Initialize, "");
+            Logger.WriteLog(LogType.Initialize, "Server ready!");
+
             return true;
         }
 

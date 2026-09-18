@@ -139,11 +139,18 @@ namespace Rasa.Packets.MapChannel.Server
                     case ConversationType.Training:
                         var training = (TrainingConverse)entry.Value;
 
-                        // One element, not two. conversationwindow.py unpacks this branch as
-                        // "(bCanTrain,) = convoData", so a second element raises inside the
-                        // client's own conversation handler and the window never opens.
-                        pw.WriteTuple(1);
+                        // Two elements. npc.py's Converse unpacks this branch as
+                        // "(bCanTrain, dialogId) = convoDataDict[CONVO_TYPE_TRAINING]", and
+                        // CanTrain() unpacks it the same way, so a one-element tuple raises
+                        // inside the client's own conversation handler and no window opens.
+                        //
+                        // conversationwindow.py does unpack it as "(bCanTrain,)", but that is
+                        // not this data: it reads back the payload _CreateConversationLinkWidget
+                        // stored on the topic link, which the window itself built as a 1-tuple.
+                        // Only npc.py sees what goes on the wire.
+                        pw.WriteTuple(2);
                         pw.WriteBool(training.CanTrain);
+                        pw.WriteInt(training.DialogId);
 
                         break;
 

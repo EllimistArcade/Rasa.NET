@@ -71,6 +71,14 @@ namespace Rasa.Structures
         public bool AllowDetach { get; set; }
 
         /// <summary>
+        /// A weapon skill's standing effect (ManifestationManager.SyncWeaponSkills): there for as
+        /// long as the player has the skill, one per skill rather than one per type, and seen by
+        /// the player's own client alone - it is how that client learns what its heat meter and
+        /// reload bar should do, and nobody else's client has any use for it.
+        /// </summary>
+        public bool IsSkillPassive { get; set; }
+
+        /// <summary>
         /// Values for the client's tooltip beyond the fixed ones (duration, damage type, buff
         /// flags), keyed as the effect's tooltip format string names them - dmgMod, resistMod,
         /// healMin and so on. Every key the string uses has to be here or the client's %

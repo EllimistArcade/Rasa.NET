@@ -10,7 +10,12 @@
         public ActionId ActionId { get; set; }
         public int ActionArgId { get; set; }
         public long TargetId { get; set; }
-        public bool IsAltAction { get; set; }       // ToDo
+        /// <summary>
+        /// The alternate attack - the melee swing every weapon has besides its own fire.
+        /// baseweaponattack.py sets it when the action it is sending is not the weapon's own
+        /// attack pair, and sends it as the fourth element.
+        /// </summary>
+        public bool IsAltAction { get; set; }
 
         public override void Read(PythonReader pr)
         {
@@ -21,7 +26,7 @@
                 TargetId = pr.ReadLong();
             else
                 pr.ReadNoneStruct();                // no target
-            pr.ReadBool();
+            IsAltAction = pr.ReadBool();
         }
     }
 }

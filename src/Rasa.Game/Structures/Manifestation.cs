@@ -148,6 +148,13 @@ namespace Rasa.Structures
         /// </summary>
         public long NextShotAt { get; set; }
 
+        /// <summary>
+        /// Environment.TickCount64 at which this player's next melee (alternate) attack is due.
+        /// Its own clock: a swing does not wait on the gun's refire, nor the gun on the swing, as
+        /// the client times them separately - each from its own action's recovery and reuse.
+        /// </summary>
+        public long NextMeleeAt { get; set; }
+
         /// <summary>Environment.TickCount64 when the pending logout was requested.</summary>
         public long LogoutRequestedTick { get; set; }
         public bool RemoveFromMap { get; set; }

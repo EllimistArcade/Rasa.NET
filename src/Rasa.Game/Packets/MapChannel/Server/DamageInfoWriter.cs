@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Rasa.Packets.MapChannel.Server
 {
     using Data;
@@ -27,7 +29,7 @@ namespace Rasa.Packets.MapChannel.Server
             pw.WriteList(0);                    // sourceEffectIds
         }
 
-        /// <summary>A tooltip or argument value of one of the types Python packets carry.</summary>
+        /// <summary>A tooltip or argument value of one of the types Python packets carry; a list of ints is a Python list.</summary>
         public static void WriteValue(PythonWriter pw, object value)
         {
             switch (value)
@@ -41,6 +43,11 @@ namespace Rasa.Packets.MapChannel.Server
                 case ulong ul: pw.WriteULong(ul); break;
                 case bool b: pw.WriteBool(b); break;
                 case string s: pw.WriteString(s); break;
+                case IList<int> list:
+                    pw.WriteList(list.Count);
+                    foreach (var item in list)
+                        pw.WriteInt(item);
+                    break;
                 default:
                     Logger.WriteLog(LogType.Error, $"Python packet: unsupported value type {value.GetType().Name}");
                     pw.WriteNoneStruct();

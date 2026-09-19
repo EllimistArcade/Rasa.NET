@@ -4,7 +4,8 @@
     {
         None = -1,
         // reqruit Skill's
-        Firearms = 2,
+        /// <summary>skilldata T1_RECRUIT_FIREARMS. Was 2 here, which is no skill; nothing read it.</summary>
+        Firearms = 1,
         HandToHand = 8,
 
         /// <summary>

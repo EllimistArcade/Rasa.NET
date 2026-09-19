@@ -88,7 +88,8 @@ namespace Rasa.Managers
                 if (client?.Player == player)
                     return client;
 
-            return null;
+            // Not on the list yet - a player still in the queue for the map they are loading into.
+            return Server.Clients.Find(c => c?.Player == player);
         }
 
         #endregion
@@ -104,8 +105,11 @@ namespace Rasa.Managers
         /// </summary>
         public void Attach(MapChannel mapChannel, Actor actor, GameEffect effect, params object[] attachArgs)
         {
-            foreach (var existing in actor.ActiveEffects.Values.Where(e => e.TypeId == effect.TypeId).ToList())
-                DettachEffect(mapChannel, actor, existing);
+            // A skill's standing effects are one per skill and share a type (two heat bonuses
+            // are two SKILL_LIMITED_COOL_RATE_MODIFIER_EFFECTs); the rest replace their own kind.
+            if (!effect.IsSkillPassive)
+                foreach (var existing in actor.ActiveEffects.Values.Where(e => e.TypeId == effect.TypeId && !e.IsSkillPassive).ToList())
+                    DettachEffect(mapChannel, actor, existing);
 
             AddToList(actor, effect);
             mapChannel.ActorsWithEffects.Add(actor);
@@ -113,7 +117,7 @@ namespace Rasa.Managers
             if (effect.MaxHealthPercent != 0)
                 ApplyMaxHealth(mapChannel, actor, effect);
 
-            CellManager.Instance.CellCallMethod(mapChannel, actor, new GameEffectAttachedPacket
+            var attached = new GameEffectAttachedPacket
             {
                 EffectTypeId = effect.TypeId,
                 EffectId = effect.EffectId,
@@ -129,7 +133,12 @@ namespace Rasa.Managers
                 IsNegativeEffect = !effect.IsBuff,
                 Extras = effect.Tooltip,
                 Args = attachArgs.ToList()
-            });
+            };
+
+            if (effect.IsSkillPassive)
+                ClientOf(mapChannel, actor)?.CallMethod(actor.EntityId, attached);
+            else
+                CellManager.Instance.CellCallMethod(mapChannel, actor, attached);
 
             if (effect.MovementModifierPercent != 0)
                 UpdateMovementMod(mapChannel, actor);
@@ -198,7 +207,12 @@ namespace Rasa.Managers
             gameEffect.Parent?.Children.Remove(gameEffect);
 
             // inform clients (Recv_GameEffectDetached 75)
-            CellManager.Instance.CellCallMethod(mapChannel, actor, new GameEffectDetachedPacket { EffectId = gameEffect.EffectId });
+            // Told to whoever was told of it.
+            if (gameEffect.IsSkillPassive)
+                ClientOf(mapChannel, actor)?.CallMethod(actor.EntityId, new GameEffectDetachedPacket { EffectId = gameEffect.EffectId });
+            else
+                CellManager.Instance.CellCallMethod(mapChannel, actor, new GameEffectDetachedPacket { EffectId = gameEffect.EffectId });
+
             RemoveFromList(actor, gameEffect);
 
             if (actor.ActiveEffects.Count == 0)
@@ -559,13 +573,17 @@ namespace Rasa.Managers
             return total;
         }
 
-        /// <summary>Damage an attacker deals, after the effects on them that raise or lower it (Rage, Sacrifice).</summary>
-        public static int ApplyDamageDealt(Actor source, int amount)
+        /// <summary>
+        /// Damage an attacker deals, after the effects on them that raise or lower it (Rage,
+        /// Sacrifice) and any other percent the caller brings - a weapon skill's bonus. The
+        /// percents add: a Rage of +30 under a +40 weapon skill is +70, not 1.3 x 1.4.
+        /// </summary>
+        public static int ApplyDamageDealt(Actor source, int amount, int extraPercent = 0)
         {
             if (source == null || amount <= 0)
                 return amount;
 
-            var percent = DamageDealtPercentOf(source);
+            var percent = DamageDealtPercentOf(source) + extraPercent;
 
             return percent == 0 ? amount : Math.Max(0, (int)Math.Round(amount * (100 + percent) / 100.0));
         }

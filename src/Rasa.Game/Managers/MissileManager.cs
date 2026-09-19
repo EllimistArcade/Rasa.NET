@@ -95,6 +95,19 @@ namespace Rasa.Managers
                     }
         }
 
+        /// <summary>
+        /// The part of a missile's damage that meets armour. The rest - ArmorBypassPercent of it
+        /// - goes past, and with whatever the armour could not stop comes off health: "Bypass
+        /// Armor: 25% of damage done directly to Health".
+        /// </summary>
+        public static int ArmorShare(Missile missile)
+        {
+            if (missile.ArmorBypassPercent <= 0)
+                return missile.DamageA;
+
+            return missile.DamageA - missile.DamageA * missile.ArmorBypassPercent / 100;
+        }
+
         private void DoDamageToCreature(MapChannel mapChannel, Missile missile)
         {
             var creature = EntityManager.Instance.GetCreature(missile.TargetEntityId);
@@ -108,8 +121,8 @@ namespace Rasa.Managers
 
             Resist(creature, missile);
 
-            // decrease armor first
-            var armorDecrease = Math.Min(missile.DamageA, creature.Attributes[Attributes.Armor].Current);
+            // decrease armor first - all of it but what bypasses armour
+            var armorDecrease = Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
             creature.Attributes[Attributes.Armor].Current -= armorDecrease;
             CellManager.Instance.CellCallMethod(mapChannel, creature, new UpdateArmorPacket(creature.Attributes[Attributes.Armor], creature.EntityId));
 
@@ -156,8 +169,8 @@ namespace Rasa.Managers
             // as the amount that landed.
             Resist(actor, missile);
 
-            // decrease armor first
-            var armorDecrease = Math.Min(missile.DamageA, actor.Attributes[Attributes.Armor].Current);
+            // decrease armor first - all of it but what bypasses armour
+            var armorDecrease = Math.Min(ArmorShare(missile), actor.Attributes[Attributes.Armor].Current);
 
             actor.Attributes[Attributes.Armor].Current -= armorDecrease;
             CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateArmorPacket(actor.Attributes[Attributes.Armor], 0));
@@ -183,6 +196,15 @@ namespace Rasa.Managers
 
         public void RequestWeaponAttack(Client client, RequestWeaponAttackPacket packet)
         {
+            // The alternate attack is a melee swing, not a shot: no ammunition, no heat, the
+            // weapon's alt damage, and Hand to Hand's bonus rather than the weapon skill's. It
+            // used to come through here as one more shot of the gun.
+            if (packet.IsAltAction)
+            {
+                ManifestationManager.Instance.TryMeleeAttack(client, packet);
+                return;
+            }
+
             ManifestationManager.Instance.PlayerTryFireWeapon(client);
 
                 /*
@@ -270,11 +292,13 @@ namespace Rasa.Managers
             }
         }
 
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage)
+        /// <param name="armorBypassPercent">Percent of the damage that skips armour: the Torqueshell and Injection Gun skills.</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0)
         {
             var missile = new Missile
             {
                 DamageA = damage,
+                ArmorBypassPercent = Math.Max(0, Math.Min(100, armorBypassPercent)),
                 Source = action.Actor
             };
 

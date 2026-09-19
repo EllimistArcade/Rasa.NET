@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Rasa.Auth\Rasa.Auth.csproj" />
     <ProjectReference Include="..\Rasa.Utils\Rasa.Utils.csproj" />
   </ItemGroup>
 

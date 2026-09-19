@@ -627,7 +627,7 @@ namespace Rasa.Managers
             // the arrival's ActorInfo gave that client the sprint's speed and its drain picked
             // up again, under an effect id handed out by the map they had left and with no
             // buff on any screen to show for it.
-            GameEffectManager.Instance.ClearEffects(player);
+            GameEffectManager.Instance.ClearEffects(player.MapChannel, player);
 
             CommunicatorManager.Instance.LeaveMapChannels(client);
             client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());

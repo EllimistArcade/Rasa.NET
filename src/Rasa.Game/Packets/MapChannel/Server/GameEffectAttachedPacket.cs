@@ -12,6 +12,11 @@ namespace Rasa.Packets.MapChannel.Server
     /// effect's OnAttach. The sprint effect, for one, takes a single bead-modifier float there;
     /// most effects take nothing. Args holds those trailing values, each written as its own
     /// tuple element - a list in that position would arrive as one argument, a list.
+    ///
+    /// The tooltip dictionary is read by BaseGameEffect.SetTooltipDict: duration (seconds; left
+    /// out for an effect with no end, so the client shows no timer), damageType and attrId
+    /// (turned into words), isActive, isBuff, isDebuff, isNegativeEffect, and then whatever the
+    /// effect's tooltip format string names - Extras carries those.
     /// </summary>
     public class GameEffectAttachedPacket : ServerPythonPacket
     {
@@ -23,13 +28,17 @@ namespace Rasa.Packets.MapChannel.Server
         public ulong SourceId { get; set; }
         public bool Announced { get; set; }
         // tooltip
-        public int Duration { get; set; }
+        /// <summary>Seconds to run, or null for an effect that stays until detached.</summary>
+        public int? Duration { get; set; }
         public int DamageType { get; set; }
         public int AttrId { get; set; }
         public bool IsActive { get; set; }
         public bool IsBuff { get; set; }
         public bool IsDebuff { get; set; }
         public bool IsNegativeEffect { get; set; }
+
+        /// <summary>The effect's own tooltip values, by the names its format string uses.</summary>
+        public Dictionary<string, object> Extras { get; set; } = new Dictionary<string, object>();
 
         /// <summary>Extra OnAttach arguments; double, int, uint, long, ulong, bool, string or null.</summary>
         public List<object> Args { get; set; } = new List<object>();
@@ -42,11 +51,22 @@ namespace Rasa.Packets.MapChannel.Server
             pw.WriteUInt(EffectLevel);      //level
             pw.WriteULong(SourceId);        //sourceId
             pw.WriteBool(Announced);        //announce
-            pw.WriteDictionary(7);          //tooltipDict
-            pw.WriteString("duration");
-            pw.WriteInt(Duration);
-            pw.WriteString("damageType");
-            pw.WriteInt(DamageType);
+
+            pw.WriteDictionary(5 + (Duration.HasValue ? 1 : 0) + (DamageType != 0 ? 1 : 0) + Extras.Count);  //tooltipDict
+
+            if (Duration.HasValue)
+            {
+                pw.WriteString("duration");
+                pw.WriteInt(Duration.Value);
+            }
+
+            // Turned into the damage type's name by the client; 0 is no type and no line.
+            if (DamageType != 0)
+            {
+                pw.WriteString("damageType");
+                pw.WriteInt(DamageType);
+            }
+
             pw.WriteString("attrId");
             pw.WriteInt(AttrId);
             pw.WriteString("isActive");
@@ -58,25 +78,14 @@ namespace Rasa.Packets.MapChannel.Server
             pw.WriteString("isNegativeEffect");
             pw.WriteBool(IsNegativeEffect);
 
-            foreach (var arg in Args)
+            foreach (var (key, value) in Extras)
             {
-                switch (arg)
-                {
-                    case null: pw.WriteNoneStruct(); break;
-                    case double d: pw.WriteDouble(d); break;
-                    case float f: pw.WriteDouble(f); break;
-                    case int i: pw.WriteInt(i); break;
-                    case uint u: pw.WriteUInt(u); break;
-                    case long l: pw.WriteLong(l); break;
-                    case ulong ul: pw.WriteULong(ul); break;
-                    case bool b: pw.WriteBool(b); break;
-                    case string s: pw.WriteString(s); break;
-                    default:
-                        Logger.WriteLog(LogType.Error, $"GameEffectAttached: unsupported attach argument type {arg.GetType().Name}");
-                        pw.WriteNoneStruct();
-                        break;
-                }
+                pw.WriteString(key);
+                DamageInfoWriter.WriteValue(pw, value);
             }
+
+            foreach (var arg in Args)
+                DamageInfoWriter.WriteValue(pw, arg);
         }
     }
 }

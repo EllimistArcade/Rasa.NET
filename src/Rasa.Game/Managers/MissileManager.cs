@@ -77,6 +77,24 @@ namespace Rasa.Managers
                 }
         }
 
+        /// <summary>
+        /// Applies the victim's resistance (from the effects on them; see
+        /// GameEffectManager.ApplyResist) to a missile about to land, so the damage taken and
+        /// the damage reported agree, and the hit data says what was resisted.
+        /// </summary>
+        private static void Resist(Actor victim, Missile missile)
+        {
+            missile.DamageA = GameEffectManager.ApplyResist(victim, missile.DamageA, out var resisted);
+
+            if (resisted > 0)
+                foreach (var hit in missile.Args.HitData)
+                    if (hit.EntityId == victim.EntityId)
+                    {
+                        hit.Resisted = (uint)resisted;
+                        hit.FinalAmt = missile.DamageA;
+                    }
+        }
+
         private void DoDamageToCreature(MapChannel mapChannel, Missile missile)
         {
             var creature = EntityManager.Instance.GetCreature(missile.TargetEntityId);
@@ -87,6 +105,8 @@ namespace Rasa.Managers
             // Shooting something is being in a fight, not only being shot at - otherwise a player
             // who opens fire and wins never enters combat at all.
             EnterCombat(missile.Source);
+
+            Resist(creature, missile);
 
             // decrease armor first
             var armorDecrease = Math.Min(missile.DamageA, creature.Attributes[Attributes.Armor].Current);
@@ -130,6 +150,11 @@ namespace Rasa.Managers
             // Both ends: whoever was hit, and whoever hit them if that was a player too.
             EnterCombat(actor);
             EnterCombat(missile.Source);
+
+            // What the effects on the victim resist comes off first (Rage, Resistance, Sacrifice,
+            // Base Wave), and off the missile too, since the recovery packet reports its DamageA
+            // as the amount that landed.
+            Resist(actor, missile);
 
             // decrease armor first
             var armorDecrease = Math.Min(missile.DamageA, actor.Attributes[Attributes.Armor].Current);

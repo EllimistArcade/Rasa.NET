@@ -506,7 +506,7 @@ namespace Rasa.Managers
 
             // Effects are per map as far as the clients know - nobody on the next map was told
             // about them - and a sprint left running would keep draining adrenaline unseen.
-            GameEffectManager.Instance.ClearEffects(client.Player);
+            GameEffectManager.Instance.ClearEffects(client.Player.MapChannel, client.Player);
 
             // The weapon is put away with them. A manifestation arriving on a map starts with
             // nothing in its hands - the client transitions to _no_tool and is never told

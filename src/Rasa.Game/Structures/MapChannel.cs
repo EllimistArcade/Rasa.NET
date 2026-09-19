@@ -31,6 +31,13 @@ namespace Rasa.Structures
         // effect
         public int CurrentEffectId { get; set; } // increases with every spawned game effect
 
+        /// <summary>
+        /// Every actor on the map with at least one effect on it - players and creatures alike -
+        /// so the effect worker walks only those rather than every creature on the map.
+        /// GameEffectManager keeps it.
+        /// </summary>
+        public readonly HashSet<Actor> ActorsWithEffects = new HashSet<Actor>();
+
         // Dynamic Object List
         public List<DynamicObject> DynamicObjects = new List<DynamicObject>();
 

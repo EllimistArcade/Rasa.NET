@@ -35,11 +35,14 @@ namespace Rasa.Managers
     ///
     /// What an ability does comes from its properties (AbilityProperty) and the client module
     /// that runs it (ActionInfo.Module). Direct damage - lightning, the knockbacks and
-    /// strikes, the waves - and sprint are resolved here. An ability this does not know how to
-    /// resolve is refused with "cannot perform action now" and logged once, so it costs the
-    /// player nothing and the gap is visible in the log.
+    /// strikes, the waves - is resolved here; sprint and the timed buffs, debuffs and
+    /// damage-over-times (Rage, Resistance, Sacrifice, Ruin, Scourge, Reconstruction, the
+    /// Regeneration and Base waves) become GameEffects, built in AbilityManager.Effects.cs and
+    /// run by GameEffectManager. An ability this does not know how to resolve is refused with
+    /// "cannot perform action now" and logged once, so it costs the player nothing and the gap
+    /// is visible in the log.
     /// </summary>
-    public class AbilityManager
+    public partial class AbilityManager
     {
         private static AbilityManager _instance;
         private static readonly object InstanceLock = new object();
@@ -69,6 +72,26 @@ namespace Rasa.Managers
             "abilities.tectonicstrike", "abilities.stun", "abilities.concussivewave", "abilities.energywave",
             "abilities.vortex", "abilities.deathdamage", "abilities.stalkereggattack"
         };
+
+        /// <summary>
+        /// The client modules whose abilities are a GameEffect with a duration - on the
+        /// performer, the squad around them, or an enemy - resolved by ResolveTimedEffect.
+        /// </summary>
+        private static readonly HashSet<string> TimedEffectModules = new HashSet<string>
+        {
+            "abilities.rage", "abilities.resistance", "abilities.sacrifice", "abilities.decay",
+            "abilities.scourge", "abilities.reconstruction", "abilities.regenerationwave", "abilities.basewave"
+        };
+
+        /// <summary>Of those, the ones aimed at a single enemy (client targetType TARGET_NON_FRIENDLY).</summary>
+        private static readonly HashSet<string> HostileEffectModules = new HashSet<string> { "abilities.decay" };
+
+        /// <summary>
+        /// Abilities the client marks isToggle without a sourceGameEffect or targetGameEffect
+        /// (Sacrifice), or whose toggle the player may also press again while it runs (Rage): a
+        /// second request while the effect is on means "off", as it does for sprint.
+        /// </summary>
+        private static readonly HashSet<string> ToggleModules = new HashSet<string> { "abilities.sprint", "abilities.rage", "abilities.sacrifice" };
 
         public static AbilityManager Instance
         {
@@ -245,10 +268,12 @@ namespace Rasa.Managers
             // sprint tooltip says. SprintAction does not set isToggle in the client code, so the
             // second press arrives as an ordinary request rather than a detach; ending the running
             // effect is what the player meant, and the silent refusal cancels the client's local
-            // windup and takes nothing.
-            if (IsSustained(info))
+            // windup and takes nothing. Sacrifice is the same case with isToggle set but no
+            // effect class named for the client to ask about, and Rage can arrive this way too.
+            if (IsSustained(info) || ToggleModules.Contains(action.Module))
             {
-                var running = player.ActiveEffects.Values.FirstOrDefault(e => e.ActionId == actionId);
+                // Their own, not a copy of a squad mate's aura they happen to be standing in.
+                var running = player.ActiveEffects.Values.FirstOrDefault(e => e.ActionId == actionId && e.Parent == null);
 
                 if (running != null)
                 {
@@ -285,13 +310,15 @@ namespace Rasa.Managers
                 }
             }
 
-            if (IsDirectDamage(action, info) && target == null && !SelfCentred(info) && packet.Target.Kind != ActionTargetKind.Location)
+            var wantsHostile = IsDirectDamage(action, info) || HostileEffectModules.Contains(action.Module);
+
+            if (wantsHostile && target == null && !SelfCentred(info) && packet.Target.Kind != ActionTargetKind.Location)
             {
                 Fail(client, actionId, level, PlayerMessage.PmActionFailedNoTarget);
                 return;
             }
 
-            if (IsDirectDamage(action, info) && target != null && !IsHostile(player, target))
+            if (wantsHostile && target != null && !IsHostile(player, target))
             {
                 Fail(client, actionId, level, PlayerMessage.PmActionFailedActorFriendly);
                 return;
@@ -365,7 +392,7 @@ namespace Rasa.Managers
         /// <summary>Whether this server knows how to apply the ability; see the class remarks.</summary>
         private static bool CanResolve(ActionInfo action, ActionLevelInfo info)
         {
-            return action.Module == "abilities.sprint" || IsDirectDamage(action, info);
+            return action.Module == "abilities.sprint" || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
         }
 
         /// <summary>
@@ -500,6 +527,12 @@ namespace Rasa.Managers
             if (IsDirectDamage(actionInfo, info))
             {
                 ResolveDirectDamage(mapChannel, client, player, actionInfo, info, action);
+                return;
+            }
+
+            if (TimedEffectModules.Contains(actionInfo.Module))
+            {
+                ResolveTimedEffect(mapChannel, client, player, actionInfo, info, action);
                 return;
             }
 
@@ -654,13 +687,17 @@ namespace Rasa.Managers
 
             foreach (var target in targets)
             {
-                var amount = Scale(player.Level, _random.Next(min, max + 1), scaleType);
+                // Rolled, scaled to the performer's level, raised or lowered by the effects on
+                // them (Rage, Sacrifice), and cut by what the target's effects resist.
+                var rolled = GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, _random.Next(min, max + 1), scaleType));
+                var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted);
                 var taken = ActorManager.Instance.Damage(mapChannel, target, amount, player);
 
                 recovery.Hits.Add(new AbilityHit
                 {
                     EntityId = target.EntityId,
                     Amount = amount,
+                    Resisted = resisted,
                     DamageType = damageType,
                     DeathBlow = taken > 0 && target.Attributes[Attributes.Health].Current <= 0
                 });
@@ -670,7 +707,7 @@ namespace Rasa.Managers
         }
 
         /// <summary>Living, non-AFS creatures within radius metres of a point, from the cells around the performer.</summary>
-        private static List<Creature> HostilesWithin(MapChannel mapChannel, Manifestation player, Vector3 centre, float radius)
+        internal static List<Creature> HostilesWithin(MapChannel mapChannel, Manifestation player, Vector3 centre, float radius)
         {
             var found = new List<Creature>();
 
@@ -681,6 +718,39 @@ namespace Rasa.Managers
                 foreach (var creature in cell.CreatureList)
                     if (IsHostile(player, creature) && !found.Contains(creature) && Vector3.Distance(centre, creature.Position) <= radius)
                         found.Add(creature);
+
+            return found;
+        }
+
+        /// <summary>
+        /// The performer and the living members of their squad within radius metres of them, from
+        /// the cells around the performer. A player in no squad is a squad of one. This is who a
+        /// "user and nearby squad members" ability reaches.
+        /// </summary>
+        internal static List<Manifestation> SquadWithin(MapChannel mapChannel, Manifestation player, float radius)
+        {
+            var found = new List<Manifestation> { player };
+
+            if (radius <= 0 || player.PartyId == 0)
+                return found;
+
+            foreach (var cell in CellManager.CellsIn(mapChannel, player.Cells))
+                foreach (var client in cell.ClientList)
+                {
+                    var other = client?.Player;
+
+                    if (other == null || other == player || found.Contains(other))
+                        continue;
+
+                    if (other.PartyId != player.PartyId || other.State == CharacterState.Dead)
+                        continue;
+
+                    if (!other.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
+                        continue;
+
+                    if (Vector3.Distance(player.Position, other.Position) <= radius)
+                        found.Add(other);
+                }
 
             return found;
         }

@@ -269,19 +269,27 @@ namespace Rasa.Managers
 
                 player.RegenSeconds++;
 
-                Regenerate(health, player.RegenSeconds);
+                Regenerate(player, health, player.RegenSeconds);
 
                 if (player.Attributes.TryGetValue(Attributes.Armor, out var armor))
-                    Regenerate(armor, player.RegenSeconds);
+                    Regenerate(player, armor, player.RegenSeconds);
 
                 if (player.Attributes.TryGetValue(Attributes.Power, out var power))
-                    Regenerate(power, player.RegenSeconds);
+                    Regenerate(player, power, player.RegenSeconds);
             }
         }
 
-        private static void Regenerate(ActorAttributes attribute, long second)
+        /// <summary>
+        /// One attribute's regeneration for one second. The amount is the attribute's own
+        /// RefreshAmount as the effects on the player make it - Regeneration Wave and Base Wave
+        /// multiply it (GameEffectManager.RegenAmount), and the client was told the same figure
+        /// when the effect went on, so the two sides still move together.
+        /// </summary>
+        private static void Regenerate(Actor actor, ActorAttributes attribute, long second)
         {
-            if (attribute.RefreshAmount <= 0 || attribute.Current >= attribute.CurrentMax)
+            var amount = GameEffectManager.RegenAmount(actor, attribute);
+
+            if (amount <= 0 || attribute.Current >= attribute.CurrentMax)
                 return;
 
             // A period of 0 is one the stats never set; the client treats an unset period as 1.
@@ -290,7 +298,7 @@ namespace Rasa.Managers
             if (second % period != 0)
                 return;
 
-            attribute.Current = Math.Min(attribute.CurrentMax, attribute.Current + attribute.RefreshAmount);
+            attribute.Current = Math.Min(attribute.CurrentMax, attribute.Current + amount);
         }
 
         /// <summary>Puts an actor back to its maximum, and says how much that took.</summary>

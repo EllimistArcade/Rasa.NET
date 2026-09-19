@@ -340,6 +340,9 @@ namespace Rasa.Managers
             // let's calculate damage
             var damageRange = weaponClassInfo.MaxDamage - weaponClassInfo.MinDamage;
             var damage = weaponClassInfo.MinDamage + new Random().Next(0, damageRange + 1);
+
+            // Then what the effects on the shooter do to it: Rage's bonus, Sacrifice's trade.
+            damage = GameEffectManager.ApplyDamageDealt(client.Player, damage);
             var action = new ActionData(client.Player, weaponClassInfo.WeaponAttackActionId, weaponClassInfo.WeaponAttackArgId, client.Player.Target, 0);
             // launch correct missile type depending on weapon type
             MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage);

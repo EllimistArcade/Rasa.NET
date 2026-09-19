@@ -130,6 +130,10 @@ namespace Rasa.Managers
             creature.State = CharacterState.Dead;
             CellManager.Instance.CellCallMethod(mapChannel, creature, new StateChangePacket(stateIds));
 
+            // A debuff does not outlive what it was on: a Ruin still ticking on a corpse would
+            // try to damage it every second until it expired.
+            GameEffectManager.Instance.ClearEffects(mapChannel, creature);
+
             // tell spawnpool if set
             if (creature.SpawnPool != null)
             {

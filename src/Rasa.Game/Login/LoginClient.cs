@@ -27,6 +27,7 @@ namespace Rasa.Login
             Socket.AutoReceive = false;
             Socket.OnReceive += OnReceive;
             Socket.OnError += OnError;
+            Socket.OnDrop += OnDrop;
 
             DHKeyExchange.GeneratePrivateAndPublicA(PrivateKey, PublicKey);
 
@@ -66,6 +67,14 @@ namespace Rasa.Login
         }
 
         private void OnError(SocketAsyncEventArgs args)
+        {
+            Manager.Disconnect(this);
+
+            Close();
+        }
+
+        /// <summary>The socket gave up on this connection; the reason is already logged.</summary>
+        private void OnDrop(string reason)
         {
             Manager.Disconnect(this);
 

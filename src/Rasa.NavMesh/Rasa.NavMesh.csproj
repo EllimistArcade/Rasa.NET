@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyTitle>Rasa.NET NavMesh builder</AssemblyTitle>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Rasa.NavMesh</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <PackageId>Rasa.NavMesh</PackageId>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+    <RootNamespace>Rasa.NavMesh</RootNamespace>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotRecast.Recast" Version="2026.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rasa.ClientData\Rasa.ClientData.csproj" />
+    <ProjectReference Include="..\Rasa.Navigation\Rasa.Navigation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="data\entity_meshes.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

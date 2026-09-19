@@ -254,13 +254,13 @@ namespace Rasa.Memory
             if (type <= 0x6C)
                 return type & 0x0F;
 
-            return type switch
+            return CheckedCount(type switch
             {
                 0x6D => Reader.ReadByte(),
                 0x6E => Reader.ReadInt16(),
                 0x6F => Reader.ReadInt32(),
                 _ => throw new Exception($"WTF? Dictionary type: {type:X2}"),
-            };
+            }, "dictionary");
         }
 
         public int ReadList()
@@ -272,13 +272,13 @@ namespace Rasa.Memory
             if (type <= 0x7C)
                 return type & 0x0F;
 
-            return type switch
+            return CheckedCount(type switch
             {
                 0x7D => Reader.ReadByte(),
                 0x7E => Reader.ReadInt16(),
                 0x7F => Reader.ReadInt32(),
                 _ => throw new Exception($"WTF? List type: {type:X2}"),
-            };
+            }, "list");
         }
 
         public int ReadTuple()
@@ -290,13 +290,44 @@ namespace Rasa.Memory
             if (type <= 0x8C)
                 return type & 0x0F;
 
-            return type switch
+            return CheckedCount(type switch
             {
                 0x8D => Reader.ReadByte(),
                 0x8E => Reader.ReadInt16(),
                 0x8F => Reader.ReadInt32(),
                 _ => throw new Exception($"WTF? Tuple type: {type:X2}"),
-            };
+            }, "tuple");
+        }
+
+        /// <summary>
+        /// A container count from the stream, checked against what is left of it: every
+        /// element takes at least one byte, so a count beyond the remaining bytes cannot be
+        /// real, and a packet that allocates by the count (LevelSkills) must not size an
+        /// array from a signed 32-bit value the client chose.
+        /// </summary>
+        private int CheckedCount(int count, string what)
+        {
+            return Reader.CheckedLength(count, what + " count");
+        }
+
+        /// <summary>
+        /// One number, in whichever form it marshalled as. Python has no fixed width here and
+        /// the client writes whatever is smallest: a coordinate or an angle that lands on a whole
+        /// number arrives as an int rather than a double, so a reader that insists on doubles
+        /// throws on a player standing on an exact metre or facing due north - and a throw out of
+        /// Read closes the connection. None and the structs that share its nibble read as 0.
+        /// </summary>
+        public double ReadNumber()
+        {
+            switch (PeekType())
+            {
+                case PythonType.Double: return ReadDouble();
+                case PythonType.Int: return ReadInt();
+                case PythonType.Long: return ReadLong();
+                default:
+                    ReadUnkStruct();
+                    return 0;
+            }
         }
 
         public T ReadStruct<T>()

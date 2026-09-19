@@ -2,10 +2,12 @@
 
 namespace Rasa.Repositories.Char
 {
+    using Auction;
     using Character;
     using CharacterAppearance;
     using Clan;
     using ClanInventory;
+    using ClanLockboxLog;
     using ClanMember;
     using Context.Char;
     using GameAccount;
@@ -22,6 +24,7 @@ namespace Rasa.Repositories.Char
     using Friend;
     using Ignored;
     using Items;
+    using Petition;
     using UserOption;
     using UnitOfWork;
 
@@ -42,12 +45,15 @@ namespace Rasa.Repositories.Char
             ICharacterSkillsRepository characterSkills,
             ICharacterTeleporterRepository characterTeleporters,
             ICharacterTitleRepository characterTitles,
+            IAuctionRepository auctions,
             IClanRepository clans,
             IClanInventoryRepository clanInventories,
             IClanMemberRepository clanMembers,
+            IClanLockboxLogRepository clanLockboxLogs,
             IFriendRepository friends,
             IIgnoredRepository ignoreds,
             IItemRepository items,
+            IPetitionRepository petitions,
             IUserOptionRepository userOptions
             ) : base(dbContext)
         {
@@ -65,11 +71,14 @@ namespace Rasa.Repositories.Char
             CharacterTeleporters = characterTeleporters;
             CharacterTitles = characterTitles;
             Clans = clans;
+            Auctions = auctions;
             ClanInventories = clanInventories;
             ClanMembers = clanMembers;
+            ClanLockboxLogs = clanLockboxLogs;
             Friends = friends;
             Ignoreds = ignoreds;
             Items = items;
+            Petitions = petitions;
             UserOptions = userOptions;
         }
 
@@ -85,13 +94,16 @@ namespace Rasa.Repositories.Char
         public ICharacterSkillsRepository CharacterSkills { get; }
         public ICharacterTeleporterRepository CharacterTeleporters { get; }
         public ICharacterTitleRepository CharacterTitles { get; }
+        public IAuctionRepository Auctions { get; }
         public IClanRepository Clans { get; }
         public IClanInventoryRepository ClanInventories { get; }
         public IClanMemberRepository ClanMembers { get; }
+        public IClanLockboxLogRepository ClanLockboxLogs { get; }
         public IFriendRepository Friends { get; }
         public IGameAccountRepository GameAccounts { get; }
         public IIgnoredRepository Ignoreds { get; }
         public IItemRepository Items { get; }
+        public IPetitionRepository Petitions { get; }
         public IUserOptionRepository UserOptions { get; }
     }
 }

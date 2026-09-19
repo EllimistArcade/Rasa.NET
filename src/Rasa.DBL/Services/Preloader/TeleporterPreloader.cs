@@ -312,7 +312,7 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 356, 25408, 3, "Wormhole: Valverde Plateau", -283.125, 421.10156, 848.1133, 4.19, 1497 };
             yield return new object[] { 357, 29648, 2, "Waypoint: Brann LZ", 19.77696, 238.5039, -659.1398, 3.2, 1759 };
             yield return new object[] { 358, 0, 0, "Wormhole: Ligo Crucible Dupe see 86", 0.0, 0.0, 0.0, 0.0, 0 };
-            yield return new object[] { 359, 0, 0, "Dropship Transport: Ligo Crucible", 0.0, 0.0, 0.0, 0.0, 0 };
+            yield return new object[] { 359, 0, 4, "Dropship Transport: Ligo Crucible", 968.0, 144.16, -76.0, 0.0, 1993 };
             yield return new object[] { 360, 0, 5, "Hospital: Level 01: Entrance Hall", 87.9191, 65.6069, 215.4363, 0.0, 1806 };
             yield return new object[] { 361, 25651, 2, "Hospital: Camp Cato", -248.42883, 673.16424, -323.39874, 0.0, 2047 };
             yield return new object[] { 362, 0, 0, "Waypoint: Maintenance Corridors", 0.0, 0.0, 0.0, 0.0, 0 };
@@ -489,7 +489,6 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 533, 0, 5, "Hospital: Control Point Whiskey", -310.91406, 421.17578, -125.27734, 0.0, 2374 };
             yield return new object[] { 534, 25651, 2, "Waypoint: Staging Point", 897.272521972656, 123.691452026367, -233.132720947266, 0.0, 1244 };
             yield return new object[] { 535, 0, 5, "Hospital: Entrance Gauntlet", -240.59766, 1.60935, -53.578125, 0.0, 2278 };
-            yield return new object[] { 536, 0, 4, "Dropship Transport: Shadow Edge Post", -129.82812, 294.73047, -748.35256, 0.0, 1734 };
             yield return new object[] { 537, 29648, 1, "Local: Stonewall Artillery Control 1", 59.410156, 350.58203, -474.89844, 0.0, 1734 };
             yield return new object[] { 538, 29648, 1, "Local: Stonewall Operations Tower", -3.8046875, 339.8711, -533.4883, 0.0, 1734 };
             yield return new object[] { 539, 29648, 1, "Local: Stonewall Command", -62.7968, 353.4297, -400.707, 0.0, 1734 };

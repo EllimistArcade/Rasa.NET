@@ -7,6 +7,7 @@ namespace Rasa.Repositories.Char.ClanInventory
     {
         void AddInvItem(uint clanId, uint slotId, uint itemId);
         void DeleteInvItem(uint clanId, uint slotId);
+        void DeleteInvItemByItemId(uint itemId);
         List<ClanInventoryEntry> GetItems(uint clanId);
         void MoveInvItem(uint clanId, uint slotId, uint itemId);
     }

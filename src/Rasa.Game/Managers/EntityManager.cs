@@ -50,30 +50,33 @@ namespace Rasa.Managers
         public void DestroyPhysicalEntity(Client client, ulong entityId, EntityType entityType)
         {
             client.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(entityId));
-            //free entity
+
+            // Unregister before freeing: FreeEntity refuses an id that is still registered, so
+            // the old order leaked every id destroyed this way - a player's whole inventory on
+            // each map change and logout - and logged a line per item.
             switch (entityType)
             {
                 case EntityType.Character:
-                    FreeEntity(entityId);
                     UnregisterEntity(entityId);
                     UnregisterPlayer(entityId);
+                    FreeEntity(entityId);
                     break;
                 case EntityType.Npc:
                     break;
                 case EntityType.Creature:
-                    FreeEntity(entityId);
                     UnregisterEntity(entityId);
                     UnregisterCreature(entityId);
+                    FreeEntity(entityId);
                     break;
                 case EntityType.Item:
-                    FreeEntity(entityId);
                     UnregisterEntity(entityId);
                     UnregisterItem(entityId);
+                    FreeEntity(entityId);
                     break;
                 case EntityType.Object:
-                    FreeEntity(entityId);
                     UnregisterEntity(entityId);
                     UnregisterDynamicObject(entityId);
+                    FreeEntity(entityId);
                     break;
                 case EntityType.VendorItem:
                     break;
@@ -144,6 +147,16 @@ namespace Rasa.Managers
 
         public void FreeEntity(ulong id)
         {
+            // An id can only go back to the pool once nothing is registered under it. Handing
+            // out an id that is still in RegisteredEntities gives two entities the same id,
+            // and the second registration throws on the main loop. A caller that forgot to
+            // unregister now leaks the id and logs, instead.
+            if (RegisteredEntities.ContainsKey(id))
+            {
+                Logger.WriteLog(LogType.Error, $"Entity {id} ({RegisteredEntities[id]}) was freed while still registered; the id is not reused.");
+                return;
+            }
+
             lock (_entityIdLock)
                 if(!_freeEntityIds.Contains(id))
                     _freeEntityIds.Add(id);
@@ -151,7 +164,14 @@ namespace Rasa.Managers
 
         public void RegisterEntity(ulong entityId, EntityType type)
         {
-            RegisteredEntities.Add(entityId, type);
+            // Not Add: a duplicate used to throw out of whichever map worker was registering,
+            // losing the tick. Registering the same entity twice (a creature re-added to the
+            // world) is harmless; a different type under the same id means an id was reused
+            // while registered, which FreeEntity now refuses, and is worth a line either way.
+            if (RegisteredEntities.TryGetValue(entityId, out var existing) && existing != type)
+                Logger.WriteLog(LogType.Error, $"Entity {entityId} registered as {type} while already registered as {existing}; the new registration wins.");
+
+            RegisteredEntities[entityId] = type;
         }
 
         public void UnregisterEntity(ulong entityId)
@@ -200,6 +220,12 @@ namespace Rasa.Managers
             return DynamicObjects[entityId];
         }
 
+        /// <summary>GetObject without the KeyNotFoundException: for ids that come off the wire.</summary>
+        internal bool TryGetObject(ulong entityId, out DynamicObject dynamicObject)
+        {
+            return DynamicObjects.TryGetValue(entityId, out dynamicObject);
+        }
+
         public void RegisterDynamicObject(DynamicObject dynamicObject)
         {
             DynamicObjects.Add(dynamicObject.EntityId, dynamicObject);
@@ -227,9 +253,16 @@ namespace Rasa.Managers
         }
 
         // Creatures
+        /// <summary>
+        /// The creature with this entity id, or null. Entity ids reach this from client packets,
+        /// so an id that is not a creature - another map's, a stale one, an item's - was a
+        /// KeyNotFoundException in whichever handler asked, which closes the connection.
+        /// ChatCommandsManager already wrote GetCreature(entityId)?.Position, expecting the null
+        /// this now returns.
+        /// </summary>
         public Creature GetCreature(ulong entityId)
         {
-            return Creatures[entityId];
+            return Creatures.TryGetValue(entityId, out var creature) ? creature : null;
         }
 
         public void RegisterCreature(Creature creature)

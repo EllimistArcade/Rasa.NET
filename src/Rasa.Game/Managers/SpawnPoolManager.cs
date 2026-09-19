@@ -240,6 +240,10 @@ namespace Rasa.Managers
                 pos.Z += new Random().Next() % 5 - 2;
             }
 
+            // Spawn pools were placed by hand; on a slope the offset members would hang in the
+            // air or start in the ground. With a navmesh they stand on it.
+            pos = NavMeshManager.SnapToGround(MapChannelManager.Instance.FindByContextId(creature.SpawnPool.MapContextId), pos);
+
             CreatureManager.Instance.SetLocation(creature, pos, creature.SpawnPool.Rotation, creature.SpawnPool.MapContextId);
         }
     }

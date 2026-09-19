@@ -42,12 +42,15 @@ namespace Rasa.Repositories.Char.CharacterOption
             }
         }
 
-        public List<CharacterOptionEntry> Get(uint accountIdid)
+        public List<CharacterOptionEntry> Get(uint characterId)
         {
+            // This ignored its argument and returned the whole table, which went unnoticed
+            // only because the table stayed empty: nothing ever completed the unit of work
+            // that wrote to it. Now that saves land, every character would have been sent
+            // every other character's options.
             var query = _charContext.CreateNoTrackingQuery(_charContext.CharacterOptionEntries);
-            var characterOptionEntries = query.ToList();
 
-            return characterOptionEntries;
+            return query.Where(e => e.CharacterId == characterId).ToList();
         }
     }
 }

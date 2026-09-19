@@ -21,5 +21,19 @@ namespace Rasa.Structures
         public bool FullyLooted { get; set; }
         public bool IsLootable { get; set; }
         public LootQuality LootQuality { get; set; }
+
+        /// <summary>
+        /// The manifestation with the corpse window open, or 0. Set by RequestCorpseLooting and
+        /// cleared by CancelCorpseLooting, which is what the client sends when the window closes.
+        /// </summary>
+        public ulong CurrentLooter { get; set; }
+
+        /// <summary>Whether anything is left to take.</summary>
+        public bool HasLoot => Credits > 0 || LootItems.Exists(i => !i.Taken);
+
+        public LootItem Find(ulong itemEntityId) => LootItems.Find(i => i.EntityId == itemEntityId);
+
+        /// <summary>What a looting player should be shown: everything nobody has taken yet.</summary>
+        public List<LootItem> Remaining() => LootItems.FindAll(i => !i.Taken);
     }
 }

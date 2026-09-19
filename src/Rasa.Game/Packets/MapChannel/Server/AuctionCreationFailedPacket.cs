@@ -7,10 +7,10 @@
     {
         public override GameOpcode Opcode { get; } = GameOpcode.AuctionCreationFailed;
 
-        public uint ItemId { get; set; }
+        public ulong ItemId { get; set; }
         public PlayerMessage PlayerMessageId { get; set; }
 
-        public AuctionCreationFailedPacket(uint itemId, PlayerMessage playerMessageId )
+        public AuctionCreationFailedPacket(ulong itemId, PlayerMessage playerMessageId)
         {
             ItemId = itemId;
             PlayerMessageId = playerMessageId;
@@ -19,7 +19,7 @@
         public override void Write(PythonWriter pw)
         {
             pw.WriteTuple(2);
-            pw.WriteUInt(ItemId);
+            pw.WriteULong(ItemId);
             pw.WriteUInt((uint)PlayerMessageId);
         }
     }

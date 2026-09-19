@@ -7,6 +7,7 @@
         RedirectRequest    = 2,
         RedirectResponse   = 3,
         ServerInfoRequest  = 4,
-        ServerInfoResponse = 5
+        ServerInfoResponse = 5,
+        AccountLockChanged = 6
     }
 }

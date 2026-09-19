@@ -22,5 +22,12 @@ namespace Rasa.Repositories.Auth.Account
         void UpdateLoginData(uint id, IPAddress remoteAddress);
 
         void UpdateLastServer(uint id, byte lastServerId);
+
+        /// <summary>
+        /// Sets the locked flag on the account with this username - an exact match, otherwise the
+        /// first case-insensitive one.
+        /// </summary>
+        /// <returns>the updated account, or null when no account has that username</returns>
+        AuthAccountEntry SetLocked(string userName, bool locked);
     }
 }

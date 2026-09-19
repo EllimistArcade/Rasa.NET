@@ -6,6 +6,7 @@ using System.Text;
 
 namespace Rasa.Memory
 {
+    using Extensions;
     using Models;
 
     [Flags]
@@ -50,7 +51,7 @@ namespace Rasa.Memory
         {
             ReadDebugByte(1);
 
-            return Reader.ReadBytes(ReadCount());
+            return Reader.ReadBytes(Reader.CheckedLength(ReadCount(), "array"));
         }
 
         public byte ReadByte()
@@ -106,7 +107,7 @@ namespace Rasa.Memory
         {
             ReadDebugByte(13);
 
-            var length = ReadCount();
+            var length = Reader.CheckedLength(ReadCount(), "string");
 
             var strBytes = Reader.ReadBytes(length);
 

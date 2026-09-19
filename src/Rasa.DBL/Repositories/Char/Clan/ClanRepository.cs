@@ -33,7 +33,10 @@ namespace Rasa.Repositories.Char.Clan
                 CreatedAt = DateTime.UtcNow,
                 Credits = 0,
                 Prestige = 0,
-                PurashedTabs = 0
+                // One, not none: the first tab is not bought. A clan created with 0 would be told
+                // every tab was locked, and the client's own purchase rule needs the tab below
+                // the one being bought unlocked - so it could never have bought its way out.
+                PurashedTabs = 1
             };
 
             _charContext.ClanEntries.Add(entry);
@@ -95,48 +98,103 @@ namespace Rasa.Repositories.Char.Clan
             return entries;
         }
 
+        private ClanEntry GetWritable(uint clanId)
+        {
+            var entry = _charContext.GetWritable(_charContext.ClanEntries, clanId);
+
+            if (entry == null)
+                Logger.WriteLog(LogType.Error, $"Clan {clanId} does not exist; update skipped.");
+
+            return entry;
+        }
+
+        /// <summary>Renames a clan. False if there is no such clan, or the write failed.</summary>
+        public bool UpdateClanName(uint clanId, string clanName)
+        {
+            var entry = _charContext.CreateTrackingQuery(_charContext.ClanEntries).FirstOrDefault(e => e.Id == clanId);
+
+            if (entry == null)
+                return false;
+
+            entry.Name = clanName;
+            _charContext.SaveChanges();
+
+            return true;
+        }
+
+        /// <summary>How many lockbox tabs the clan has unlocked.</summary>
+        public bool UpdatePurashedTabs(uint clanId, uint purashedTabs)
+        {
+            var entry = _charContext.CreateTrackingQuery(_charContext.ClanEntries).FirstOrDefault(e => e.Id == clanId);
+
+            if (entry == null)
+                return false;
+
+            entry.PurashedTabs = purashedTabs;
+            _charContext.SaveChanges();
+
+            return true;
+        }
+
         public void UpdateCredits(uint clanId, uint credits)
         {
-            var query = _charContext.CreateNoTrackingQuery(_charContext.ClanEntries);
-            var entry = query.Where(e => e.Id == clanId).FirstOrDefault();
+            var entry = GetWritable(clanId);
+
+            if (entry == null)
+                return;
 
             entry.Credits = credits;
-
-            _charContext.Update(entry);
             _charContext.SaveChanges();
         }
 
         public void UpdateLastPvPClanTimeForMembers(uint clanId, DateTime lastPvPClanTimestamp)
         {
-            var query = _charContext.CreateNoTrackingQuery(_charContext.ClanMemberEntries);
-            var entry = query.Where(e => e.ClanId == clanId).ToList();
+            var members = _charContext.CreateNoTrackingQuery(_charContext.ClanMemberEntries).Where(e => e.ClanId == clanId).ToList();
 
-            foreach(var member in entry)
+            foreach (var member in members)
             {
-                var characters = _charContext.CreateNoTrackingQuery(_charContext.CharacterEntries);
-                var character = characters.Where(e => e.Id == member.CharacterId).FirstOrDefault();
+                var character = _charContext.GetWritable(_charContext.CharacterEntries, member.CharacterId);
 
-                _charContext.Update(character);
+                if (character == null)
+                    continue;
+
+                // This used to rewrite each member's whole character row without changing
+                // anything in it; the timestamp it was given was never stored.
+                character.LastPvPClan = lastPvPClanTimestamp;
             }
 
             _charContext.SaveChanges();
         }
 
+        /// <summary>Starts the PvP-clan cooldown for one character: the one who left or was kicked.</summary>
+        public void UpdateLastPvPClanTime(uint characterId, DateTime lastPvPClanTimestamp)
+        {
+            var character = _charContext.GetWritable(_charContext.CharacterEntries, characterId);
+
+            if (character == null)
+                return;
+
+            character.LastPvPClan = lastPvPClanTimestamp;
+            _charContext.SaveChanges();
+        }
+
         public void UpdatePrestige(uint clanId, uint prestige)
         {
-            var query = _charContext.CreateNoTrackingQuery(_charContext.ClanEntries);
-            var entry = query.Where(e => e.Id == clanId).FirstOrDefault();
+            var entry = GetWritable(clanId);
+
+            if (entry == null)
+                return;
 
             entry.Prestige = prestige;
-
-            _charContext.Update(entry);
             _charContext.SaveChanges();
         }
 
         public bool UpdateRankTitleByClanId(uint clanId, uint rank, string title)
         {
-            var query = _charContext.CreateNoTrackingQuery(_charContext.ClanEntries);
-            var entry = query.Where(e => e.Id == clanId).FirstOrDefault();
+            var entry = GetWritable(clanId);
+
+            if (entry == null)
+                return false;
 
             switch (rank)
             {
@@ -157,7 +215,6 @@ namespace Rasa.Repositories.Char.Clan
                     return false;
             }
 
-            _charContext.Update(entry);
             _charContext.SaveChanges();
 
             return true;

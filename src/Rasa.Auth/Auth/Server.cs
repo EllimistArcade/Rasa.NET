@@ -18,6 +18,7 @@ namespace Rasa.Auth
     using Packets.Auth.Server;
     using Repositories.UnitOfWork;
     using Structures;
+    using Structures.Auth;
     using Threading;
     using Timer;
 
@@ -65,6 +66,8 @@ namespace Rasa.Auth
             CommandProcessor.RegisterCommand("exit", ProcessExitCommand);
             CommandProcessor.RegisterCommand("reload", ProcessReloadCommand);
             CommandProcessor.RegisterCommand("create", ProcessCreateCommand);
+            CommandProcessor.RegisterCommand("ban", parts => ProcessLockCommand(parts, true));
+            CommandProcessor.RegisterCommand("unban", parts => ProcessLockCommand(parts, false));
         }
 
         ~Server()
@@ -244,36 +247,45 @@ namespace Rasa.Auth
 
         public bool AuthenticateGameServer(LoginRequestPacket packet, CommunicatorClient client)
         {
+            // Lock order everywhere in this class is Clients -> ServerList -> GameServers, so
+            // nothing that holds GameServers may go on to regenerate the server list.
+            // DisconnectCommunicator does exactly that, which is why the rejections are decided
+            // under the lock and carried out after it.
+            string rejection;
+            LogType rejectionLogType;
+
             lock (GameServers)
             {
                 if (GameServers.ContainsKey(packet.ServerId))
                 {
-                    DisconnectCommunicator(client);
-                    Logger.WriteLog(LogType.Debug, $"A server tried to connect to an already in use server slot! Remote Address: {client.Socket.RemoteAddress}");
-                    return false;
+                    rejection = "A server tried to connect to an already in use server slot!";
+                    rejectionLogType = LogType.Debug;
                 }
-
-                if (!Config.Servers.ContainsKey(packet.ServerId.ToString()))
+                else if (!Config.Servers.ContainsKey(packet.ServerId.ToString()))
                 {
-                    DisconnectCommunicator(client);
-                    Logger.WriteLog(LogType.Debug, $"A server tried to connect to a non-defined server slot! Remote Address: {client.Socket.RemoteAddress}");
-                    return false;
+                    rejection = "A server tried to connect to a non-defined server slot!";
+                    rejectionLogType = LogType.Debug;
                 }
-
-                if (Config.Servers[packet.ServerId.ToString()] != packet.Password)
+                else if (Config.Servers[packet.ServerId.ToString()] != packet.Password)
                 {
-                    DisconnectCommunicator(client);
-                    Logger.WriteLog(LogType.Error, $"A server tried to log in with an invalid password! Remote Address: {client.Socket.RemoteAddress}");
-                    return false;
+                    rejection = "A server tried to log in with an invalid password!";
+                    rejectionLogType = LogType.Error;
                 }
+                else
+                {
+                    GameServerQueue.Remove(client);
+                    GameServers.Add(packet.ServerId, client);
 
-                GameServerQueue.Remove(client);
-                GameServers.Add(packet.ServerId, client);
+                    Logger.WriteLog(LogType.Network, $"The Game server (Id: {packet.ServerId}, Address: {client.Socket.RemoteAddress}, Public Address: {packet.PublicAddress}) has authenticated! Requesting info...");
 
-                Logger.WriteLog(LogType.Network, $"The Game server (Id: {packet.ServerId}, Address: {client.Socket.RemoteAddress}, Public Address: {packet.PublicAddress}) has authenticated! Requesting info...");
-
-                return true;
+                    return true;
+                }
             }
+
+            DisconnectCommunicator(client);
+            Logger.WriteLog(rejectionLogType, $"{rejection} Remote Address: {client.Socket.RemoteAddress}");
+
+            return false;
         }
 
         public void UpdateServerInfo(CommunicatorClient client, ServerInfoResponsePacket packet)
@@ -286,7 +298,9 @@ namespace Rasa.Auth
         {
             Client authClient;
             lock (Clients)
-                authClient = Clients.FirstOrDefault(c => c.AccountEntry.Id == packet.AccountId);
+                // AccountEntry is null on every connection still at the login screen, and this
+                // runs on the communicator thread whenever a game server answers a redirect.
+                authClient = Clients.FirstOrDefault(c => c.AccountEntry != null && c.AccountEntry.Id == packet.AccountId);
 
             ServerInfo info;
             lock (ServerList)
@@ -314,9 +328,13 @@ namespace Rasa.Auth
 
                 if (client.ServerId != 0)
                     GameServers.Remove(client.ServerId);
-
-                GenerateServerList();
             }
+
+            // Outside the GameServers lock: GenerateServerList takes ServerList and then
+            // GameServers, and calling it from inside GameServers inverted that order against
+            // UpdateServerInfo, so one game server dropping while another reported its info
+            // could deadlock both communicator threads for good.
+            GenerateServerList();
 
             Timer.Add($"Disconnect-comm-{DateTime.Now.Ticks}", 1000, false, () =>
             {
@@ -390,7 +408,16 @@ namespace Rasa.Auth
 
         public void MainLoop(long delta)
         {
-            Timer.Update(delta);
+            // Same rule as the game server: this is the only thread, and a fault in one
+            // connection must not cost the tick for the connections after it in the list.
+            try
+            {
+                Timer.Update(delta);
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Error updating the auth server timers: {e}");
+            }
 
             if (Clients.Count == 0)
                 return;
@@ -398,7 +425,25 @@ namespace Rasa.Auth
             lock (Clients)
             {
                 foreach (var c in Clients)
-                    c.Update(delta);
+                {
+                    try
+                    {
+                        c.Update(delta);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.WriteLog(LogType.Error, $"Error updating auth client {c.Socket?.RemoteAddress}, disconnecting it: {e}");
+
+                        try
+                        {
+                            c.Close();
+                        }
+                        catch (Exception inner)
+                        {
+                            Logger.WriteLog(LogType.Error, $"And closing it threw as well: {inner}");
+                        }
+                    }
+                }
 
                 if (_clientsToRemove.Count > 0)
                 {
@@ -415,10 +460,23 @@ namespace Rasa.Auth
 
         public void BroadcastServerList()
         {
+            var servers = GetServerListSnapshot();
+
             lock (Clients)
                 foreach (var c in Clients)
                     if (c.State == ClientState.ServerList)
-                        c.SendPacket(new SendServerListExtPacket(ServerList, c.AccountEntry.LastServerId));
+                        c.SendPacket(new SendServerListExtPacket(servers, c.AccountEntry.LastServerId));
+        }
+
+        /// <summary>
+        /// A copy of the server list to serialize from. Send writes the packet on the calling
+        /// thread, and the list is rebuilt on the communicator threads, so handing the live
+        /// list to a packet let the main loop enumerate it while GenerateServerList changed it.
+        /// </summary>
+        public List<ServerInfo> GetServerListSnapshot()
+        {
+            lock (ServerList)
+                return ServerList.Select(s => s.Copy()).ToList();
         }
 
         #region Commands
@@ -447,6 +505,70 @@ namespace Rasa.Auth
             }
 
             Logger.WriteLog(LogType.Command, "Invalid reload command!");
+        }
+
+        /// <summary>
+        /// ban &lt;username&gt; / unban &lt;username&gt;. Sets account.locked, which GetByUserName
+        /// already refuses at login, then deals with anyone already past that check: the player's
+        /// auth connection (server list screen) is closed here, and every connected game server is
+        /// told so it can kick them from the queue or world and refuse a pending handoff.
+        /// </summary>
+        private void ProcessLockCommand(string[] parts, bool locked)
+        {
+            var command = locked ? "ban" : "unban";
+
+            if (parts.Length < 2)
+            {
+                Logger.WriteLog(LogType.Command, $"Invalid {command} command! Usage: {command} <username>");
+                return;
+            }
+
+            AuthAccountEntry account;
+
+            try
+            {
+                using var unitOfWork = _authUnitOfWorkFactory.Create();
+                account = unitOfWork.AuthAccountRepository.SetLocked(parts[1], locked);
+                unitOfWork.Complete();
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Could not {command} {parts[1]}: {e.Message}");
+                return;
+            }
+
+            if (account == null)
+            {
+                Logger.WriteLog(LogType.Command, $"No account with username {parts[1]}.");
+                return;
+            }
+
+            if (locked)
+            {
+                List<Client> connected;
+
+                // AccountEntry is null until a client has logged in.
+                lock (Clients)
+                    connected = Clients.Where(c => c.AccountEntry != null && c.AccountEntry.Id == account.Id).ToList();
+
+                foreach (var client in connected)
+                    client.Close();
+            }
+
+            var notice = new AccountLockChangedPacket { AccountId = account.Id, Locked = locked };
+            var notified = 0;
+
+            lock (GameServers)
+                foreach (var server in GameServers.Values)
+                {
+                    if (!server.Connected)
+                        continue;
+
+                    server.Socket.Send(notice);
+                    notified++;
+                }
+
+            Logger.WriteLog(LogType.Command, $"{(locked ? "Banned" : "Unbanned")} account {account.Username} ({account.Id}); notified {notified} game server(s).");
         }
 
         private void ProcessCreateCommand(string[] parts)

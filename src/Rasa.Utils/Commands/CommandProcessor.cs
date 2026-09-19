@@ -19,9 +19,22 @@ namespace Rasa.Commands
             if (parts.Length < 1)
                 return;
 
-            if (Commands.ContainsKey(parts[0]))
+            if (Commands.TryGetValue(parts[0], out var handler))
             {
-                Commands[parts[0]](parts);
+                // The host awaits this loop with no catch of its own, so an exception out of a
+                // handler ("exit abc" reaching int.Parse, say) used to end the console loop for
+                // the life of the process: the server kept running, but nothing typed at it was
+                // read any more. A bad command is worth one error line, not the console.
+                try
+                {
+                    handler(parts);
+                }
+                catch (Exception e)
+                {
+                    Logger.WriteLog(LogType.Error, $"Command failed: {command}");
+                    Logger.WriteLog(LogType.Error, e);
+                }
+
                 return;
             }
 
@@ -41,8 +54,13 @@ namespace Rasa.Commands
                         case ConsoleKey.Enter:
                             return command;
                         case ConsoleKey.Backspace:
-                            command = command.Substring(0, command.Length - 1);
-                            Console.Write("\b \b");
+                            // Backspace on an empty line has nothing to remove; Substring(0, -1)
+                            // threw here, and the throw took the console loop with it.
+                            if (command.Length > 0)
+                            {
+                                command = command.Substring(0, command.Length - 1);
+                                Console.Write("\b \b");
+                            }
                             break;
                         default:
                             command += key.KeyChar;

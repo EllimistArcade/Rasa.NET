@@ -7,9 +7,10 @@
     {
         public override GameOpcode Opcode { get; } = GameOpcode.ToggleAfk;
 
+        // 0 Elements - client sends SendCallActorMethod('ToggleAfk', ())
         public override void Read(PythonReader pr)
         {
-            Logger.WriteLog(LogType.Debug, pr.ToString());
+            pr.ReadTuple();
         }
     }
 }

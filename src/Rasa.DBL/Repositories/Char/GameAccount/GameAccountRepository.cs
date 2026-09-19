@@ -55,6 +55,32 @@ namespace Rasa.Repositories.Char.GameAccount
             return entry;
         }
 
+        public GameAccountEntry Find(uint id)
+        {
+            var query = _charContext.CreateNoTrackingQuery(_charContext.GameAccountEntries);
+            query = query
+                .Include(e => e.Characters);
+            return _charContext.Find(query, id);
+        }
+
+        public GameAccountEntry FindByFamilyName(string familyName)
+        {
+            if (string.IsNullOrEmpty(familyName))
+                return null;
+
+            // Sqlite compares with BINARY collation, so a plain == is case-sensitive there
+            // while MySQL's default collation is not. Lowering both sides behaves the same on
+            // both providers; the exact pass first keeps "Bob" from resolving to "bob" when
+            // both exist.
+            var exact = Get(familyName);
+            if (exact != null)
+                return exact;
+
+            var lowered = familyName.ToLower();
+            var query = _charContext.CreateNoTrackingQuery(_charContext.GameAccountEntries);
+            return query.Where(e => e.FamilyName.ToLower() == lowered).FirstOrDefault();
+        }
+
         public bool CanChangeFamilyName(uint id, string newFamilyName)
         {
             var hasOtherAccountWithName = _charContext.GameAccountEntries.Any(e => e.Id != id && e.FamilyName == newFamilyName);

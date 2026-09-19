@@ -85,6 +85,13 @@ namespace Rasa.Managers
             foreach (var equipableClass in equipableClassList)
                 LoadedEntityClasses[(EntityClasses)equipableClass.Id].EquipableClassInfo = new EquipableClassInfo((EquipmentData)equipableClass.SlotId);
 
+            // Load creature flags. Keyed by class, and a class that is not a creature simply
+            // has none - so this is a plain fold rather than a lookup per creature.
+            var creatureFlagList = unitOfWork.Creatures.GetClassFlags();
+            foreach (var flag in creatureFlagList)
+                if (LoadedEntityClasses.TryGetValue((EntityClasses)flag.ClassId, out var entityClass))
+                    entityClass.CreatureFlags.Add((CreatureFlag)flag.FlagId);
+
             // Load ItemTemplates
             ItemManager.Instance.LoadItemTemplates();
 
@@ -93,6 +100,7 @@ namespace Rasa.Managers
             Logger.WriteLog(LogType.Initialize, $"Loaded {equipableClassList.Count} EquipableClasses");
             Logger.WriteLog(LogType.Initialize, $"Loaded {armorClassList.Count} ArmorClasses");
             Logger.WriteLog(LogType.Initialize, $"Loaded {weaponClassList.Count} WeaponClasses");
+            Logger.WriteLog(LogType.Initialize, $"Loaded {creatureFlagList.Count} CreatureClassFlags");
         }
 
         public EntityClass GetClassInfo(EntityClasses entityClassId)
@@ -110,9 +118,23 @@ namespace Rasa.Managers
             return LoadedEntityClasses[armor.ItemTemplate.Class].ArmorClassInfo;
         }
 
+        /// <summary>
+        /// Which equipment slot an item is worn in, or null for no item, a class that was never
+        /// loaded, and a class that is not equipment at all - a consumable, an ammo stack, a
+        /// crafting part. The last is an ordinary answer rather than a fault: the equip handlers
+        /// ask precisely to find out, and every caller tests the result.
+        /// </summary>
         public EquipableClassInfo GetEquipableClassInfo(Item equipment)
         {
-            return LoadedEntityClasses[equipment.ItemTemplate.Class].EquipableClassInfo;
+            if (equipment?.ItemTemplate == null)
+                return null;
+
+            if (LoadedEntityClasses.TryGetValue(equipment.ItemTemplate.Class, out var entityClass))
+                return entityClass.EquipableClassInfo;
+
+            Logger.WriteLog(LogType.Error, $"entityClassId  {equipment.ItemTemplate.Class} is not present in LoadedEntityClasses");
+
+            return null;
         }
 
         public ItemClassInfo GetItemClassInfo(Item item)
@@ -120,9 +142,23 @@ namespace Rasa.Managers
             return LoadedEntityClasses[item.ItemTemplate.Class].ItemClassInfo;
         }
 
+        /// <summary>
+        /// The weapon class of an item, or null for no item and for a class that was never
+        /// loaded. Every live caller already tests the result for null, and used to get a
+        /// NullReferenceException or a KeyNotFoundException in place of that null - thrown on
+        /// the world loop, where it costs the tick rather than the shot.
+        /// </summary>
         public WeaponClassInfo GetWeaponClassInfo(Item weapon)
         {
-            return LoadedEntityClasses[weapon.ItemTemplate.Class].WeaponClassInfo;
+            if (weapon?.ItemTemplate == null)
+                return null;
+
+            if (LoadedEntityClasses.TryGetValue(weapon.ItemTemplate.Class, out var entityClass))
+                return entityClass.WeaponClassInfo;
+
+            Logger.WriteLog(LogType.Error, $"entityClassId  {weapon.ItemTemplate.Class} is not present in LoadedEntityClasses");
+
+            return null;
         }
     }
 }

@@ -3,6 +3,10 @@
     using Data;
     using Memory;
 
+    /// <summary>
+    /// No results, or a search the server could not run. The client shows the message and then
+    /// clears its result list, so this is also how an empty search is answered.
+    /// </summary>
     public class QueryFailedPacket : ServerPythonPacket
     {
         public override GameOpcode Opcode { get; } = GameOpcode.QueryFailed;

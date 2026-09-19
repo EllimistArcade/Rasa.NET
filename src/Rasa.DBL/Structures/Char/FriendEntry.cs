@@ -14,11 +14,11 @@ namespace Rasa.Structures.Char
 
         public FriendEntry(uint accountId, uint friendAccountId)
         {
-            accountId = AccountId;
-            friendAccountId = FriendAccountId;
+            AccountId = accountId;
+            FriendAccountId = friendAccountId;
         }
 
-        [Key]
+        // Composite key (account_id, friend_account_id) is configured in CharContext.
         [Column("account_id")]
         [Required]
         public uint AccountId { get; set; }

@@ -3,11 +3,17 @@
 namespace Rasa.Structures
 {
     using Data;
+
     public class Party
     {
         internal uint Id { get; set; }
+
+        /// <summary>Account id of the leader.</summary>
         internal uint PartyLeaderId { get; set; }
+
+        /// <summary>In join order, including members whose spot is being held while they are offline.</summary>
         internal List<PartyMember> Members { get; set; }
+
         internal PartyLootMethod LootMethod { get; set; }
         internal PartyLootThreshold LootThreshold { get; set; }
 
@@ -17,5 +23,7 @@ namespace Rasa.Structures
             PartyLeaderId = partyLeaderId;
             Members = partyMembers;
         }
+
+        internal PartyMember Find(uint userId) => Members.Find(m => m.UserId == userId);
     }
 }

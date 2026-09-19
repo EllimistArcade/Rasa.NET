@@ -3,6 +3,11 @@
     using Data;
     using Memory;
 
+    /// <summary>
+    /// The sender's own copy of a delivered whisper. Recv_WhisperAck(target, msg, isTargetAfk)
+    /// prints PM_CHAT_WHISPER, "To %(username)s: %(speech)s", and marks the name when the
+    /// target is AFK.
+    /// </summary>
     public class WhisperAckPacket : ServerPythonPacket
     {
         public override GameOpcode Opcode { get; } = GameOpcode.WhisperAck;

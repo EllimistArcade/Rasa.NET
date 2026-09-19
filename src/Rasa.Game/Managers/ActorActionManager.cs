@@ -42,6 +42,20 @@ namespace Rasa.Managers
             return true;
         }
 
+        /// <summary>
+        /// Forgets every queued action of an actor that is leaving the world. An action fires
+        /// after its wait time on the world loop, and looks its actor's client up when it does;
+        /// a player who disconnected in the meantime is no longer in the client list, and a
+        /// reload that found nobody used to take the whole server down with it. Every map is
+        /// swept rather than the actor's own, since which map the actor thinks it is on is not
+        /// always the one its actions were queued on.
+        /// </summary>
+        public void RemoveActor(Actor actor)
+        {
+            foreach (var mapChannel in MapChannelManager.Instance.MapChannelArray.Values)
+                mapChannel.PerformRecovery.RemoveAll(action => action.Actor == actor);
+        }
+
         public void DoWork(MapChannel mapChannel, long delta)
         {
             if (mapChannel.PerformRecovery.Count > 0)
@@ -66,10 +80,28 @@ namespace Rasa.Managers
 
                     if (action.WaitTime <= action.PassedTime)
                     {
-                        // perform action
-                        PerformRecovery(mapChannel, action);
-                        // remove action
+                        // Off the list first, then performed.
+                        //
+                        // A recovery that threw used to leave its action where it was: the list
+                        // is walked again on the very next tick, the same action is still first
+                        // in line and still due, so it throws again - and again - while the
+                        // exception escaping here abandons the rest of this map's worker and
+                        // every map iterated after it. One action that cannot be performed cost
+                        // the world its simulation from then until a restart.
+                        //
+                        // Nothing ever re-queues an action, so taking it off before performing it
+                        // loses nothing, and a recovery that fails now costs only itself.
                         mapChannel.PerformRecovery.Remove(action);
+
+                        try
+                        {
+                            PerformRecovery(mapChannel, action);
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.WriteLog(LogType.Error,
+                                $"Recovery {action.ActionId}/{action.ActionArgId} for entity {action.Actor?.EntityId} on map {mapChannel.MapInfo.MapContextId} threw and was dropped: {e}");
+                        }
                     }
                 }
             }
@@ -79,29 +111,36 @@ namespace Rasa.Managers
         {
             switch (action.ActionId)
             {
-                case ActionId.AaRecruitLightning:
-                    MissileManager.Instance.MissileLaunch(mapChannel, action, new Random().Next(233, 311 + 1));
-                    break;
-                case ActionId.AaRecruitSprint:
-                    GameEffectManager.Instance.AttachSprint(mapChannel, action.Actor, action.ActionArgId, 500);
+                case ActionId.Gesture:
+                    GestureManager.Instance.PerformRecovery(mapChannel, action);
                     break;
                 case ActionId.UseObject:
                     CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformRecoveryPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
                     switch (action.ActionArgId)
                     {
-                        case 1:
+                        case DynamicObjectManager.FootlockerUseArgId:
                             DynamicObjectManager.Instance.FootlockerRecovery(mapChannel, action);
                             break;
-                        case 6:
+                        case KraftwerksManager.UseObjectArgId:
+                            KraftwerksManager.Instance.UseRecovery(mapChannel, action);
+                            break;
+                        case DynamicObjectManager.LogosUseArgId:
                             DynamicObjectManager.Instance.LogosRecovery(mapChannel, action);
                             break;
-                        case 7:
+                        case DynamicObjectManager.ControlPointUseArgId:
                             DynamicObjectManager.Instance.CaptureControlPointRecovery(mapChannel, action);
                             break;
                         default:
                             Logger.WriteLog(LogType.Debug, $"PerformRecovery.UseObject: unsuported actionArgId {action.ActionArgId}");
                             break;
                     }
+                    break;
+                case ActionId.ToolHealingDisc:
+                case ActionId.ToolFieldRepair:
+                case ActionId.ToolArmorAugmentation:
+                case ActionId.ToolHarvest:
+                case ActionId.ToolCipher:
+                    ToolActionManager.Instance.PerformRecovery(mapChannel, action);
                     break;
                 case ActionId.WeaponAttack:
                     Logger.WriteLog(LogType.Debug, $"PerformRecovery {action.ActionArgId} {action.ActionId} {action.Args}");
@@ -122,7 +161,12 @@ namespace Rasa.Managers
                     action.Actor.WeaponReady = false;
                     break;
                 default:
-                    Logger.WriteLog(LogType.Error, $"PerformAction: unsuported {action.ActionId}");
+                    // Anything in the action tables is an ability, resolved from its data. The
+                    // lightning and sprint cases that used to sit here ran on hand-typed numbers.
+                    if (AbilityManager.Instance.TryGetAction(action.ActionId, out _))
+                        AbilityManager.Instance.PerformRecovery(mapChannel, action);
+                    else
+                        Logger.WriteLog(LogType.Error, $"PerformAction: unsuported {action.ActionId}");
                     break;
             };
         }

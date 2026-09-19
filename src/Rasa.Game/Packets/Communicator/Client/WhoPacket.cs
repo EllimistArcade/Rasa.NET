@@ -7,12 +7,17 @@
     {
         public override GameOpcode Opcode { get; } = GameOpcode.Who;
         
-        public string FamilyName { get; set; }
-        
+        /// <summary>
+        /// Free text from /who, /lookup or /whois - matched against character and family
+        /// names, not a family name specifically. Empty when the player typed the command
+        /// with no argument.
+        /// </summary>
+        public string SearchText { get; set; }
+
         public override void Read(PythonReader pr)
         {
             pr.ReadTuple();
-            FamilyName = pr.ReadUnicodeString();
+            SearchText = pr.ReadUnicodeString();
         }
     }
 }

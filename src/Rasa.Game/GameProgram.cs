@@ -17,6 +17,7 @@ namespace Rasa
     using Hosting;
     using Initialization;
     using Repositories.Char;
+    using Repositories.Char.Auction;
     using Repositories.Char.CensorWord;
     using Repositories.Char.Character;
     using Repositories.Char.CharacterAbilityDrawer;
@@ -30,12 +31,14 @@ namespace Rasa
     using Repositories.Char.CharacterTeleporter;
     using Repositories.Char.CharacterTitle;
     using Repositories.Char.Clan;
+    using Repositories.Char.ClanLockboxLog;
     using Repositories.Char.ClanInventory;
     using Repositories.Char.ClanMember;
     using Repositories.Char.Friend;
     using Repositories.Char.GameAccount;
     using Repositories.Char.Ignored;
     using Repositories.Char.Items;
+    using Repositories.Char.Petition;
     using Repositories.Char.UserOption;
     using Repositories.UnitOfWork;
     using Repositories.World;
@@ -107,21 +110,30 @@ namespace Rasa
             services.AddScoped<ICharacterTeleporterRepository, CharacterTeleporterRepository>();
             services.AddScoped<ICharacterTitleRepository, CharacterTitleRepository>();
             services.AddScoped<IClanRepository, ClanRepository>();
+            services.AddScoped<IClanLockboxLogRepository, ClanLockboxLogRepository>();
+            services.AddScoped<IAuctionRepository, AuctionRepository>();
             services.AddScoped<IClanInventoryRepository, ClanInventoryRepository>();
             services.AddScoped<IClanMemberRepository, ClanMemberRepository>();
             services.AddScoped<IFriendRepository, FriendRepository>();
             services.AddScoped<IIgnoredRepository, IgnoredRepository>();
             services.AddScoped<IItemRepository, ItemRepository>();
+            services.AddScoped<IPetitionRepository, PetitionRepository>();
             services.AddScoped<IUserOptionRepository, UserOptionRepository>();
 
             // World
             services.AddScoped<IWorldUnitOfWork, WorldUnitOfWork>();
+            services.AddScoped<IActionRepository, ActionRepository>();
             services.AddScoped<IEquipmentRepository, EquipmentRepository>();
             services.AddScoped<ICreatureRepository, CreatureRepository>();
             services.AddScoped<IEntityClassRepository, EntityClassRepository>();
             services.AddScoped<IFootlockerRepository, FootlockerRepository>();
             services.AddScoped<ILogosRepository, LogosRepository>();
             services.AddScoped<IMapInfoRepository, MapInfoRepository>();
+            services.AddScoped<IMapLinkRepository, MapLinkRepository>();
+            services.AddScoped<IKraftwerksRepository, KraftwerksRepository>();
+            services.AddScoped<IMapRegionRepository, MapRegionRepository>();
+            services.AddScoped<IMapMarkerRepository, MapMarkerRepository>();
+            services.AddScoped<IRecipeRepository, RecipeRepository>();
             services.AddScoped<INpcMissionRepository, NpcMissionRepository>();
             services.AddScoped<INpcMissionRewardRepository, NpcMissionRewardRepository>();
             services.AddScoped<INpcPackageRepository, NpcPackageRepository>();

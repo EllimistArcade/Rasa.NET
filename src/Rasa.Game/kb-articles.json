@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "title": "Getting started",
+    "keywords": [ "start", "new", "begin", "help" ],
+    "body": "Press F1 for the in-game help topics.\n\nUse /petition to reach a GM, or /bug to report a problem. Both open the Customer Services pages of the Help window, and both are answered by a person rather than by this article."
+  },
+  {
+    "id": 2,
+    "title": "Reporting a bug",
+    "keywords": [ "bug", "report", "broken", "crash" ],
+    "body": "Type /bug, or open Help and choose Report Bug.\n\nSay what you were doing, what you expected, and what happened instead. Include where you were standing: the report carries your map and position automatically, but the name of the place helps.\n\nOne report per problem, please - a report covering three things is three times as hard to act on."
+  },
+  {
+    "id": 3,
+    "title": "Petitions and what happens to them",
+    "keywords": [ "petition", "gm", "support", "ticket" ],
+    "body": "Type /petition, or open Help and choose Petition.\n\nA petition is filed against your account and character, with the map and position you were at when you sent it. A GM reads it and either answers you in game or resolves it with a note.\n\nThere is a short cooldown between petitions. If you need to add something to one you have already sent, send a second petition referring to the first."
+  }
+]

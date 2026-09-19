@@ -49,17 +49,46 @@ namespace Rasa.Packets.Game.Client
 
         public CreateCharacterResult Validate()
         {
-            if (CharacterName.Length < 3)
-                return CreateCharacterResult.NameTooShort;
+            // ReadUnicodeString answers a Python None with null; the length checks below used
+            // to dereference it and disconnect the client at the character screen.
+            if (CharacterName == null || FamilyName == null)
+                return CreateCharacterResult.InvalidEncoding;
 
-            if (CharacterName.Length > 20)
-                return CreateCharacterResult.NameTooLong;
+            var characterName = ValidateName(CharacterName);
 
-            if (!NameRegex.IsMatch(CharacterName))
-                return CreateCharacterResult.NameFormatInvalid;
+            if (characterName != CreateCharacterResult.Success)
+                return characterName;
+
+            // The family name was never checked: empty, over-long or any characters at all
+            // went into account.family_name as sent, and it is shown to every other player.
+            var familyName = ValidateName(FamilyName);
+
+            if (familyName != CreateCharacterResult.Success)
+                return familyName;
 
             if (Scale < MinHeight || Scale > MaxHeight)
                 return CreateCharacterResult.InvalidCharacterHeight;
+
+            if (RaceId < Race.Human || RaceId > Race.Thrax)
+                return CreateCharacterResult.CharacterCreationInvalidRace;
+
+            // Male or female; nothing the client offers sends anything else.
+            if (Gender > 1)
+                return CreateCharacterResult.InvalidEncoding;
+
+            return CreateCharacterResult.Success;
+        }
+
+        private static CreateCharacterResult ValidateName(string name)
+        {
+            if (name.Length < 3)
+                return CreateCharacterResult.NameTooShort;
+
+            if (name.Length > 20)
+                return CreateCharacterResult.NameTooLong;
+
+            if (!NameRegex.IsMatch(name))
+                return CreateCharacterResult.NameFormatInvalid;
 
             return CreateCharacterResult.Success;
         }

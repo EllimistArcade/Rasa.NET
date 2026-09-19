@@ -15,6 +15,7 @@ namespace Rasa.Structures.Char
 
     [Table(CharacterEntry.TableName)]
     [Index(nameof(CharacterEntry.AccountId), Name = "character_index_account")]
+    [Index(nameof(CharacterEntry.AccountId), nameof(CharacterEntry.Slot), IsUnique = true, Name = "character_index_account_slot")]
     public class CharacterEntry : IHasId
     {
         public const string TableName = "character";

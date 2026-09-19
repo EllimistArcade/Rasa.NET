@@ -9,12 +9,18 @@ namespace Rasa.Repositories.World
     {
         [SuppressMessage("ReSharper", "SuggestBaseTypeForParameter", Justification = "Required for DI")]
         public WorldUnitOfWork(WorldContext dbContext,
+            IActionRepository actionRepository,
             IEquipmentRepository equipmentRepository,
             ICreatureRepository creatureRepository,
             IEntityClassRepository entityClassRepository,
             IFootlockerRepository footlockerRepository,
             ILogosRepository logosRepository,
             IMapInfoRepository mapInfoRepository,
+            IMapLinkRepository mapLinkRepository,
+            IKraftwerksRepository kraftwerksRepository,
+            IMapRegionRepository mapRegionRepository,
+            IMapMarkerRepository mapMarkerRepository,
+            IRecipeRepository recipeRepository,
             INpcMissionRepository npcMissionRepository,
             INpcMissionRewardRepository npcMissionRewardRepository,
             INpcPackageRepository npcPackageRepository,
@@ -23,12 +29,18 @@ namespace Rasa.Repositories.World
             ITeleporterRepository teleporterRepository)
                 : base(dbContext)
         {
+            Actions = actionRepository;
             Equipment = equipmentRepository;
             Creatures = creatureRepository;
             EntityClasses = entityClassRepository;
             Footlockers = footlockerRepository;
             Logoses = logosRepository;
             MapInfos = mapInfoRepository;
+            MapLinks = mapLinkRepository;
+            Kraftwerks = kraftwerksRepository;
+            MapRegions = mapRegionRepository;
+            MapMarkers = mapMarkerRepository;
+            Recipes = recipeRepository;
             NpcMissions = npcMissionRepository;
             NpcMissionRewards = npcMissionRewardRepository;
             NpcPackages = npcPackageRepository;
@@ -37,12 +49,18 @@ namespace Rasa.Repositories.World
             Teleporters = teleporterRepository;
         }
 
+        public IActionRepository Actions { get; }
         public IEquipmentRepository Equipment { get; }
         public ICreatureRepository Creatures { get; }
         public IEntityClassRepository EntityClasses { get; }
         public IFootlockerRepository Footlockers { get; }
         public ILogosRepository Logoses { get; }
         public IMapInfoRepository MapInfos { get; }
+        public IMapLinkRepository MapLinks { get; }
+        public IKraftwerksRepository Kraftwerks { get; }
+        public IMapRegionRepository MapRegions { get; }
+        public IMapMarkerRepository MapMarkers { get; }
+        public IRecipeRepository Recipes { get; }
         public INpcMissionRepository NpcMissions { get; }
         public INpcMissionRewardRepository NpcMissionRewards { get; }
         public INpcPackageRepository NpcPackages { get; }

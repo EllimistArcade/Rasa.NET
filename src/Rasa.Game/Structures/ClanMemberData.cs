@@ -15,6 +15,11 @@
         public string Note { get; set; }
         public bool IsAfk { get; set; }
         public uint CharacterId { get; set; }
+
+        /// <summary>
+        /// Set only in the copy of a member's line that goes to that member's own client, where it is
+        /// their manifestation's entity id; 0 everywhere else. See <see cref="Write"/>.
+        /// </summary>
         public ulong CharacterEntityId { get; set; }
 
         public ClanMemberData()
@@ -57,7 +62,16 @@
         {
             pw.WriteTuple(11);
             pw.WriteUInt(UserId);
-            pw.WriteULong(CharacterEntityId);
+
+            // The client's characterId (shared/clandefs.py), which it files the member under and
+            // sends back to kick, promote, demote or hand leadership to them. In a player's own line
+            // it is their manifestation's entity id - client/clan.py compares it with
+            // GetCurrentManifestationId to find itself - and in everyone else's the character id.
+            //
+            // This wrote CharacterEntityId alone, which nothing sets for anyone but the reader, so
+            // every other member went out as 0: the client filed them all under the same key and
+            // kept whichever came last, and the clan window sent 0 for every action on them.
+            pw.WriteULong(CharacterEntityId != 0 ? CharacterEntityId : CharacterId);
             pw.WriteString(CharacterName);
             pw.WriteString(FamilyName);
             pw.WriteUInt(ClanId);

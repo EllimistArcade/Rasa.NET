@@ -13,9 +13,17 @@ namespace Rasa.Structures
         public byte Phase { get; set; }
         public SpawnPool SpawnPool { get; set; }
         public DropshipType DropshipType { get; set; }
+
+        /// <summary>Departure or arrival; meaningful for a teleporter dropship, see <see cref="DropshipRole"/>.</summary>
+        public DropshipRole Role { get; set; }
+
         internal Client Client { get; set; }
         internal Vector3 Destination { get; set; }
         internal uint DestinationMapId { get; set; }
+        internal double DestinationRotation { get; set; }
+
+        /// <summary>A departure whose destination pad is on the map it leaves from: no map change, a flight and a move.</summary>
+        internal bool StaysOnMap => Role == DropshipRole.Departure && DestinationMapId == MapContextId;
 
         public Dropship(Factions faction, DropshipType dropshipType, SpawnPool spawnPool = null)
         {
@@ -36,8 +44,14 @@ namespace Rasa.Structures
             Rotation = (new Random().Next() % 640) * 0.01f;
         }
         
-        public Dropship(Factions faction, DropshipType dropshipType, Client client, Vector3 destination = new Vector3(), uint destinationMapId = 0)
+        /// <summary>
+        /// A teleporter dropship for one player. A departure is built where the player stands,
+        /// with the pad they chose as its destination; an arrival is built where they have just
+        /// been put down, with no destination.
+        /// </summary>
+        public Dropship(Factions faction, DropshipType dropshipType, Client client, DropshipRole role, Vector3 destination = new Vector3(), uint destinationMapId = 0)
         {
+            Role = role;
             EntityId = EntityManager.Instance.GetEntityId;
             EntityClassId = faction == Factions.AFS ? Data.EntityClasses.UsableCrSpawnerHumDropshipV01 : Data.EntityClasses.UsableCrSpawnerBaneDropshipV01;
             Faction = faction;

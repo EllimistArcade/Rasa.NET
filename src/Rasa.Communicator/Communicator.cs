@@ -63,6 +63,7 @@ namespace Rasa.Communicator
 
             Socket = new LengthedSocket(CommunicatorHeaderLen);
             Socket.OnError += OnSocketError;
+            Socket.OnDrop += OnSocketDrop;
 
             switch (Type)
             {
@@ -91,6 +92,7 @@ namespace Rasa.Communicator
 
             Socket = socket;
             Socket.OnReceive += OnSocketReceive;
+            Socket.OnDrop += OnSocketDrop;
 
             Socket.ReceiveAsync();
         }
@@ -103,6 +105,15 @@ namespace Rasa.Communicator
             OnError?.Invoke();
 
             Logger.WriteLog(LogType.Communicator, $"Communicator(Type = {Type}) has encountered an error!");
+        }
+
+        /// <summary>
+        /// The socket gave up on this link - no buffers left, or a stream that stopped framing.
+        /// Same ending as any other socket error, and the reason is already logged.
+        /// </summary>
+        private void OnSocketDrop(string reason)
+        {
+            OnSocketError(null);
         }
 
         private void OnSocketAccept(LengthedSocket socket)

@@ -11,10 +11,17 @@
         public int[] SkillIds { get; set; }
         public int[] SkillLevels { get; set; }
 
+        /// <summary>More entries than there are skills is not a request the client makes.</summary>
+        public const int MaxEntries = 256;
+
         public override void Read(PythonReader pr)
         {
             pr.ReadTuple();
             ListLenght = pr.ReadList();
+
+            if (ListLenght > MaxEntries)
+                throw new System.IO.InvalidDataException($"LevelSkills with {ListLenght} entries.");
+
             SkillIds = new int[ListLenght];
             SkillLevels = new int[ListLenght];
             for (var i = 0; i < ListLenght; i++)

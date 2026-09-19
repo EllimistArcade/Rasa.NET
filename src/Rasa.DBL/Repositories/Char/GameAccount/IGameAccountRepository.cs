@@ -12,6 +12,15 @@ namespace Rasa.Repositories.Char.GameAccount
 
         GameAccountEntry Get(string name);
 
+        /// <summary>Like Get(uint) with characters included, but null when the account does not exist.</summary>
+        GameAccountEntry Find(uint id);
+
+        /// <summary>
+        /// Family name lookup for names a player typed: an exact match wins, otherwise the
+        /// first case-insensitive one. Null when nothing matches.
+        /// </summary>
+        GameAccountEntry FindByFamilyName(string familyName);
+
         bool CanChangeFamilyName(uint id, string newFamilyName);
 
         void UpdateFamilyName(uint id, string newFamilyName);

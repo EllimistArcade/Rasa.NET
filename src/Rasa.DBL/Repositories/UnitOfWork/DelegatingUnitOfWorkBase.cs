@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Rasa.Repositories.UnitOfWork
 {
@@ -16,6 +17,11 @@ namespace Rasa.Repositories.UnitOfWork
         public void Complete()
         {
             _parent.Complete();
+        }
+
+        public IDbContextTransaction BeginTransaction()
+        {
+            return _parent.BeginTransaction();
         }
 
         public void Reject()

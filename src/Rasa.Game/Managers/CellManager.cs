@@ -7,6 +7,7 @@ namespace Rasa.Managers
     using Game;
     using Models;
     using Packets;
+    using Packets.MapChannel.Server;
     using Repositories.UnitOfWork;
     using Structures;
 
@@ -89,6 +90,33 @@ namespace Rasa.Managers
             mapChannel.MapCellInfo.Cells[cellMatrix[2, 2]].MapTriggers.Add(trigger);
         }
 
+        //mapLink
+        public void AddToWorld(MapChannel mapChannel, MapLink link)
+        {
+            if (link == null)
+                return;
+
+            var cellPosX = (uint)(link.Position.X / CellSize + CellBias);
+            var cellPosZ = (uint)(link.Position.Z / CellSize + CellBias);
+
+            // The matrix is built so the link's neighbours exist for the players who will look
+            // at it from up to two cells away.
+            var cellMatrix = CreateCellMatrix(mapChannel, cellPosX, cellPosZ);
+
+            mapChannel.MapCellInfo.Cells[cellMatrix[2, 2]].MapLinks.Add(link);
+        }
+
+        public void RemoveFromWorld(MapChannel mapChannel, MapLink link)
+        {
+            if (link == null)
+                return;
+
+            var cellSeed = GetCellSeed(link.Position);
+
+            if (mapChannel.MapCellInfo.Cells.TryGetValue(cellSeed, out var cell))
+                cell.MapLinks.Remove(link);
+        }
+
         // Object
         public void AddToWorld(MapChannel mapChannel, DynamicObject dynamicObject)
         {
@@ -168,13 +196,27 @@ namespace Rasa.Managers
             if (creature == null)
                 return;
 
-            // destroy crature and notify players
+            // Tell the players who can see it. This used to go through DestroyPhysicalEntity
+            // per player, which also unregisters the entity - so a corpse nobody was near when
+            // it timed out was never unregistered at all, and stayed in the entity tables
+            // (with its id never freed) for the life of the process.
             foreach (var cellSeed in creature.Cells)
-                foreach (var player in mapChannel.MapCellInfo.Cells[cellSeed].ClientList)
-                    EntityManager.Instance.DestroyPhysicalEntity(player, creature.EntityId, EntityType.Creature);
+                if (mapChannel.MapCellInfo.Cells.TryGetValue(cellSeed, out var cell))
+                    foreach (var player in cell.ClientList)
+                        player.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(creature.EntityId));
+
+            // Its loot with it: a dispenser is a separate entity attached to the corpse, and
+            // it was left in the map's table forever, with its id.
+            LootDispenserManager.Instance.RemoveForCreature(mapChannel, creature);
+
+            // Unregister once, whoever was or was not watching.
+            EntityManager.Instance.UnregisterEntity(creature.EntityId);
+            EntityManager.Instance.UnregisterCreature(creature.EntityId);
+            EntityManager.Instance.FreeEntity(creature.EntityId);
 
             // remove creature from cell
-            mapChannel.MapCellInfo.Cells[creature.Cells[2, 2]].CreatureList.Remove(creature);
+            if (mapChannel.MapCellInfo.Cells.TryGetValue(creature.Cells[2, 2], out var homeCell))
+                homeCell.CreatureList.Remove(creature);
         }
 
         public void DoWork(MapChannel mapChannel)
@@ -253,23 +295,29 @@ namespace Rasa.Managers
 
         public void RemoveFromWorld(Client client)
         {
+            // Read after the null check, not before it.
+            if (client.Player == null)
+                return;
+
             var mapChannel = client.Player.MapChannel;
 
-            if (client.Player == null)
+            if (mapChannel == null)
                 return;
 
             //notify players
             var ListOfClients = new List<Client>();
 
-            foreach (var cellSeed in client.Player.Cells)
-                foreach (var player in mapChannel.MapCellInfo.Cells[cellSeed].ClientList)
-                    ListOfClients.Add(player);
+            foreach (var cell in CellsIn(mapChannel, client.Player.Cells))
+                ListOfClients.AddRange(cell.ClientList);
 
             ManifestationManager.Instance.CellDiscardClientToPlayers(client, ListOfClients);
             ManifestationManager.Instance.CellDiscardPlayersToClient(client, ListOfClients);
 
-            // remove player from cell
-            mapChannel.MapCellInfo.Cells[client.Player.Cells[2, 2]].ClientList.Remove(client);
+            // remove player from cell. A player who dropped during the loading screen never had
+            // a matrix built, so this asked for cell 0 and threw - which abandoned the rest of
+            // RemovePlayer on every such disconnect.
+            if (mapChannel.MapCellInfo.Cells.TryGetValue(client.Player.Cells[2, 2], out var homeCell))
+                homeCell.ClientList.Remove(client);
         }
 
         public void UpdateVisibility(MapChannel mapChannel)
@@ -291,25 +339,26 @@ namespace Rasa.Managers
 
                 GetCellMatrixDiff(client.Player.Cells, cellMatrix, out needUpdate, out needDelete);
 
-                // remove Player from old cell
-                mapChannel.MapCellInfo.Cells[client.Player.Cells[2, 2]].ClientList.Remove(client);
+                // remove Player from old cell. A cell this map has not got is one the player was
+                // never in, so there is nothing to take them out of.
+                if (mapChannel.MapCellInfo.Cells.TryGetValue(client.Player.Cells[2, 2], out var oldCell))
+                    oldCell.ClientList.Remove(client);
 
                 // remove players, creatures, object that left visibility range
                 var DiscardClients = new List<Client>();
                 var DiscardCreatures = new List<Creature>();
                 var DiscardObjects = new List<DynamicObject>();
 
+                // The cells being left come from the player's stored matrix, which is the one
+                // that can name cells of a map they are no longer on.
                 foreach (var cellSeed in needDelete)
                 {
-                    foreach (var player in client.Player.MapChannel.MapCellInfo.Cells[cellSeed].ClientList)
-                        DiscardClients.Add(player);
+                    if (!mapChannel.MapCellInfo.Cells.TryGetValue(cellSeed, out var leaving))
+                        continue;
 
-                    foreach (var creature in client.Player.MapChannel.MapCellInfo.Cells[cellSeed].CreatureList)
-                        DiscardCreatures.Add(creature);
-
-                    foreach (var dinamicObject in client.Player.MapChannel.MapCellInfo.Cells[cellSeed].DynamicObjectList)
-                        DiscardObjects.Add(dinamicObject);
-
+                    DiscardClients.AddRange(leaving.ClientList);
+                    DiscardCreatures.AddRange(leaving.CreatureList);
+                    DiscardObjects.AddRange(leaving.DynamicObjectList);
                 }
 
                 ManifestationManager.Instance.CellDiscardPlayersToClient(client, DiscardClients);
@@ -466,10 +515,33 @@ namespace Rasa.Managers
 
         internal void CellCallMethod(MapChannel mapChannel, Actor origin, PythonPacket packet)
         {
-            foreach (var cellSeed in origin.Cells)
-                foreach (var client in mapChannel.MapCellInfo.Cells[cellSeed].ClientList)
+            foreach (var cell in CellsIn(mapChannel, origin.Cells))
+                foreach (var client in cell.ClientList)
                     client.CallMethod(origin.EntityId, packet);
+        }
 
+        /// <summary>
+        /// The cells of <paramref name="mapChannel"/> that a stored cell matrix names, skipping
+        /// any this map does not have.
+        ///
+        /// A matrix belongs to the map it was built for, but an actor's outlives that: nothing
+        /// clears it when they leave a map, and it is five by five zeroes until they first enter
+        /// one. Indexing a map's cell table with one straight - which is what every broadcast
+        /// over a stored matrix used to do - throws KeyNotFoundException whenever the two do not
+        /// belong together. On the world loop that costs the rest of the tick, and for something
+        /// re-run every tick it costs every tick after it as well.
+        ///
+        /// A cell the matrix names that this map has not got is simply nobody to send to, so it
+        /// is skipped rather than being an error.
+        /// </summary>
+        internal static IEnumerable<MapCell> CellsIn(MapChannel mapChannel, uint[,] cellMatrix)
+        {
+            if (mapChannel == null || cellMatrix == null)
+                yield break;
+
+            foreach (var cellSeed in cellMatrix)
+                if (mapChannel.MapCellInfo.Cells.TryGetValue(cellSeed, out var cell))
+                    yield return cell;
         }
         #endregion
     }

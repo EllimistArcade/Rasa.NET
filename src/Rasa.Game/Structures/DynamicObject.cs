@@ -27,6 +27,13 @@ namespace Rasa.Structures
         public List<Client> TriggeredByPlayers = new List<Client>();
         public string Comment { get; set; }
 
+        /// <summary>
+        /// What keeps this shut, or null if nothing does. Only a locked object can be ciphered,
+        /// and only a lock carrying a cipher level can be ciphered at all - see
+        /// <see cref="UsableLock"/> for why nothing in the world has one yet.
+        /// </summary>
+        public UsableLock Lock { get; set; }
+
         public bool IsInWorld = false;
         public UseObjectState StateId = 0;
         public bool IsEnabled = true;

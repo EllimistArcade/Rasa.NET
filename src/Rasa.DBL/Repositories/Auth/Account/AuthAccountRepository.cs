@@ -88,6 +88,26 @@ namespace Rasa.Repositories.Auth.Account
             _dbContext.SaveChanges();
         }
 
+        public AuthAccountEntry SetLocked(string userName, bool locked)
+        {
+            if (string.IsNullOrEmpty(userName))
+                return null;
+
+            // Tracked query: the entry is modified and saved below. Sqlite compares with BINARY
+            // collation, so a lower()-to-lower() pass catches a differently-cased username.
+            var lowered = userName.ToLower();
+            var entry = _dbContext.AuthAccountEntries.FirstOrDefault(e => e.Username == userName)
+                        ?? _dbContext.AuthAccountEntries.FirstOrDefault(e => e.Username.ToLower() == lowered);
+
+            if (entry == null)
+                return null;
+
+            entry.Locked = locked;
+            _dbContext.SaveChanges();
+
+            return entry;
+        }
+
         private string CreateSalt()
         {
             var salt = _randomNumberService.CreateRandomBytes(20);

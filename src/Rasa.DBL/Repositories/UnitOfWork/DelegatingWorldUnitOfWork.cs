@@ -13,6 +13,8 @@ namespace Rasa.Repositories.UnitOfWork
             _parent = parent;
         }
 
+        public IActionRepository Actions => _parent.Actions;
+
         public IEquipmentRepository Equipment => _parent.Equipment;
 
         public ICreatureRepository Creatures => _parent.Creatures;
@@ -24,6 +26,11 @@ namespace Rasa.Repositories.UnitOfWork
         public ILogosRepository Logoses => _parent.Logoses;
 
         public IMapInfoRepository MapInfos => _parent.MapInfos;
+        public IMapLinkRepository MapLinks => _parent.MapLinks;
+        public IKraftwerksRepository Kraftwerks => _parent.Kraftwerks;
+        public IMapRegionRepository MapRegions => _parent.MapRegions;
+        public IMapMarkerRepository MapMarkers => _parent.MapMarkers;
+        public IRecipeRepository Recipes => _parent.Recipes;
 
         public INpcMissionRepository NpcMissions => _parent.NpcMissions;
 

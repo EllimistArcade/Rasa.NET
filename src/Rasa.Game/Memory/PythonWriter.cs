@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Text;
 
 namespace Rasa.Memory
 {
@@ -31,18 +32,49 @@ namespace Rasa.Memory
             Writer.Write((byte)PythonStruct.Zero);
         }
 
+        /// <summary>
+        /// A Python bool. False is the Zero struct, not None: the marshal has both, and they are
+        /// different values. Python treats either as falsy, so anything the client only tests the
+        /// truth of cannot tell them apart - but a value it hands to a native call can. The trade
+        /// window does exactly that (tradewindow.py __ShowYourAccept passes the received
+        /// confirmValue straight into SetVisible and Enable), and a None there is not a bool.
+        /// ReadBool accepts None, True and Zero, so this still round-trips.
+        /// </summary>
         public void WriteBool(bool value)
         {
             if (value)
                 WriteTrueStruct();
             else
-                WriteNoneStruct();
+                WriteZeroStruct();
         }
 
+        /// <summary>
+        /// 0x10..0x1C carry the value 0..12 in the type byte itself; 0x1D, 0x1E and 0x1F escape
+        /// to a one, two or four byte value.
+        ///
+        /// A negative number took the inline path, because it is not greater than 12. There is no
+        /// room for one there: 0x10 | -1 is 0xFF after the cast, a type byte for something that is
+        /// not an int at all, and the client's unmarshaller reads the rest of the packet as
+        /// whatever that happens to mean.
+        ///
+        /// Negatives now take the four byte form. The narrow escapes are left to positive values
+        /// on purpose: this reader takes 0x1D as an unsigned byte and 0x1E as a signed short, and
+        /// nothing in the client tells us which of those the game's own unmarshaller does. The
+        /// four byte form is the one both readings agree on, and three bytes is not worth a guess
+        /// about an encoding we cannot check.
+        /// </summary>
         public void WriteInt(int value)
         {
-            if (value > 0x0C)
+            if (value < 0)
             {
+                Writer.Write((byte) 0x1F);
+                Writer.Write(value);
+            }
+            else if (value > 0x0C)
+            {
+                // Kept to the signed byte range, so the value is the same whether the reader on
+                // the other side treats 0x1D as signed or unsigned. 128..255 fall through to the
+                // two byte form, where they are positive either way.
                 if ((sbyte) value == value)
                 {
                     Writer.Write((byte) 0x1D);
@@ -108,6 +140,17 @@ namespace Rasa.Memory
             }
         }
 
+        /// <summary>
+        /// The length prefix counts bytes, not characters - ReadUtf8StringOn on the other side
+        /// takes it straight to ReadBytes. string.Length counts UTF-16 code units, so every
+        /// character outside ASCII used to be announced short: an accented letter is one char and
+        /// two bytes, so the reader stopped one byte early and took the rest of that letter as the
+        /// next type byte. From there the whole packet is garbage, and an accented family name in
+        /// a squad roster is enough to do it.
+        ///
+        /// Encoding once and measuring the result also picks the right header: a string of 200
+        /// accented characters is 400 bytes and cannot be announced in the one byte form at all.
+        /// </summary>
         public void WriteString(string value)
         {
             if (value == null)
@@ -116,23 +159,7 @@ namespace Rasa.Memory
                 return;
             }
 
-            if (value.Length <= 0xFF)
-            {
-                Writer.Write((byte) 0x4D);
-                Writer.Write((byte) value.Length);
-            }
-            else if (value.Length <= 0xFFFF)
-            {
-                Writer.Write((byte) 0x4E);
-                Writer.Write((ushort) value.Length);
-            }
-            else
-            {
-                Writer.Write((byte) 0x4F);
-                Writer.Write(value.Length);
-            }
-
-            Writer.WriteUtf8String(value);
+            WriteStringBytes(value, 0x40);
         }
 
         public void WriteUnicodeString(string value)
@@ -143,23 +170,30 @@ namespace Rasa.Memory
                 return;
             }
 
-            if (value.Length <= 0xFF)
+            WriteStringBytes(value, 0x50);
+        }
+
+        private void WriteStringBytes(string value, byte type)
+        {
+            var bytes = Encoding.UTF8.GetBytes(value);
+
+            if (bytes.Length <= 0xFF)
             {
-                Writer.Write((byte) 0x5D);
-                Writer.Write((byte) value.Length);
+                Writer.Write((byte) (type | 0x0D));
+                Writer.Write((byte) bytes.Length);
             }
-            else if (value.Length <= 0xFFFF)
+            else if (bytes.Length <= 0xFFFF)
             {
-                Writer.Write((byte) 0x5E);
-                Writer.Write((ushort) value.Length);
+                Writer.Write((byte) (type | 0x0E));
+                Writer.Write((ushort) bytes.Length);
             }
             else
             {
-                Writer.Write((byte) 0x5F);
-                Writer.Write(value.Length);
+                Writer.Write((byte) (type | 0x0F));
+                Writer.Write(bytes.Length);
             }
 
-            Writer.WriteUtf8String(value);
+            Writer.Write(bytes);
         }
 
         public void WriteDictionary(int elementCount)

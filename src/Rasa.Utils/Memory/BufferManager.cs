@@ -32,15 +32,30 @@ namespace Rasa.Memory
                     BufferDatas.Push(new BufferData(i));
         }
 
+        /// <summary>
+        /// Takes a buffer from the pool, or returns null when there are none left.
+        /// </summary>
+        /// <remarks>
+        /// Running out is a load problem, not a programming error. This used to throw, and the
+        /// throw happened on whichever socket thread happened to ask, where nothing caught it and
+        /// it took the process down - so one client arriving at a bad moment could end everyone
+        /// else's session. The caller drops the one connection it was about to serve instead,
+        /// which hands back that connection's buffers and lets the server carry on.
+        /// </remarks>
         public static BufferData RequestBuffer()
         {
-            if (BufferDatas.Count == 0)
-                throw new OutOfMemoryException("BufferManager has ran out of usable buffer space!");
-
             BufferData data;
 
+            // The emptiness check belongs inside the lock with the pop it guards: sends are now
+            // issued from several threads at once, so two callers seeing one buffer left would
+            // both go on to pop and the second would throw out of Stack itself.
             lock (BufferDatas)
+            {
+                if (BufferDatas.Count == 0)
+                    return null;
+
                 data = BufferDatas.Pop();
+            }
 
             data.Reset();
             data.Free = false;
@@ -50,11 +65,19 @@ namespace Rasa.Memory
 
         public static void FreeBuffer(BufferData data)
         {
-            data.Reset();
-            data.Free = true;
-
             lock (BufferDatas)
+            {
+                // A buffer freed twice would sit in the pool twice and be handed to two
+                // connections at once, each writing over the other's packet. Whatever freed it
+                // twice is the bug; quietly sharing the buffer is the damage.
+                if (data.Free)
+                    return;
+
+                data.Reset();
+                data.Free = true;
+
                 BufferDatas.Push(data);
+            }
         }
     }
 }

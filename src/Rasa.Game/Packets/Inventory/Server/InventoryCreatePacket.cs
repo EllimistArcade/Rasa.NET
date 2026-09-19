@@ -27,11 +27,15 @@ namespace Rasa.Packets.Inventory.Server
             pw.WriteList(ListOfItems.Count);
             for (var i = 0; i < ListOfItems.Count; i++)
             {
+                // (entityId, slot): client/inventory.py CreateInventory reads each entry as
+                // "for (entityId, slot) in itemList", which is how InventoryReload writes them.
+                // This wrote (slot, entityId). CreateInventory resets the inventory first, throwing
+                // away the items the InventoryAddItems just before it had placed, then filed each slot
+                // number as an entity sitting in the slot an entity id named - so the clan lockbox
+                // showed nothing after a login or map change until a lockbox change reloaded it.
                 pw.WriteTuple(2);
-                pw.WriteInt(i);
                 pw.WriteULong(ListOfItems[i]);
-
-                // ToDo: it seems that we need to send data about item, not only itemEntityId
+                pw.WriteInt(i);
             }
 
             pw.WriteInt(InventorySize);

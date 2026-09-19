@@ -5,13 +5,20 @@
     using Packets;
     using Packets.MapChannel.Client;
     using Packets.Clan.Client;
+    using Packets.Crafting.Client;
     using Packets.Communicator.Both;
     using Packets.Communicator.Client;
     using Packets.Inventory.Client;
+    using Packets.LookingForGroup.Client;
     using Packets.LootDispenser.Client;
+    using Packets.Manifestation.Client;
+    using Packets.Minion.Client;
     using Packets.Party.Both;
     using Packets.Party.Client;
+    using Packets.Petition.Client;
+    using Packets.Summon.Client;
     using Packets.Social.Client;
+    using Packets.Trade.Client;
 
     public partial class ClientPacketHandler
     {
@@ -32,6 +39,12 @@
             ManifestationManager.Instance.AllocateAttributePoints(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.SelectNewCharacterClass)]
+        private void SelectNewCharacterClass(SelectNewCharacterClassPacket packet)
+        {
+            ManifestationManager.Instance.SelectNewCharacterClass(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.AssignNPCMission)]
         private void AssignNPCMission(AssignNPCMissionPacket packet)
         {
@@ -47,7 +60,7 @@
         [PacketHandler(GameOpcode.CancelLogoutRequest)]
         private void CancelLogoutRequest(CancelLogoutRequestPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo CancelLogoutRequest");  // gues nothing to do here
+            MapChannelManager.Instance.CancelLogoutRequest(Client);
         }
 
         [PacketHandler(GameOpcode.ChangeShowHelmet)]
@@ -116,6 +129,68 @@
             MapChannelManager.Instance.MapLoaded(Client);
         }
         
+        // The minion commands. All nine are addressed to the player's own actor by
+        // SendCallActorMethod, which the router does not care about - it dispatches on opcode -
+        // and none of them names the minion, because the client does not know which entity that
+        // is. MinionManager resolves it.
+        //
+        // The client hides every one of these unless the MinionCommands server flag is set, so a
+        // server that has not turned the feature on never sees them.
+
+        [PacketHandler(GameOpcode.MinionAssistMe)]
+        private void MinionAssistMe(MinionAssistMePacket packet)
+        {
+            MinionManager.Instance.AssistMe(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.MinionAssistTarget)]
+        private void MinionAssistTarget(MinionAssistTargetPacket packet)
+        {
+            MinionManager.Instance.AssistTarget(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.MinionCommand)]
+        private void MinionCommand(MinionCommandPacket packet)
+        {
+            MinionManager.Instance.Command(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.MinionFollowMe)]
+        private void MinionFollowMe(MinionFollowMePacket packet)
+        {
+            MinionManager.Instance.FollowMe(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.MinionFollowTarget)]
+        private void MinionFollowTarget(MinionFollowTargetPacket packet)
+        {
+            MinionManager.Instance.FollowTarget(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.MinionGo)]
+        private void MinionGo(MinionGoPacket packet)
+        {
+            MinionManager.Instance.Go(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.MinionStay)]
+        private void MinionStay(MinionStayPacket packet)
+        {
+            MinionManager.Instance.Stay(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.MinionTarget)]
+        private void MinionTarget(MinionTargetPacket packet)
+        {
+            MinionManager.Instance.Target(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.MinionTargetMe)]
+        private void MinionTargetMe(MinionTargetMePacket packet)
+        {
+            MinionManager.Instance.TargetMe(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.Ping)]
         private void Ping(PingPacket packet)
         {
@@ -182,10 +257,16 @@
             ManifestationManager.Instance.RequestCustomization(Client, packet);
         }
         
+        [PacketHandler(GameOpcode.RequestDetachGameEffect)]
+        private void RequestDetachGameEffect(RequestDetachGameEffectPacket packet)
+        {
+            GestureManager.Instance.RequestDetachGameEffect(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestGesture)]
         private void RequestGesture(RequestGesturePacket packet)
         {
-            // ToDo
+            GestureManager.Instance.RequestGesture(Client, packet);
         }
 
         /*[PacketHandler(GameOpcode.RequestGestureWeapon)]
@@ -236,6 +317,12 @@
             AuctionHouseManager.Instance.RequestQueryAuctions(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.RequestUseCloneCredit)]
+        private void RequestUseCloneCredit(RequestUseCloneCreditPacket packet)
+        {
+            ManifestationManager.Instance.RequestUseCloneCredit(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestSetAbilitySlot)]
         private void RequestSetAbilitySlot(RequestSetAbilitySlotPacket packet)
         {
@@ -272,6 +359,56 @@
             DynamicObjectManager.Instance.RequestUseObjectPacket(Client, packet);
         }
 
+        // Crafting, all made at a Kraftwerks station; see KraftwerksManager.
+
+        [PacketHandler(GameOpcode.RequestCraftItemNew)]
+        private void RequestCraftItemNew(RequestCraftItemNewPacket packet)
+        {
+            KraftwerksManager.Instance.RequestCraftItemNew(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestCraftItem)]
+        private void RequestCraftItem(RequestCraftItemPacket packet)
+        {
+            KraftwerksManager.Instance.RequestCraftItem(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestSalvageItem)]
+        private void RequestSalvageItem(RequestSalvageItemPacket packet)
+        {
+            KraftwerksManager.Instance.RequestSalvageItem(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestExtractModule)]
+        private void RequestExtractModule(RequestExtractModulePacket packet)
+        {
+            KraftwerksManager.Instance.RequestExtractModule(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestIntegrateItem)]
+        private void RequestIntegrateItem(RequestIntegrateItemPacket packet)
+        {
+            KraftwerksManager.Instance.RequestIntegrateItem(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestUpgradeItem)]
+        private void RequestUpgradeItem(RequestUpgradeItemPacket packet)
+        {
+            KraftwerksManager.Instance.RequestUpgradeItem(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestRetrieveFinishedCraftItem)]
+        private void RequestRetrieveFinishedCraftItem(RequestRetrieveFinishedCraftItemPacket packet)
+        {
+            KraftwerksManager.Instance.RequestRetrieveFinishedCraftItem(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestRetrieveAllFinishedItems)]
+        private void RequestRetrieveAllFinishedItems(RequestRetrieveAllFinishedItemsPacket packet)
+        {
+            KraftwerksManager.Instance.RequestRetrieveAllFinishedItems(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestVendorBuyback)]
         private void RequestVendorBuyback(RequestVendorBuybackPacket packet)
         {
@@ -284,6 +421,12 @@
             NpcManager.Instance.RequestVendorPurchase(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.RequestRepair)]
+        private void RequestRepair(RequestRepairPacket packet)
+        {
+            NpcManager.Instance.RequestRepair(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestVendorRepair)]
         private void RequestVendorRepair(RequestVendorRepairPacket packet)
         {
@@ -294,6 +437,12 @@
         private void RequestVendorSale(RequestVendorSalePacket packet)
         {
             NpcManager.Instance.RequestVendorSale(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestToolAction)]
+        private void RequestToolAction(RequestToolActionPacket packet)
+        {
+            ToolActionManager.Instance.RequestToolAction(Client, packet);
         }
 
         [PacketHandler(GameOpcode.RequestVisualCombatMode)]
@@ -347,7 +496,7 @@
         [PacketHandler(GameOpcode.SetAutoLootThreshold)]
         private void SetAutoLootThreshold(SetAutoLootThresholdPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: SetAutoLootThreshold");
+            LootDispenserManager.Instance.SetAutoLootThreshold(Client, packet);
         }
 
         [PacketHandler(GameOpcode.SetDesiredCrouchState)]
@@ -445,7 +594,7 @@
         [PacketHandler(GameOpcode.KickPlayerFromClanByName)]
         private void KickPlayerFromClanByName(KickPlayerFromClanByNamePacket packet)
         {
-            Logger.WriteLog(LogType.Debug, $"KickPlayerFromClanByNamePacket => ToDo");
+            ClanManager.Instance.KickPlayerFromClanByName(Client, packet);
         }
 
         [PacketHandler(GameOpcode.LeaveClan)]
@@ -472,19 +621,19 @@
         [PacketHandler(GameOpcode.ChangeClanName)]
         private void ChangeClanName(ChangeClanNamePacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ChangeClanNamePacket");
+            ClanManager.Instance.ChangeClanName(Client, packet);
         }
 
         [PacketHandler(GameOpcode.ChangeFirstName)]
         private void ChangeFirstName(ChangeFirstNamePacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ChangeFirstNamePacket");
+            CharacterManager.Instance.ChangeFirstName(Client, packet);
         }
 
         [PacketHandler(GameOpcode.ChangeLastName)]
         private void ChangeLastName(ChangeLastNamePacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ChangeLastNamePacket");
+            CharacterManager.Instance.ChangeLastName(Client, packet);
         }
 
         [PacketHandler(GameOpcode.ChannelChat)]
@@ -502,13 +651,13 @@
         [PacketHandler(GameOpcode.ClanLeadersChat)]
         private void ClanLeadersChat(ClanLeadersChatPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ClanLeadersChatPacket");
+            CommunicatorManager.Instance.ClanLeadersChat(Client, packet);
         }
 
         [PacketHandler(GameOpcode.Emote)]
         private void Emote(EmotePacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: EmotePacket");
+            CommunicatorManager.Instance.Emote(Client, packet);
         }
 
         [PacketHandler(GameOpcode.FeudChallengeResponse)]
@@ -520,7 +669,7 @@
         [PacketHandler(GameOpcode.GotoMob)]
         private void GotoMob(GotoMobPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: GotoMobPacket");
+            CommunicatorManager.Instance.GotoMob(Client, packet);
         }
 
         [PacketHandler(GameOpcode.GuildChat)]
@@ -568,7 +717,7 @@
         [PacketHandler(GameOpcode.Shout)]
         private void Shout(ShoutPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ShoutPacket");
+            CommunicatorManager.Instance.Shout(Client, packet.TextMsg);
         }
 
         [PacketHandler(GameOpcode.SurrenderClanFeud)]
@@ -586,7 +735,7 @@
         [PacketHandler(GameOpcode.ToggleAfk)]
         private void ToggleAfk(ToggleAfkPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ToggleAfkPacket");
+            ManifestationManager.Instance.ToggleAfk(Client);
         }
 
         [PacketHandler(GameOpcode.Whisper)]
@@ -598,7 +747,6 @@
         [PacketHandler(GameOpcode.Who)]
         private void Who(WhoPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: WhoPacket");
             CommunicatorManager.Instance.Who(Client, packet);
         }
 
@@ -662,7 +810,11 @@
             InventoryManager.Instance.PersonalInventory_MoveItem(Client, packet);
         }
 
-        // ToDo: PurchaseClanLockboxTab(tabId)
+        [PacketHandler(GameOpcode.PurchaseClanLockboxTab)]
+        private void PurchaseClanLockboxTab(PurchaseClanLockboxTabPacket packet)
+        {
+            InventoryManager.Instance.PurchaseClanLockboxTab(Client, packet);
+        }
 
         [PacketHandler(GameOpcode.PurchaseLockboxTab)]
         private void PurchaseLockboxTab(PurchaseLockboxTabPacket packet)
@@ -700,7 +852,17 @@
             InventoryManager.Instance.RequestTakeItemFromHomeInventory(Client, packet);
         }
 
-        // ToDo: RequestTakeItemFromInboxInventory(auctioneerId, entityId, destSlot)
+        [PacketHandler(GameOpcode.RequestUnstick)]
+        private void RequestUnstick(RequestUnstickPacket packet)
+        {
+            ManifestationManager.Instance.RequestUnstick(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestTakeItemFromInboxInventory)]
+        private void RequestTakeItemFromInboxInventory(RequestTakeItemFromInboxInventoryPacket packet)
+        {
+            InventoryManager.Instance.RequestTakeItemFromInboxInventory(Client, packet);
+        }
 
         [PacketHandler(GameOpcode.TransferCreditToLockbox)]
         private void TransferCreditToLockbox(TransferCreditToLockboxPacket packet)
@@ -728,6 +890,40 @@
         {
             LootDispenserManager.Instance.RequestLootAllFromCorpse(Client, packet);
         }
+
+        [PacketHandler(GameOpcode.RequestLootItemFromCorpse)]
+        private void RequestLootItemFromCorpse(RequestLootItemFromCorpsePacket packet)
+        {
+            LootDispenserManager.Instance.RequestLootItemFromCorpse(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.CancelCorpseLooting)]
+        private void CancelCorpseLooting(CancelCorpseLootingPacket packet)
+        {
+            LootDispenserManager.Instance.CancelCorpseLooting(Client, packet);
+        }
+        #endregion
+
+        #region LookingForGroup
+
+        [PacketHandler(GameOpcode.RemoveLookingForGroupAd)]
+        private void RemoveLookingForGroupAd(RemoveLookingForGroupAdPacket packet)
+        {
+            LookingForGroupManager.Instance.RemoveLookingForGroupAd(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestCreateLookingForGroupAd)]
+        private void RequestCreateLookingForGroupAd(RequestCreateLookingForGroupAdPacket packet)
+        {
+            LookingForGroupManager.Instance.RequestCreateLookingForGroupAd(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestLookingForGroupSearch)]
+        private void RequestLookingForGroupSearch(RequestLookingForGroupSearchPacket packet)
+        {
+            LookingForGroupManager.Instance.RequestLookingForGroupSearch(Client, packet);
+        }
+
         #endregion
 
         #region Party
@@ -735,7 +931,7 @@
         [PacketHandler(GameOpcode.AcceptPartyInvitesChanged)]
         private void AcceptPartyInvitesChanged(AcceptPartyInvitesChangedPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, $"ToDo: AcceptPartyInvitesChangedPacket");
+            PartyManager.Instance.AcceptPartyInvitesChanged(Client, packet);
         }
 
         [PacketHandler(GameOpcode.CancelSquadInviteRequest)]
@@ -801,12 +997,48 @@
         [PacketHandler(GameOpcode.MakeUserPartyLeader)]
         private void MakeUserPartyLeader(MakeUserPartyLeaderPacket packet)
         {
+            PartyManager.Instance.MakeUserPartyLeader(Client, packet);
         }
 
         [PacketHandler(GameOpcode.MakeUserPartyLeaderById)]
         private void MakeUserPartyLeaderById(MakeUserPartyLeaderByIdPacket packet)
         {
+            PartyManager.Instance.MakeUserPartyLeaderById(Client, packet);
         }
+
+        #region Summon
+
+        [PacketHandler(GameOpcode.InviteFriendToJoin)]
+        private void InviteFriendToJoin(InviteFriendToJoinPacket packet)
+        {
+            SummonManager.Instance.InviteFriendToJoin(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestInvitationToJoin)]
+        private void RequestInvitationToJoin(RequestInvitationToJoinPacket packet)
+        {
+            SummonManager.Instance.RequestInvitationToJoin(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RespondToJoinFriend)]
+        private void RespondToJoinFriend(RespondToJoinFriendPacket packet)
+        {
+            SummonManager.Instance.RespondToJoinFriend(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RespondToAddAndJoinFriend)]
+        private void RespondToAddAndJoinFriend(RespondToAddAndJoinFriendPacket packet)
+        {
+            SummonManager.Instance.RespondToAddAndJoinFriend(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RespondToRequestToJoin)]
+        private void RespondToRequestToJoin(RespondToRequestToJoinPacket packet)
+        {
+            SummonManager.Instance.RespondToRequestToJoin(Client, packet);
+        }
+
+        #endregion
 
         [PacketHandler(GameOpcode.PartyInvitationResponse)]
         private void PartyInvitationResponse(PartyInvitationResponsePacket packet)
@@ -817,21 +1049,134 @@
         [PacketHandler(GameOpcode.PartyJoinRequestResponse)]
         private void PartyJoinRequestResponse(PartyJoinRequestResponsePacket packet)
         {
+            PartyManager.Instance.PartyJoinRequestResponse(Client, packet);
         }
 
         [PacketHandler(GameOpcode.SendJoinRequestToPartyByName)]
         private void SendJoinRequestToPartyByName(SendJoinRequestToPartyByNamePacket packet)
         {
+            PartyManager.Instance.SendJoinRequestToPartyByName(Client, packet);
         }
 
         [PacketHandler(GameOpcode.SendJoinRequestToSquadLeader)]
         private void SendJoinRequestToSquadLeader(SendJoinRequestToSquadLeaderPacket packet)
         {
+            PartyManager.Instance.SendJoinRequestToSquadLeader(Client, packet);
+        }
+
+        #endregion
+
+        #region Trade
+
+        [PacketHandler(GameOpcode.RequestAcceptTradeRequest)]
+        private void RequestAcceptTradeRequest(RequestAcceptTradeRequestPacket packet)
+        {
+            TradeManager.Instance.RequestAcceptTradeRequest(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestAddItemToTrade)]
+        private void RequestAddItemToTrade(RequestAddItemToTradePacket packet)
+        {
+            TradeManager.Instance.RequestAddItemToTrade(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestCancelTrade)]
+        private void RequestCancelTrade(RequestCancelTradePacket packet)
+        {
+            TradeManager.Instance.RequestCancelTrade(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestChangeEnergyUnitAmount)]
+        private void RequestChangeEnergyUnitAmount(RequestChangeEnergyUnitAmountPacket packet)
+        {
+            TradeManager.Instance.RequestChangeEnergyUnitAmount(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestConfirmTrade)]
+        private void RequestConfirmTrade(RequestConfirmTradePacket packet)
+        {
+            TradeManager.Instance.RequestConfirmTrade(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestRemoveItemFromTrade)]
+        private void RequestRemoveItemFromTrade(RequestRemoveItemFromTradePacket packet)
+        {
+            TradeManager.Instance.RequestRemoveItemFromTrade(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestTrade)]
+        private void RequestTrade(RequestTradePacket packet)
+        {
+            TradeManager.Instance.RequestTrade(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RequestUnconfirmTrade)]
+        private void RequestUnconfirmTrade(RequestUnconfirmTradePacket packet)
+        {
+            TradeManager.Instance.RequestUnconfirmTrade(Client, packet);
+        }
+
+        #endregion
+
+        #region Petition
+
+        [PacketHandler(GameOpcode.CreateBugReport)]
+        private void CreateBugReport(CreateBugReportPacket packet)
+        {
+            PetitionManager.Instance.CreateBugReport(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.CreateHelpRequest)]
+        private void CreateHelpRequest(CreateHelpRequestPacket packet)
+        {
+            PetitionManager.Instance.CreateHelpRequest(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.CancelPetition)]
+        private void CancelPetition(CancelPetitionPacket packet)
+        {
+            PetitionManager.Instance.CancelPetition(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RetrievePetition)]
+        private void RetrievePetition(RetrievePetitionPacket packet)
+        {
+            PetitionManager.Instance.RetrievePetition(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.AddToPetition)]
+        private void AddToPetition(AddToPetitionPacket packet)
+        {
+            PetitionManager.Instance.AddToPetition(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.SearchKB)]
+        private void SearchKB(SearchKBPacket packet)
+        {
+            PetitionManager.Instance.SearchKB(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RetrieveKBArticle)]
+        private void RetrieveKBArticle(RetrieveKBArticlePacket packet)
+        {
+            PetitionManager.Instance.RetrieveKBArticle(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.SearchPetitions)]
+        private void SearchPetitions(SearchPetitionsPacket packet)
+        {
+            PetitionManager.Instance.SearchPetitions(Client, packet);
         }
 
         #endregion
 
         #region Social
+
+        [PacketHandler(GameOpcode.AddFriend)]
+        private void AddFriend(AddFriendPacket packet)
+        {
+            SocialManager.Instance.AddFriend(Client, packet);
+        }
 
         [PacketHandler(GameOpcode.AddFriendByName)]
         private void AddFriendByName(AddFriendByNamePacket packet)
@@ -857,10 +1202,22 @@
             SocialManager.Instance.RemoveFriend(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.RemoveFriendByName)]
+        private void RemoveFriendByName(RemoveFriendByNamePacket packet)
+        {
+            SocialManager.Instance.RemoveFriendByName(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RemoveIgnore)]
         private void RemoveIgnore(RemoveIgnorePacket packet)
         {
             SocialManager.Instance.RemoveIgnore(Client, packet);
+        }
+
+        [PacketHandler(GameOpcode.RemoveIgnoreByName)]
+        private void RemoveIgnoreByName(RemoveIgnoreByNamePacket packet)
+        {
+            SocialManager.Instance.RemoveIgnoreByName(Client, packet);
         }
         #endregion
     }

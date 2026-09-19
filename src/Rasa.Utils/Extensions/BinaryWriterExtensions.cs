@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text;
 
 namespace Rasa.Extensions
@@ -13,7 +14,11 @@ namespace Rasa.Extensions
                 return;
             }
 
-            writer.Write(text.Length);
+            // The reader takes this count to ReadBytes, so it has to be the encoded length.
+            // string.Length is UTF-16 code units, which is short for anything outside ASCII -
+            // this carries account names, emails and passwords between Auth and Game, and one
+            // accented character used to desync that link for the rest of the packet.
+            writer.Write(Encoding.UTF8.GetByteCount(text));
             writer.WriteUtf8StringOn(text);
         }
 
@@ -22,17 +27,26 @@ namespace Rasa.Extensions
             writer.WriteUtf8StringOn(text);
         }
 
+        /// <summary>
+        /// Writes the text as UTF-8. A <paramref name="length"/> is a fixed field width in bytes,
+        /// zero padded; -1 means "however long it turns out to be".
+        /// </summary>
         public static void WriteUtf8StringOn(this BinaryWriter writer, string text, int length = -1)
         {
+            var bytes = Encoding.UTF8.GetBytes(text);
+
             if (length == -1)
-                length = text.Length;
+                length = bytes.Length;
 
-            writer.Write(Encoding.UTF8.GetBytes(text));
+            // Padding used to be counted in characters against a field measured in bytes, so a
+            // non-ASCII value both overran the field and was padded too far.
+            if (bytes.Length > length)
+                throw new ArgumentException(
+                    $"'{text}' is {bytes.Length} bytes and does not fit a {length} byte field.", nameof(text));
 
-            if (length <= text.Length)
-                return;
+            writer.Write(bytes);
 
-            for (var i = 0; i < length - text.Length; ++i)
+            for (var i = bytes.Length; i < length; ++i)
                 writer.Write((byte) 0);
         }
 

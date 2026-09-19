@@ -1,10 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Rasa.Managers
 {
     using Data;
     using Game;
+    using Packets.Communicator.Server;
     using Packets.LootDispenser.Server;
+    using Packets.MapChannel.Client;
+    using Packets.MapChannel.Server;
     using Rasa.Packets.ClientMethod.Server;
     using Rasa.Packets.Game.Server;
     using Rasa.Packets.LootDispenser.Client;
@@ -79,6 +83,40 @@ namespace Rasa.Managers
             client.CallMethod(SysEntity.ClientMethodId, new GotLootPacket(loot));
         }
 
+        /// <summary>How long a corpse with nothing left on it stays in the world.</summary>
+        public const long EmptyCorpseMs = 20000;
+
+        /// <summary>How long a corpse that still has something on it stays.</summary>
+        public const long LootableCorpseMs = 120000;
+
+        /// <summary>How long a corpse someone has the window open on stays, whatever else is true.</summary>
+        public const long BeingLootedCorpseMs = 300000;
+
+        /// <summary>
+        /// Whether a dead creature can leave the world yet.
+        ///
+        /// The rule was twenty seconds from the moment its health hit zero, full stop - no regard
+        /// for loot still on it or for a player standing over it with the window open. Twenty
+        /// seconds is about one more fight, so a corpse routinely vanished between the kill and
+        /// the looting, and the window went with it.
+        /// </summary>
+        internal bool MayDespawn(MapChannel mapChannel, Creature creature, long deadTime)
+        {
+            if (mapChannel == null || creature.CorpseLootEntityId == 0
+                || !mapChannel.LootDispensers.TryGetValue(creature.CorpseLootEntityId, out var loot))
+                return deadTime >= EmptyCorpseMs;
+
+            // Someone has it open. Their window closing clears this, and the cap is there so a
+            // player who walks away with it open cannot hold a corpse for ever.
+            if (loot.CurrentLooter != 0)
+                return deadTime >= BeingLootedCorpseMs;
+
+            if (loot.HasLoot)
+                return deadTime >= LootableCorpseMs;
+
+            return deadTime >= EmptyCorpseMs;
+        }
+
         internal LootDispenser Create(Client killer, Creature creature)
         {
             var mapChannel = killer.Player.MapChannel;
@@ -91,17 +129,42 @@ namespace Rasa.Managers
 
             mapChannel.LootDispensers.Add(loot.EntityId, loot);
 
+            // So the despawn check can find it without walking every dispenser on the map on
+            // every creature on every tick.
+            creature.CorpseLootEntityId = loot.EntityId;
+
             return loot;
         }
 
+        /// <summary>
+        /// One Random, not one per call. Three `new Random()` in a row seeded from the clock gave
+        /// three values from the same tick, so the quality tracked the item count.
+        /// </summary>
+        private static readonly Random Roll = new Random();
+
         private LootDispenser CreateLoot(Client killer, LootDispenser loot)
         {
-            var giveLoot = new Random().Next(0, 2);
-            if (giveLoot > 0)
-                loot.LootItems.Add(new LootItem(28, 3147, (uint)giveLoot*3, killer.Player.EntityId, 0));
+            int giveLoot;
 
-            loot.Credits = new Random().Next(1, 10);
-            loot.LootQuality = (LootQuality)new Random().Next(1, 7);
+            lock (Roll)
+            {
+                giveLoot = Roll.Next(0, 2);
+                loot.Credits = Roll.Next(1, 10);
+                loot.LootQuality = (LootQuality)Roll.Next(1, 7);
+            }
+
+            if (giveLoot > 0)
+            {
+                // A real item, made now rather than at the moment it is taken. The corpse window
+                // resolves every row to an entity and silently drops the ones it cannot
+                // (corpselootwindow: GetEntity(itemId), continue on None), so a row without an
+                // item behind it is an empty window. It also means what is taken is what was
+                // rolled, rather than a second item built from the same template.
+                var item = ItemManager.Instance.CreateFromTemplateId(28, (uint)giveLoot * 3);
+
+                if (item != null)
+                    loot.LootItems.Add(new LootItem(item, killer.Player.EntityId, 0));
+            }
 
             return loot;
         }
@@ -118,37 +181,278 @@ namespace Rasa.Managers
             CanLootItems(client, loot);
         }
 
-        internal void RequestLootAllFromCorpse(Client client, RequestLootAllFromCorpsePacket packet)
+        /// <summary>
+        /// Drops every dispenser attached to a creature that is leaving the world: out of the
+        /// map's table, off the owner's screen if they are still here, and its entity id freed.
+        /// </summary>
+        internal void RemoveForCreature(MapChannel mapChannel, Creature creature)
         {
-            var loot = client.Player.MapChannel.LootDispensers[packet.EntityId];
+            List<ulong> attached = null;
 
-            if (loot.Owner != client.Player.EntityId)
+            foreach (var entry in mapChannel.LootDispensers)
+                if (entry.Value.AttachedTo == creature.EntityId)
+                    (attached ??= new List<ulong>()).Add(entry.Key);
+
+            if (attached == null)
                 return;
 
-            if (loot.FullyLooted)
-                return;
+            foreach (var lootEntityId in attached)
+            {
+                var loot = mapChannel.LootDispensers[lootEntityId];
 
-            client.CallMethod(loot.EntityId, new ActorGotLootPacket(loot));
-            client.CallMethod(loot.EntityId, new TakenInfoPacket(client.Player.EntityId, loot.LootItems));
+                mapChannel.LootDispensers.Remove(lootEntityId);
 
-            loot.IsLootable = false;
-            CanLootItems(client, loot);
-            GotLoot(client, loot);
+                var owner = mapChannel.ClientList.Find(c => c.Player != null && c.Player.EntityId == loot.Owner);
 
-            if (loot.LootItems.Count > 0)
+                owner?.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(lootEntityId));
+
+                // The rolled items are real entities now, made when the loot was rolled rather
+                // than when it is taken, so a corpse that goes unlooted takes them with it.
+                // Without this they would sit in RegisteredEntities for the life of the process
+                // and their ids would never come back.
                 foreach (var lootItem in loot.LootItems)
                 {
-                    var item = ItemManager.Instance.CreateFromTemplateId(lootItem.ItemTemplateId, lootItem.ItemQuantity);
-                    InventoryManager.Instance.AddItemToInventory(client, item);
+                    if (lootItem.Taken || lootItem.Item == null)
+                        continue;
+
+                    owner?.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(lootItem.EntityId));
+
+                    // The row's id is the item's, and CreateItem registered it in
+                    // RegisteredEntities as well as Items. Freeing it while it was still
+                    // registered handed the id to the next entity created, and registering
+                    // that one threw "An item with the same key has already been added" out
+                    // of the map worker - from the next loot roll, or the next spawn.
+                    EntityManager.Instance.UnregisterEntity(lootItem.EntityId);
+                    EntityManager.Instance.UnregisterItem(lootItem.EntityId);
+                    EntityManager.Instance.FreeEntity(lootItem.EntityId);
                 }
 
-            if (loot.Credits > 0)
-                CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Credits, loot.Credits);
+                EntityManager.Instance.FreeEntity(lootEntityId);
+            }
         }
 
+        /// <summary>
+        /// The dispenser this packet names, if it is on the player's map and they may loot it.
+        /// Every one of these came in indexed straight off the dictionary, so an id for a corpse
+        /// on another map - or one that has already been cleaned up - was a KeyNotFoundException
+        /// out of the handler, which closes the connection.
+        /// </summary>
+        private static LootDispenser FindLootable(Client client, ulong entityId)
+        {
+            var dispensers = client?.Player?.MapChannel?.LootDispensers;
+
+            if (dispensers == null || !dispensers.TryGetValue(entityId, out var loot))
+                return null;
+
+            // Loot belongs to whoever earned it. The client only offers a corpse it was told
+            // about, but the packet can name any id.
+            if (loot.Owner != client.Player.EntityId)
+                return null;
+
+            return loot;
+        }
+
+        /// <summary>
+        /// The client has used a corpse and wants the window. Answering with LootCorpse is what
+        /// opens it; while this was a stub, nothing ever did, which is why the two per-item
+        /// methods had never been reachable.
+        /// </summary>
         internal void RequestCorpseLooting(Client client, RequestCorpseLootingPacket packet)
         {
-            // ToDo
+            var loot = FindLootable(client, packet.EntityId);
+
+            if (loot == null || loot.FullyLooted)
+                return;
+
+            var remaining = loot.Remaining();
+
+            // The window draws a row only for an item it can resolve to an entity, so the items
+            // have to exist on the client before it opens. Re-sending one it already has is
+            // harmless: clientmethod.Recv_CreatePhysicalEntity treats a repeat of the same class
+            // as an update.
+            foreach (var lootItem in remaining)
+                if (lootItem.Item != null)
+                    ItemManager.Instance.SendItemDataToClient(client, lootItem.Item, false);
+
+            loot.CurrentLooter = client.Player.EntityId;
+
+            LootInfo(client, loot);
+            CanLootItems(client, loot);
+
+            client.CallMethod(loot.EntityId, new LootCorpsePacket(client.Player.EntityId, remaining));
         }
+
+        /// <summary>
+        /// The window has closed. The client sends this on any close, not only a deliberate
+        /// cancel, and expects no answer - so this only lets go of the corpse.
+        /// </summary>
+        internal void CancelCorpseLooting(Client client, CancelCorpseLootingPacket packet)
+        {
+            var dispensers = client?.Player?.MapChannel?.LootDispensers;
+
+            if (dispensers == null || !dispensers.TryGetValue(packet.EntityId, out var loot))
+                return;
+
+            // Only the player who has it open may close it.
+            if (loot.CurrentLooter == client.Player.EntityId)
+                loot.CurrentLooter = 0;
+        }
+
+        /// <summary>Takes one item off a corpse.</summary>
+        internal void RequestLootItemFromCorpse(Client client, RequestLootItemFromCorpsePacket packet)
+        {
+            var loot = FindLootable(client, packet.EntityId);
+
+            if (loot == null || loot.FullyLooted)
+                return;
+
+            var lootItem = loot.Find(packet.ItemId);
+
+            // Already gone, or never on this corpse. Say so rather than ignoring it: the row is
+            // still on the asking player's screen until TakenInfo tells them otherwise.
+            if (lootItem == null || lootItem.Taken)
+            {
+                client.CallMethod(loot.EntityId, new TakenInfoPacket(client.Player.EntityId, Taken(loot)));
+                return;
+            }
+
+            if (!TakeItem(client, loot, lootItem, packet.DestSlot))
+                return;
+
+            Settle(client, loot);
+        }
+
+        /// <summary>
+        /// The client sends this two ways and they are not the same request.
+        ///
+        /// The Loot All button sends autoLootOnly false: take everything.
+        ///
+        /// Walking near a corpse sends it with autoLootOnly **true**, from lootdispenser's
+        /// _UpdateTick, which runs every frame while a dispenser is attached and fires the
+        /// moment the player is inside the corpse's auto-loot radius. Nobody clicked anything.
+        /// That one means "take what I said I would pick up automatically", which is items at or
+        /// below the player's auto-loot threshold - Junk by default, since that is what the
+        /// client's own option defaults to.
+        ///
+        /// Treating them alike is why looting felt random: walking over a body silently emptied
+        /// it, so the window either never opened or opened onto a corpse that had already been
+        /// cleared out from under it.
+        /// </summary>
+        internal void RequestLootAllFromCorpse(Client client, RequestLootAllFromCorpsePacket packet)
+        {
+            var loot = FindLootable(client, packet.EntityId);
+
+            if (loot == null || loot.FullyLooted)
+                return;
+
+            var threshold = client.Player?.AutoLootThreshold ?? LootQuality.Junk;
+
+            // Through the same path as taking one at a time, so both keep the same books. It
+            // used to build a second item from each template and add that, leaving the rolled
+            // items behind and nothing marked as taken - and since FullyLooted was never set
+            // either, the same corpse paid out again on every request.
+            foreach (var lootItem in loot.Remaining())
+            {
+                if (packet.AutoLootOnly && !WithinThreshold(lootItem, threshold))
+                    continue;
+
+                TakeItem(client, loot, lootItem, null);
+            }
+
+            // Credits come along either way: they have no quality to weigh against a threshold,
+            // and leaving a handful behind would keep an otherwise empty corpse standing.
+            Settle(client, loot);
+        }
+
+        /// <summary>Whether walking past a corpse should pick this item up unasked.</summary>
+        private static bool WithinThreshold(LootItem lootItem, LootQuality threshold)
+        {
+            var quality = (LootQuality)(lootItem.Item?.ItemTemplate?.QualityId ?? 0);
+
+            // Rank, not the raw id: the ids are the client's and Junk is the largest of them.
+            return quality.Rank() <= threshold.Rank();
+        }
+
+        /// <summary>
+        /// The best quality this player's client will pick up by walking over a corpse. Sent at
+        /// login and whenever the option changes; it was a logged ToDo, so every player was
+        /// treated as if they had asked for everything.
+        /// </summary>
+        internal void SetAutoLootThreshold(Client client, SetAutoLootThresholdPacket packet)
+        {
+            if (client.Player == null)
+                return;
+
+            var threshold = (LootQuality)packet.LootLevel;
+
+            // The client only ever sends one of its five option values, but the packet is the
+            // client's word: an unknown one would rank as int.MaxValue and auto-loot everything.
+            if (!Enum.IsDefined(typeof(LootQuality), threshold) || threshold == LootQuality.Mission)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry?.Id} sent auto-loot threshold {packet.LootLevel}, which is not a quality.");
+                return;
+            }
+
+            client.Player.AutoLootThreshold = threshold;
+        }
+
+        /// <summary>
+        /// Moves one rolled item into the player's inventory. False if it would not fit, in which
+        /// case the item stays on the corpse rather than disappearing between the two.
+        /// </summary>
+        private bool TakeItem(Client client, LootDispenser loot, LootItem lootItem, uint? destSlot)
+        {
+            if (lootItem.Taken || lootItem.Item == null)
+                return false;
+
+            var placed = destSlot.HasValue
+                ? InventoryManager.Instance.AddItemToInventory(client, lootItem.Item, destSlot.Value)
+                : InventoryManager.Instance.AddItemToInventory(client, lootItem.Item);
+
+            if (placed == null)
+            {
+                client.CallMethod(SysEntity.CommunicatorId,
+                    new DisplayClientMessagePacket(PlayerMessage.PmInventoryFull, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                return false;
+            }
+
+            lootItem.Taken = true;
+
+            client.CallMethod(loot.EntityId, new ActorGotLootPacket(loot));
+            client.CallMethod(loot.EntityId, new TakenInfoPacket(client.Player.EntityId, Taken(loot)));
+
+            return true;
+        }
+
+        /// <summary>Pays out the credits and closes the corpse once nothing is left on it.</summary>
+        private void Settle(Client client, LootDispenser loot)
+        {
+            // Items only. The credits are paid out *by* this method, so asking whether the corpse
+            // still holds anything - which counts them - would be circular: the credits would
+            // keep the corpse open, and nothing would ever pay them.
+            if (loot.LootItems.Exists(i => !i.Taken))
+            {
+                // Still something on it: refresh what can be taken and leave it open.
+                CanLootItems(client, loot);
+                return;
+            }
+
+            if (loot.Credits > 0)
+            {
+                CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Credits, loot.Credits);
+                loot.Credits = 0;
+            }
+
+            loot.FullyLooted = true;
+            loot.IsLootable = false;
+            loot.CurrentLooter = 0;
+
+            CanLootItems(client, loot);
+            GotLoot(client, loot);
+        }
+
+        /// <summary>The rows TakenInfo should mark; the client keys off the ones it is sent.</summary>
+        private static List<LootItem> Taken(LootDispenser loot) => loot.LootItems.FindAll(i => i.Taken);
     }
 }

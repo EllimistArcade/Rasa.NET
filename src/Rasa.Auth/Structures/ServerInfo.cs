@@ -26,6 +26,11 @@ namespace Rasa.Structures
             Status = 1;
         }
 
+        public ServerInfo Copy()
+        {
+            return (ServerInfo)MemberwiseClone();
+        }
+
         public void Clear()
         {
             Ip = IPAddress.None;

@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices.ComTypes;
@@ -21,6 +23,78 @@ namespace Rasa.Queue
         public Server Server { get; }
         public LengthedSocket Socket { get; }
         public int QueuedClients => _queuedClients.Count;
+
+        /// <summary>Queue connections handed off to the world port that are still open.</summary>
+        public int RedirectingClients
+        {
+            get
+            {
+                lock (Clients)
+                    return Clients.Count(c => c.State == QueueState.Redirecting);
+            }
+        }
+
+        /// <summary>
+        /// How long a handed-off client keeps its slot while nobody logs in at the world port.
+        /// The client connects there straight away, before it loads anything, so this is
+        /// generous; a redirect session on the world side lasts the same minute.
+        /// </summary>
+        private static readonly TimeSpan RedirectTimeout = TimeSpan.FromSeconds(60);
+
+        /// <summary>
+        /// The account has logged in at the world port: its queue connection, if still open,
+        /// stops counting as a slot.
+        /// </summary>
+        public void Arrived(uint userId)
+        {
+            lock (Clients)
+                foreach (var client in Clients)
+                    if (client.UserId == userId && client.State == QueueState.Redirecting)
+                        client.MarkArrived();
+        }
+
+        /// <summary>
+        /// Closes handed-off connections whose account never turned up at the world port, so a
+        /// client that took the handoff and went away does not hold a slot for as long as it
+        /// keeps the socket open.
+        /// </summary>
+        private void ExpireRedirects()
+        {
+            List<QueueClient> expired;
+            var cutoff = DateTime.Now - RedirectTimeout;
+
+            lock (Clients)
+                expired = Clients.Where(c => c.State == QueueState.Redirecting && c.RedirectTime < cutoff).ToList();
+
+            // QueueClient.Close removes the client from Clients, so close outside the lock.
+            foreach (var client in expired)
+            {
+                Logger.WriteLog(LogType.Network, $"Queue client for account {client.UserId} was handed off {RedirectTimeout.TotalSeconds:F0} s ago and never logged in; closing it.");
+                client.Close();
+            }
+        }
+
+        /// <summary>Closes every queue connection belonging to an account.</summary>
+        public void Disconnect(uint userId)
+        {
+            List<QueueClient> matches;
+
+            lock (Clients)
+                matches = Clients.Where(c => c.UserId == userId && c.State != QueueState.Disconnected).ToList();
+
+            // QueueClient.Close removes the client from Clients, so close outside the lock.
+            foreach (var client in matches)
+                client.Close();
+        }
+
+        /// <summary>Accounts with a live, authenticated queue connection.</summary>
+        public HashSet<uint> ConnectedUserIds()
+        {
+            lock (Clients)
+                return new HashSet<uint>(Clients
+                    .Where(c => c.State == QueueState.Authenticated || c.State == QueueState.InQueue || c.State == QueueState.Redirecting)
+                    .Select(c => c.UserId));
+        }
         public RedirectDelegate OnRedirect { get; set; }
         public QueueConfig Config => Server.Config.QueueConfig;
 
@@ -125,6 +199,8 @@ namespace Rasa.Queue
 
         public void Update(int freeSlots)
         {
+            ExpireRedirects();
+
             if (QueuedClients == 0)
                 return;
 

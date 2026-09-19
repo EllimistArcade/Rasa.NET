@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Rasa.Repositories.UnitOfWork
 {
@@ -17,6 +18,11 @@ namespace Rasa.Repositories.UnitOfWork
             {
                 _dbContext.SaveChanges();
             }
+        }
+
+        public IDbContextTransaction BeginTransaction()
+        {
+            return _dbContext.Database.BeginTransaction();
         }
 
         public void Reject()

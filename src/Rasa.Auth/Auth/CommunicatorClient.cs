@@ -39,21 +39,38 @@ namespace Rasa.Auth
             Socket.ReceiveAsync();
         }
 
+        /// <summary>
+        /// Socket completion thread, carrying messages from a game server. A malformed body or a
+        /// throwing handler must not end the auth process, and it must not silently cost the link
+        /// to that game server either - which is what happened when the exception was left to the
+        /// socket layer's catch-all, whose log line names the socket operation rather than the
+        /// message that could not be handled.
+        /// </summary>
         private void OnReceive(BufferData data)
         {
-            var opcode = (CommOpcode) data.Buffer[data.BaseOffset + data.Offset++];
+            CommOpcode? opcode = null;
 
-            var packetType = _router.GetPacketType(opcode);
-            if (packetType == null)
-                return;
+            try
+            {
+                opcode = (CommOpcode) data.Buffer[data.BaseOffset + data.Offset++];
 
-            var packet = Activator.CreateInstance(packetType) as IOpcodedPacket<CommOpcode>;
-            if (packet == null)
-                return;
+                var packetType = _router.GetPacketType(opcode.Value);
+                if (packetType == null)
+                    return;
 
-            packet.Read(data.GetReader());
+                var packet = Activator.CreateInstance(packetType) as IOpcodedPacket<CommOpcode>;
+                if (packet == null)
+                    return;
 
-            _router.RoutePacket(this, packet);
+                packet.Read(data.GetReader());
+
+                _router.RoutePacket(this, packet);
+            }
+            catch (Exception e)
+            {
+                var what = opcode.HasValue ? $"a {opcode.Value} message" : "a message whose opcode could not be read";
+                Logger.WriteLog(LogType.Error, $"Error handling {what} from game server {ServerId}: {e}");
+            }
         }
 
         private void OnError(SocketAsyncEventArgs args)
@@ -85,8 +102,19 @@ namespace Rasa.Auth
         [PacketHandler(CommOpcode.LoginRequest)]
         private void MsgLoginRequest(LoginRequestPacket packet)
         {
+            // Set before the slot is claimed, not after. DisconnectCommunicator gives the slot
+            // back only when ServerId is non-zero, and this used to be assigned four statements
+            // and two sends later - so a game server whose socket died in that window left its
+            // entry in GameServers forever, pointing at a dead connection. It could then never
+            // reconnect (the slot reads as in use) and the auth server went on asking that dead
+            // socket for its player counts once a second until it was restarted.
+            ServerId = packet.ServerId;
+            PublicAddress = packet.PublicAddress;
+
             if (!Server.AuthenticateGameServer(packet, this))
             {
+                ServerId = 0;
+
                 Socket.Send(new LoginResponsePacket
                 {
                     Response = CommLoginReason.Failure
@@ -98,9 +126,6 @@ namespace Rasa.Auth
             {
                 Response = CommLoginReason.Success
             });
-
-            ServerId = packet.ServerId;
-            PublicAddress = packet.PublicAddress;
 
             RequestServerInfo();
         }

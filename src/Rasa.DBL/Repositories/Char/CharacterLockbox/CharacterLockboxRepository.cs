@@ -28,23 +28,35 @@ namespace Rasa.Repositories.Char.CharacterLockbox
             return lockboxInfo;
         }
 
+        private CharacterLockboxEntry GetWritable(uint accountId)
+        {
+            var entry = _charContext.CreateTrackingQuery(_charContext.CharacterLockboxEntries).FirstOrDefault(e => e.AccountId == accountId);
+
+            if (entry == null)
+                Logger.WriteLog(LogType.Error, $"Account {accountId} has no lockbox row; update skipped.");
+
+            return entry;
+        }
+
         public void UpdateCredits(uint accountId, int credits)
         {
-            var query = _charContext.CreateNoTrackingQuery(_charContext.CharacterLockboxEntries);
-            var entry = query.FirstOrDefault(e => e.AccountId == accountId);
+            var entry = GetWritable(accountId);
+
+            if (entry == null)
+                return;
 
             entry.Credits = credits;
-            _charContext.CharacterLockboxEntries.Update(entry);
             _charContext.SaveChanges();
         }
 
         public void UpdatePurashedTabs(uint accountId, int purashedTabs)
         {
-            var query = _charContext.CreateNoTrackingQuery(_charContext.CharacterLockboxEntries);
-            var entry = query.FirstOrDefault(e => e.AccountId == accountId);
+            var entry = GetWritable(accountId);
+
+            if (entry == null)
+                return;
 
             entry.PurashedTabs = purashedTabs;
-            _charContext.CharacterLockboxEntries.Update(entry);
             _charContext.SaveChanges();
         }
     }

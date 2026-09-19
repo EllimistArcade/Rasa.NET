@@ -15,12 +15,38 @@ namespace Rasa.Structures
         public ulong ActorId { get; set; }
         public uint PartyId { get; set; }
 
+        /// <summary>
+        /// The real item this row stands for, created when the loot was rolled.
+        ///
+        /// The corpse window will not draw a row it cannot resolve to an entity - corpselootwindow
+        /// does GetEntity(itemId) and skips the row when that comes back None - so an id with no
+        /// item behind it is an empty window rather than a missing line. Holding the item also
+        /// means looting hands over the thing that was rolled, instead of making a second one from
+        /// the template and hoping they match.
+        /// </summary>
+        public Item Item { get; set; }
+
+        /// <summary>Whether someone has already taken this one.</summary>
+        public bool Taken { get; set; }
+
         public LootItem(uint itemTemplateId, uint itemClassId, uint itemQuantity, ulong actorId, uint partyId)
         {
             EntityId = EntityManager.Instance.GetEntityId;
             ItemTemplateId = itemTemplateId;
             ItemClassId = itemClassId;
             ItemQuantity = itemQuantity;
+            ActorId = actorId;
+            PartyId = partyId;
+        }
+
+        /// <summary>A row standing for an item that already exists; its entity id is the item's.</summary>
+        public LootItem(Item item, ulong actorId, uint partyId)
+        {
+            Item = item;
+            EntityId = item.EntityId;
+            ItemTemplateId = item.ItemTemplate.ItemTemplateId;
+            ItemClassId = (uint)item.ItemTemplate.Class;
+            ItemQuantity = item.StackSize;
             ActorId = actorId;
             PartyId = partyId;
         }

@@ -46,20 +46,134 @@ namespace Rasa.Structures
         public List<CharacterTeleporterEntry> GainedWaypoints = new();
         public bool IsAFK { get; set; }
 
+        /// <summary>
+        /// The best quality the client will pick up by walking over a corpse. Set by
+        /// SetAutoLootThreshold, which the client sends at login and whenever the option changes.
+        /// Junk is the client's own default (gameui: GetOptionString(..., 'Junk')), so an account
+        /// that has never touched the option auto-loots junk and nothing else.
+        /// </summary>
+        public LootQuality AutoLootThreshold { get; set; } = LootQuality.Junk;
+
+        /// <summary>
+        /// Environment.TickCount64 at the player's last movement or action. Monotonic, so a
+        /// wall-clock change on the server cannot make everyone idle at once.
+        /// </summary>
+        public long LastActivityTick { get; set; } = Environment.TickCount64;
+
+        /// <summary>Whether PlayerInactiveWarning has gone out for the current idle stretch.</summary>
+        public bool InactiveWarningSent { get; set; }
+
+        /// <summary>
+        /// Metres of movement the player has in hand, and when it was last topped up. A Move is
+        /// paid for out of this; it refills at the player's own speed, so a client cannot move
+        /// faster over any stretch of time than the character could have walked it.
+        /// </summary>
+        public double MoveBudget { get; set; }
+
+        /// <summary>Environment.TickCount64 when MoveBudget was last brought up to date.</summary>
+        public long MoveBudgetTick { get; set; } = Environment.TickCount64;
+
+        /// <summary>
+        /// Environment.TickCount64 of the last movement correction sent to this client, so a
+        /// client that keeps sending refused positions is snapped back and logged at a bounded
+        /// rate rather than once per packet.
+        /// </summary>
+        public long LastMoveCorrectionTick { get; set; }
+
+        /// <summary>How many Moves have been refused since the last one was reported.</summary>
+        public int RefusedMoves { get; set; }
+
+        /// <summary>
+        /// Puts the player somewhere because the server says so - a map change, a dropship, a
+        /// waypoint, a summon, /stuck, a GM command - rather than because the client claimed it.
+        ///
+        /// Always this and never a bare Position assignment, so that the movement check starts
+        /// again from where the server put them. Assigning Position alone leaves the check
+        /// measuring the client's next Move from wherever the player used to be, which reads as
+        /// one enormous step and refuses a move nobody made.
+        /// </summary>
+        public void PlaceAt(Vector3 position)
+        {
+            Position = position;
+            MoveBudget = 0;
+            MoveBudgetTick = Environment.TickCount64;
+        }
+
+        /// <summary>
+        /// Always false: this server has no trial accounts. The single source for every packet
+        /// that reports the flag (IsTrialAccount, WhoAck), so the client never shows the trial
+        /// tag and no trial-only restriction - whisper, party or clan invites, trial chat
+        /// channels - ever applies.
+        /// </summary>
+        public bool IsTrialAccount => false;
+
         // Inventory
         public Inventory Inventory { get; set; } = new Inventory();
 
         // Party
         internal uint PartyId { get; set; }
-        internal ulong PartyInviterId { get; set; }
+        /// <summary>AcceptPartyInvitesChanged; invitations to a player who turned them off are refused.</summary>
+        internal bool AcceptPartyInvites { get; set; } = true;
 
         // Social
         internal List<uint> Friends = new();
         internal List<uint> IgnoredPlayers = new();
         public MapChannel MapChannel { get; set; }
         public bool Disconected { get; set; }
+        /// <summary>Set by RequestLogout, cleared by CancelLogoutRequest.</summary>
         public bool LogoutActive { get; set; }
+
+        /// <summary>
+        /// Whether this player is in a fight, as the server counts it: they have dealt or taken
+        /// damage within the last <see cref="Data.CombatRegen.CombatTimeoutMs"/>.
+        ///
+        /// Distinct from <c>InCombatMode</c> on Actor, which is the visual weapon stance the
+        /// client asks for with RequestVisualCombatMode and which says nothing about whether
+        /// anyone is actually fighting.
+        /// </summary>
+        public bool InCombat { get; set; }
+
+        /// <summary>Environment.TickCount64 at which combat lapses, refreshed by every hit.</summary>
+        public long CombatExpiresAt { get; set; }
+
+        /// <summary>Seconds of regeneration ticked so far (ActorManager.Regenerate); the in-combat period is a multiple of them.</summary>
+        public long RegenSeconds { get; set; }
+
+        /// <summary>
+        /// Environment.TickCount64 at which this player's next shot is due, whichever weapon fires
+        /// it. On the player rather than the weapon so that switching drawer slots between shots
+        /// does not give each weapon a clock of its own. Read through ManifestationManager's shot
+        /// clock, which lets a shot come a little before or after this and still charges the next
+        /// one from it.
+        /// </summary>
+        public long NextShotAt { get; set; }
+
+        /// <summary>
+        /// Environment.TickCount64 at which this player's next melee (alternate) attack is due.
+        /// Its own clock: a swing does not wait on the gun's refire, nor the gun on the swing, as
+        /// the client times them separately - each from its own action's recovery and reuse.
+        /// </summary>
+        public long NextMeleeAt { get; set; }
+
+        /// <summary>Environment.TickCount64 when the pending logout was requested.</summary>
+        public long LogoutRequestedTick { get; set; }
         public bool RemoveFromMap { get; set; }
+
+        /// <summary>
+        /// Ids of the map links whose trigger radius the player is standing in. A link fires
+        /// when its id joins this set, so a player who arrives inside the reciprocal gate is not
+        /// bounced straight back: MapLinkManager seeds it on arrival and clears it on leaving.
+        /// </summary>
+        internal HashSet<uint> InsideMapLinks = new();
+
+        /// <summary>
+        /// The region ids the client was last told the player is in (UpdateRegions), sorted, so
+        /// RegionManager only sends again when the set changes. Null until the first send on a map.
+        /// </summary>
+        internal List<uint> RegionIds;
+
+        /// <summary>Set by .setregion: the list above was forced and the worker leaves it alone until released or the map changes.</summary>
+        internal bool RegionsHeld;
         // chat
         public int JoinedChannels { get; set; }
         public int[] ChannelHashes = new int[14];

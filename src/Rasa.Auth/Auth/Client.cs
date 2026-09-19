@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net.Sockets;
+using System.Threading;
 
 namespace Rasa.Auth
 {
@@ -36,6 +37,20 @@ namespace Rasa.Auth
 
         private PacketQueue _packetQueue = new();
 
+        /// <summary>
+        /// Close() is reached from the socket completion threads (OnError, OnDrop, and OnReceive's
+        /// own catch) and from the main loop (the timeout timer, and Update's catch blocks), so
+        /// two threads can be in it at once. The game server's client has had this guard for a
+        /// while; this one had only the unsynchronized read of State at the top, which both
+        /// threads pass before either writes it - and both then log the disconnect, remove the
+        /// timer, shut the socket and queue the client for removal twice.
+        /// </summary>
+        private readonly object _clientLock = new object();
+
+        /// <summary>Packets read off the socket but not yet handled by the main loop.</summary>
+        private int _queuedPackets;
+        private const int MaxQueuedPackets = 64;
+
         public Client(LengthedSocket socket, Server server, IAuthUnitOfWorkFactory authUnitOfWorkFactory)
         {
             _authUnitOfWorkFactory = authUnitOfWorkFactory;
@@ -47,6 +62,7 @@ namespace Rasa.Auth
             Timer = new Timer();
 
             Socket.OnError += OnError;
+            Socket.OnDrop += OnDrop;
             Socket.OnReceive += OnReceive;
             Socket.OnDecrypt += OnDecrypt;
 
@@ -75,18 +91,63 @@ namespace Rasa.Auth
 
         public void Update(long delta)
         {
-            Timer.Update(delta);
+            // The timeout timer's callback closes the connection, and Close() does real work.
+            try
+            {
+                Timer.Update(delta);
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Error updating timers for {Socket.RemoteAddress}, disconnecting client: {e}");
+                Close();
+                return;
+            }
 
             if (State == ClientState.Disconnected)
                 return;
 
             IBasePacket packet;
 
+            // This is the auth server's main loop thread, and nothing above it catches: an
+            // exception out of a handler used to end the process. Now it ends the connection.
             while ((packet = _packetQueue.PopIncoming()) != null)
-                HandlePacket(packet);
+            {
+                // Re-checked each time round, not just before the loop: a handler can close the
+                // connection, and the packets queued behind it were handled anyway. A client
+                // that pipelines a bad login and a server-list request in one segment got the
+                // login refused and closed, then had the second packet rejected as unexpected
+                // and closed again - one connection driving any number of teardowns and
+                // Security log lines.
+                if (State == ClientState.Disconnected)
+                    return;
 
-            while ((packet = _packetQueue.PopOutgoing()) != null)
-                SendPacket(packet);
+                Interlocked.Decrement(ref _queuedPackets);
+
+                try
+                {
+                    HandlePacket(packet);
+                }
+                catch (Exception e)
+                {
+                    Logger.WriteLog(LogType.Error, $"Error handling {packet.GetType().Name} from {Socket.RemoteAddress}, disconnecting client: {e}");
+                    Close();
+                    return;
+                }
+            }
+
+            // Writing a packet can throw - serialization, or a socket that has gone since the
+            // packet was queued - and the game server has guarded this half for a while. Auth
+            // had not: an exception here reached the main loop with nothing above it.
+            try
+            {
+                while ((packet = _packetQueue.PopOutgoing()) != null)
+                    SendPacket(packet);
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Error sending queued packets to {Socket.RemoteAddress}, disconnecting client: {e}");
+                Close();
+            }
         }
         
         public void Close()
@@ -94,15 +155,25 @@ namespace Rasa.Auth
             if (State == ClientState.Disconnected)
                 return;
 
-            Logger.WriteLog(LogType.Network, "*** Client disconnected! Ip: {0}", Socket.RemoteAddress);
+            lock (_clientLock)
+            {
+                // The check above is the cheap one; this is the one that decides. Without it
+                // both threads get past the first and run the whole teardown.
+                if (State == ClientState.Disconnected)
+                    return;
 
-            Timer.Remove("timeout");
+                Logger.WriteLog(LogType.Network, "*** Client disconnected! Ip: {0}", Socket.RemoteAddress);
 
-            State = ClientState.Disconnected;
+                Timer.Remove("timeout");
 
-            Socket.Close();
+                // Written before anything else in here, so a handler still running on the other
+                // thread stops rather than carrying on against a socket that is about to go.
+                State = ClientState.Disconnected;
 
-            Server.Disconnect(this);
+                Socket.Close();
+
+                Server.Disconnect(this);
+            }
         }
 
         public void SendPacket(IBasePacket packet)
@@ -114,6 +185,17 @@ namespace Rasa.Auth
         {
             if (packet is not IOpcodedPacket<ClientOpcode> authPacket)
                 return;
+
+            // Each message belongs to a point in the conversation, and the handlers assume it:
+            // everything after Login reads AccountEntry, which Login sets. A ServerListExt or
+            // AboutToPlay sent first dereferenced null on the main loop thread. Login is the
+            // only thing a fresh connection may say; once it has said it, it may not again.
+            if (!IsExpected(authPacket.Opcode))
+            {
+                Logger.WriteLog(LogType.Security, $"Client {Socket.RemoteAddress} sent {authPacket.Opcode} in state {State}; disconnecting.");
+                Close();
+                return;
+            }
 
             switch (authPacket.Opcode)
             {
@@ -132,6 +214,23 @@ namespace Rasa.Auth
                 case ClientOpcode.ServerListExt:
                     MsgServerListExt(authPacket as ServerListExtPacket);
                     break;
+            }
+        }
+
+        private bool IsExpected(ClientOpcode opcode)
+        {
+            switch (opcode)
+            {
+                case ClientOpcode.Login:
+                    return State == ClientState.Connected;
+
+                case ClientOpcode.ServerListExt:
+                case ClientOpcode.AboutToPlay:
+                    return AccountEntry != null && (State == ClientState.LoggedIn || State == ClientState.ServerList);
+
+                default:
+                    // Logout and SCCheck carry nothing the state has to be ready for.
+                    return true;
             }
         }
 
@@ -177,6 +276,15 @@ namespace Rasa.Auth
             Close();
         }
 
+        /// <summary>
+        /// The socket has given up on this connection - a full send queue, a stream that stopped
+        /// framing, or no buffers left to serve it. Nothing more can pass either way, so let it go.
+        /// </summary>
+        private void OnDrop(string reason)
+        {
+            Close();
+        }
+
         private static void OnEncrypt(BufferData data, ref int length)
         {
             AuthCryptManager.Encrypt(data.Buffer, data.BaseOffset + data.Offset, ref length, data.RemainingLength);
@@ -187,18 +295,52 @@ namespace Rasa.Auth
             return AuthCryptManager.Decrypt(data.Buffer, data.BaseOffset + data.Offset, data.RemainingLength);
         }
 
+        /// <summary>
+        /// Socket completion thread. Nothing may escape: an opcode this server has no packet for
+        /// throws out of CreatePacket, and a malformed body throws out of Read - and the caller
+        /// is a socket callback, where an exception used to end the process. It costs this one
+        /// connection instead, and says which opcode did it.
+        /// </summary>
         private void OnReceive(BufferData data)
         {
-            // Reset the timeout after every action
-            Timer.ResetTimer("timeout");
+            // Nullable, not a default: Login is 0x00, so a default would name it as the culprit
+            // when the failure was reading the opcode byte itself.
+            ClientOpcode? opcode = null;
 
-            using var br = data.GetReader();
+            try
+            {
+                // Reset the timeout after every action
+                Timer.ResetTimer("timeout");
 
-            var packet = CreatePacket((ClientOpcode)br.ReadByte());
+                using var br = data.GetReader();
 
-            packet.Read(br);
+                opcode = (ClientOpcode)br.ReadByte();
 
-            _packetQueue.EnqueueIncoming(packet);
+                var packet = CreatePacket(opcode.Value);
+
+                packet.Read(br);
+
+                // Bounded, for the same reason the game client bounds its undrained input: this
+                // runs at line speed on a socket thread while the main loop drains one packet
+                // per handler per tick, and MsgLogin's handler is a synchronous database call.
+                // A client that pipelines logins would otherwise queue them faster than they can
+                // ever be answered. Nothing legitimate gets near this - the auth conversation is
+                // a handful of packets - so the limit doubles as the flood check.
+                if (Interlocked.Increment(ref _queuedPackets) > MaxQueuedPackets)
+                {
+                    Logger.WriteLog(LogType.Security, $"Client {Socket.RemoteAddress} has {_queuedPackets} unanswered packets queued (limit {MaxQueuedPackets}), disconnecting.");
+                    Close();
+                    return;
+                }
+
+                _packetQueue.EnqueueIncoming(packet);
+            }
+            catch (Exception e)
+            {
+                var what = opcode.HasValue ? $"a {opcode.Value} packet" : "a packet whose opcode could not be read";
+                Logger.WriteLog(LogType.Error, $"Error reading {what} from {Socket.RemoteAddress}, disconnecting client: {e}");
+                Close();
+            }
         }
 
         private IBasePacket CreatePacket(ClientOpcode opcode)
@@ -270,7 +412,7 @@ namespace Rasa.Auth
         {
             State = ClientState.ServerList;
 
-            SendPacket(new SendServerListExtPacket(Server.ServerList, AccountEntry.LastServerId));
+            SendPacket(new SendServerListExtPacket(Server.GetServerListSnapshot(), AccountEntry.LastServerId));
         }
 #pragma warning restore IDE0060 // Remove unused parameter
 

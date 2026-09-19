@@ -35,5 +35,14 @@ namespace Rasa.Timer
         {
             CurrentTimer = Timer;
         }
+
+        /// <summary>Whether a fault of this timer's has ever been logged; the first one always is.</summary>
+        public bool FaultLogged { get; set; }
+
+        /// <summary>Faults swallowed since one was last written to the log.</summary>
+        public long FaultsSinceLog { get; set; }
+
+        /// <summary>Environment.TickCount64 before which this timer's faults are counted, not logged.</summary>
+        public long NextFaultLogTick { get; set; }
     }
 }

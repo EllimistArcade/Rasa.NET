@@ -8,15 +8,15 @@
         public override GameOpcode Opcode { get; } = GameOpcode.Emote;
 
         public string Emote { get; set; }
-        private string Name;
+        private string SenderName;
         
         public EmotePacket()
         {
         }
 
-        public EmotePacket(string name, string emote)
+        public EmotePacket(string senderName, string emote)
         {
-            Name = name;
+            SenderName = senderName;
             Emote = emote;
         }
 
@@ -29,7 +29,7 @@
         public override void Write(PythonWriter pw)
         {
             pw.WriteTuple(2);
-            pw.WriteUnicodeString(Name);
+            pw.WriteUnicodeString(SenderName);
             pw.WriteUnicodeString(Emote);
         }
     }

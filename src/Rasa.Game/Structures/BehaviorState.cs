@@ -19,6 +19,7 @@ namespace Rasa.Structures
         public AiPathFollowing AiPathFollowing = new AiPathFollowing();
         public ActionFighting ActionFighting = new ActionFighting();
         public ActionWander ActionWander = new ActionWander();
+        public ActionFollow ActionFollow = new ActionFollow();
         //public long[] ActionLockTime { get; set; }
     }
 
@@ -28,10 +29,47 @@ namespace Rasa.Structures
         public ulong TargetEntityId { get; set; }
     }
 
+    /// <summary>
+    /// Where a minion is meant to be when it is not doing something else.
+    ///
+    /// The client's Command System help calls this an *anchor point*: "Players can assign an
+    /// anchor point to their subordinate with the Go/Stay command; this will tell the subordinate
+    /// to return to this location after it completes an action." Go sets it to a picked location,
+    /// Stay sets it to wherever the minion is standing, and Follow Me clears it so the minion
+    /// regroups on its master again.
+    ///
+    /// Exactly one of the two is in force: with an anchor the minion returns to a fixed point,
+    /// without one it trails <see cref="FollowTargetId"/> - normally its master, or another player
+    /// after a Follow Target order.
+    /// </summary>
+    public class ActionFollow
+    {
+        /// <summary>The entity this minion trails when it has no anchor. 0 means nothing to follow.</summary>
+        public ulong FollowTargetId { get; set; }
+
+        /// <summary>
+        /// Who this minion is assisting, or 0. Assist is not movement: "assist mode will
+        /// automatically issue a Target command whenever the player attacks an enemy so that the
+        /// subordinate is targeting the same enemy", so it is a standing instruction to copy
+        /// someone else's target, held separately from whatever the minion is following.
+        /// </summary>
+        public ulong AssistTargetId { get; set; }
+
+        public bool HasAnchor { get; set; }
+
+        public Vector3 Anchor = new Vector3();
+
+        /// <summary>Throttles repathing while chasing a target that is itself moving.</summary>
+        public long PathUpdateTime { get; set; }
+    }
+
     public class ActionWander
     {
         public byte State { get; set; }
         public Vector3 WanderDestination = new Vector3();
+
+        /// <summary>How long this idle spell lasts before the next stroll; drawn anew each time the creature stops.</summary>
+        public long RestDuration { get; set; }
     }
     
     public class AiPathFollowing

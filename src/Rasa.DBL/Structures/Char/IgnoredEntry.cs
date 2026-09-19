@@ -12,13 +12,13 @@ namespace Rasa.Structures.Char
         {
         }
 
-        public IgnoredEntry(uint accountId, uint ignoredaccountId)
+        public IgnoredEntry(uint accountId, uint ignoredAccountId)
         {
-            accountId = AccountId;
-            IgnoredAccountId = ignoredaccountId;
+            AccountId = accountId;
+            IgnoredAccountId = ignoredAccountId;
         }
 
-        [Key]
+        // Composite key (account_id, ignored_account_id) is configured in CharContext.
         [Column("account_id")]
         [Required]
         public uint AccountId { get; set; }

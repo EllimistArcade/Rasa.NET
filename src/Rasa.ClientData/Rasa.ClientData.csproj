@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <AssemblyTitle>Rasa.NET Client Data</AssemblyTitle>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Rasa.ClientData</AssemblyName>
     <PackageId>Rasa.ClientData</PackageId>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>

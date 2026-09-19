@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <AssemblyTitle>Rasa.NET Navigation</AssemblyTitle>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Rasa.Navigation</AssemblyName>
     <PackageId>Rasa.Navigation</PackageId>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>

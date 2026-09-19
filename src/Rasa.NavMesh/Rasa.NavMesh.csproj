@@ -2,11 +2,11 @@
 
   <PropertyGroup>
     <AssemblyTitle>Rasa.NET NavMesh builder</AssemblyTitle>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Rasa.NavMesh</AssemblyName>
     <OutputType>Exe</OutputType>
     <PackageId>Rasa.NavMesh</PackageId>
-    <RuntimeIdentifiers>win10-x64;osx.10.10-x64;ubuntu.14.04-x64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
     <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>

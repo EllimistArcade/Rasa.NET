@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <AssemblyTitle>Rasa.NET DBL</AssemblyTitle>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Rasa.DBL</AssemblyName>
     <PackageId>Rasa.DBL</PackageId>
     <NetStandardImplicitPackageVersion>2.1.0</NetStandardImplicitPackageVersion>
@@ -19,13 +19,13 @@
 
   <ItemGroup>
     <PackageReference Include="JetBrains.Annotations" Version="10.2.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="5.0.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="5.0.1">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.20" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.20">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="5.0.1" />
-    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="5.0.0-alpha.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.20" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>

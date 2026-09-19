@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <AssemblyTitle>Rasa.NET Shared</AssemblyTitle>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Rasa.Shared</AssemblyName>
     <PackageId>Rasa.Shared</PackageId>
     <NetStandardImplicitPackageVersion>2.1.0</NetStandardImplicitPackageVersion>

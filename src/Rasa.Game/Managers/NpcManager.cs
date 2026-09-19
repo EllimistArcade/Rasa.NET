@@ -130,9 +130,18 @@ namespace Rasa.Managers
             // whole of the offer: the client checks only that the class is a direct child of the
             // player's, and asks nothing about level. Sent on every trainer, true or false, so a
             // player who is not due an advancement still gets the window and can read the tree.
-            if (creature.Npc.NpcIsTrainer)
+            //
+            // The dialog id has to be a real one. The client looks it up unconditionally, and a
+            // line it cannot find is printed as "Missing translation for npctrainerdialoglanguage
+            // ID n" where the trainer's greeting should be.
+            if (creature.Npc.NpcIsTrainer && ClassTrainers.TryGet(creature.DbId, out var trainer))
+            {
+                var line = ClassTrainers.DialogFor(trainer.Trains,
+                    (CharacterClass)client.Player.Class, (int)client.Player.Level);
+
                 convoDataDict.Add(ConversationType.Training,
-                    new TrainingConverse(ManifestationManager.Instance.CanAdvance(client.Player), 0));
+                    new TrainingConverse(line == TrainerDialog.Offer, trainer.DialogGroup + (int)line));
+            }
 
             /*
             // Greeting = 0

@@ -117,11 +117,17 @@ namespace Rasa.Managers
             // A player's attributes are worked out in one place, UpdateStatsValues, which reads
             // the effects; anything else would be undone by the next time it runs - putting on a
             // piece of armour, spending a point. A creature has no such place, and takes a
-            // maximum-health change directly.
+            // maximum-health or attribute change directly.
             if (actor is Manifestation && ChangesStats(effect))
                 ManifestationManager.Instance.RefreshStats(actor as Manifestation);
-            else if (effect.MaxHealthPercent != 0)
-                ApplyMaxHealth(mapChannel, actor, effect);
+            else
+            {
+                if (effect.MaxHealthPercent != 0)
+                    ApplyMaxHealth(mapChannel, actor, effect);
+
+                if (!(actor is Manifestation) && effect.AttributeId.HasValue && effect.AttributePercent != 0)
+                    ApplyAttribute(mapChannel, actor, effect);
+            }
 
             var attached = new GameEffectAttachedPacket
             {
@@ -229,6 +235,9 @@ namespace Rasa.Managers
             else if (actor is Manifestation && ChangesStats(gameEffect))
                 ManifestationManager.Instance.RefreshStats(actor as Manifestation);
 
+            if (gameEffect.AttributeApplied != 0)
+                RevertAttribute(mapChannel, actor, gameEffect, true);
+
             if (gameEffect.MovementModifierPercent != 0)
                 UpdateMovementMod(mapChannel, actor);
 
@@ -263,6 +272,9 @@ namespace Rasa.Managers
 
                 if (effect.MaxHealthApplied != 0)
                     RevertMaxHealth(mapChannel, actor, effect, false);
+
+                if (effect.AttributeApplied != 0)
+                    RevertAttribute(mapChannel, actor, effect, false);
             }
 
             actor.ActiveEffects.Clear();
@@ -862,6 +874,68 @@ namespace Rasa.Managers
             effect.MaxHealthApplied = delta;
 
             CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateHealthPacket(health, 0));
+        }
+
+        /// <summary>
+        /// AttributePercent on an actor that is not a player (a creature under Disease): the
+        /// attribute's maximum moves by that share, at least 1 left; the current value is capped
+        /// to it, or raised with it for a raise - the same rules as ApplyMaxHealth. The points
+        /// moved are kept on the effect and are exactly what RevertAttribute puts back. A health
+        /// change is told to the clients; the others are the server's own figures.
+        /// </summary>
+        private static void ApplyAttribute(MapChannel mapChannel, Actor actor, GameEffect effect)
+        {
+            if (!actor.Attributes.TryGetValue(effect.AttributeId.Value, out var attribute) || attribute.CurrentMax <= 0)
+                return;
+
+            var delta = (int)Math.Round(attribute.CurrentMax * effect.AttributePercent / 100.0);
+
+            delta = Math.Max(delta, 1 - attribute.CurrentMax);
+
+            attribute.CurrentMax += delta;
+
+            if (delta > 0 && attribute.Current > 0)
+                attribute.Current += delta;
+
+            attribute.Current = Math.Min(attribute.CurrentMax, attribute.Current);
+            effect.AttributeApplied = delta;
+
+            if (attribute.AttributeId == Attributes.Health)
+                CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateHealthPacket(attribute, actor.EntityId));
+        }
+
+        private static void RevertAttribute(MapChannel mapChannel, Actor actor, GameEffect effect, bool announce)
+        {
+            var delta = effect.AttributeApplied;
+            effect.AttributeApplied = 0;
+
+            if (!effect.AttributeId.HasValue || !actor.Attributes.TryGetValue(effect.AttributeId.Value, out var attribute))
+                return;
+
+            attribute.CurrentMax = Math.Max(1, attribute.CurrentMax - delta);
+
+            // A cut coming off gives the maximum back, and the value as far as it was cut.
+            if (delta < 0 && attribute.AttributeId != Attributes.Health)
+                attribute.Current -= delta;
+
+            attribute.Current = Math.Min(attribute.CurrentMax, attribute.Current);
+
+            if (announce && mapChannel != null && attribute.AttributeId == Attributes.Health)
+                CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateHealthPacket(attribute, actor.EntityId));
+        }
+
+        /// <summary>
+        /// Whether something on the actor stops it being healed (Disease P5, "All Healing:
+        /// Disabled"). ActorManager.Heal asks; so should anything else that heals, creatures
+        /// included.
+        /// </summary>
+        public static bool HealingBlocked(Actor actor)
+        {
+            foreach (var effect in actor.ActiveEffects.Values)
+                if (effect.BlocksHealing && !effect.IsExpired)
+                    return true;
+
+            return false;
         }
 
         private static void RevertMaxHealth(MapChannel mapChannel, Actor actor, GameEffect effect, bool announce)

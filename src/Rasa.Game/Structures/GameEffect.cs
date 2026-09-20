@@ -178,6 +178,13 @@ namespace Rasa.Structures
         /// <summary>The points of maximum health actually added (or taken) when it was attached, so exactly that is put back.</summary>
         public int MaxHealthApplied { get; set; }
 
+        /// <summary>
+        /// On an actor that is not a player: the points AttributePercent actually moved
+        /// AttributeId's maximum by when it was attached (Disease's -70% Body), so exactly that
+        /// is put back. A player's attributes are worked out in UpdateStatsValues instead.
+        /// </summary>
+        public int AttributeApplied { get; set; }
+
         #endregion
 
         #region Ticks

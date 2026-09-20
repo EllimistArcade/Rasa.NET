@@ -158,9 +158,8 @@ namespace Rasa.Managers
                 return 0;
 
             // Disease P5: "All Healing: Disabled".
-            foreach (var effect in target.ActiveEffects.Values)
-                if (effect.BlocksHealing && !effect.IsExpired)
-                    return 0;
+            if (GameEffectManager.HealingBlocked(target))
+                return 0;
 
             var applied = Math.Min(amount, health.CurrentMax - health.Current);
 

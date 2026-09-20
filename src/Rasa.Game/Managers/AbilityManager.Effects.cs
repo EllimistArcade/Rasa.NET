@@ -482,10 +482,11 @@ namespace Rasa.Managers
         /// effect's per-level tooltips): P1-P3 ATTRIBUTE_ID (Spirit, Body, Mind) -ATTRIBUTE_MAX_CHANGE
         /// (70) percent, "Spirit: %(modifier)s%%"; P4 EFFECT_HEALTH_REGEN_MODIFIER and
         /// EFFECT_POWER_REGEN_MODIFIER 0, "Health Regen: Disabled / Power Regen: Disabled"; P5
-        /// HEALING_MODIFIER 0, "All Healing: Disabled". Built as the modifiers the server has -
-        /// AttributePercent, Health/PowerRegenPercent -100, BlocksHealing - so they would apply to
-        /// a player. On a creature they are shown and change little: a creature's attributes feed
-        /// nothing, it does not regenerate on the server and nothing heals it.
+        /// HEALING_MODIFIER 0, "All Healing: Disabled". All three are real on a creature as on a
+        /// player: the attribute's maximum and value are cut (GameEffectManager.ApplyAttribute,
+        /// put back when it ends), RegenAmount gives 0 health and power regeneration, and
+        /// ActorManager.Heal (GameEffectManager.HealingBlocked) refuses every heal. Whatever
+        /// reads a creature's attributes, regenerates it or heals it picks them up.
         /// </summary>
         private static void AttachDisease(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
         {

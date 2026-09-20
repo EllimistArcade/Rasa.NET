@@ -290,6 +290,10 @@ namespace Rasa.Managers
             }
 
             Reflect(mapChannel, actor, missile);
+
+            // Self Destruct goes off on the next damage its holder takes.
+            if (actor is Manifestation victim && missile.DamageA > 0)
+                AbilityManager.OnPlayerDamaged(mapChannel, victim);
         }
 
         /// <summary>

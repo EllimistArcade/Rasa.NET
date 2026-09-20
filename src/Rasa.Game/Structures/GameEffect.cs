@@ -270,6 +270,9 @@ namespace Rasa.Structures
         public int OnDamagedIntervalMs { get; set; }
         public long OnDamagedReadyAt { get; set; }
 
+        /// <summary>Self Destruct: where the holder is sent back to when it detonates.</summary>
+        public System.Numerics.Vector3? ReturnTo { get; set; }
+
         /// <summary>
         /// A tick of the effect's own, run by GameEffectManager in place of the standard ones when
         /// set - for an effect whose tick has a shape of its own (Lightning's storm).

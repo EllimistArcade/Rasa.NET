@@ -83,7 +83,8 @@ namespace Rasa.Managers
             "abilities.scourge", "abilities.reconstruction", "abilities.regenerationwave", "abilities.basewave",
             "abilities.shieldextender", "abilities.shieldwave", "abilities.bioaugmentation", "abilities.weaponenhancement",
             "abilities.damageconversion", "abilities.critwave", "abilities.painttarget", "abilities.polarityfield",
-            "abilities.controlledfission", "abilities.explodingnanites", "abilities.disease", "abilities.firesupport"
+            "abilities.controlledfission", "abilities.explodingnanites", "abilities.disease", "abilities.firesupport",
+            "abilities.selfdestruct", "abilities.scatterbombs"
         };
 
         /// <summary>
@@ -103,7 +104,7 @@ namespace Rasa.Managers
         /// (Sacrifice), or whose toggle the player may also press again while it runs (Rage): a
         /// second request while the effect is on means "off", as it does for sprint.
         /// </summary>
-        private static readonly HashSet<string> ToggleModules = new HashSet<string> { "abilities.sprint", "abilities.rage", "abilities.sacrifice" };
+        private static readonly HashSet<string> ToggleModules = new HashSet<string> { "abilities.sprint", "abilities.rage", "abilities.sacrifice", "abilities.selfdestruct" };
 
         public static AbilityManager Instance
         {

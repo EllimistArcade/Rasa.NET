@@ -246,7 +246,13 @@ namespace Rasa.Managers
                 if (healthTaken + armorTaken > 0 && health.Current > 0)
                     AbilityManager.OnCreatureDamaged(mapChannel, creature);
             }
-            else if (health.Current <= 0)
+            else if (target is Manifestation victim && armorTaken + healthTaken > 0)
+            {
+                // Self Destruct goes off on the next damage its holder takes.
+                AbilityManager.OnPlayerDamaged(mapChannel, victim);
+            }
+
+            if (!(target is Creature) && health.Current <= 0)
             {
                 // A player at zero stands back up at full: see the remarks.
                 health.Current = health.CurrentMax;

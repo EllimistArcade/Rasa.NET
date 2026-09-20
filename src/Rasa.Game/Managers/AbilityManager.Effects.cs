@@ -98,6 +98,15 @@ namespace Rasa.Managers
                     break;
                 }
 
+                case "abilities.selfdestruct":
+                    ArmSelfDestruct(mapChannel, player, info);
+                    Hit(recovery, player);
+                    break;
+
+                case "abilities.scatterbombs":
+                    DropScatterbombs(mapChannel, client, player, info);
+                    break;
+
                 case "abilities.firesupport":
                     CallFireSupport(mapChannel, client, player, info, action, recovery);
                     break;

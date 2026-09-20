@@ -82,7 +82,7 @@ namespace Rasa.Managers
             "abilities.rage", "abilities.resistance", "abilities.sacrifice", "abilities.decay",
             "abilities.scourge", "abilities.reconstruction", "abilities.regenerationwave", "abilities.basewave",
             "abilities.shieldextender", "abilities.shieldwave", "abilities.bioaugmentation", "abilities.weaponenhancement",
-            "abilities.damageconversion", "abilities.critwave"
+            "abilities.damageconversion", "abilities.critwave", "abilities.painttarget", "abilities.polarityfield"
         };
 
         /// <summary>
@@ -95,7 +95,7 @@ namespace Rasa.Managers
         };
 
         /// <summary>Of those, the ones aimed at a single enemy (client targetType TARGET_NON_FRIENDLY).</summary>
-        private static readonly HashSet<string> HostileEffectModules = new HashSet<string> { "abilities.decay" };
+        private static readonly HashSet<string> HostileEffectModules = new HashSet<string> { "abilities.decay", "abilities.painttarget", "abilities.polarityfield" };
 
         /// <summary>
         /// Abilities the client marks isToggle without a sourceGameEffect or targetGameEffect
@@ -723,7 +723,7 @@ namespace Rasa.Managers
                 // effects resist.
                 var rolled = GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, _random.Next(min, max + 1), scaleType));
                 var crit = CriticalHits.Resolve(player, target, false, critChance, ref rolled);
-                var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted);
+                var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted, damageType);
                 var taken = ActorManager.Instance.Damage(mapChannel, target, amount, player, damageType);
 
                 var hit = new AbilityHit

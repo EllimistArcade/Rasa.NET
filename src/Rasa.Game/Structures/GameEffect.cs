@@ -94,8 +94,14 @@ namespace Rasa.Structures
         /// <summary>Percent added to the damage the holder deals with weapons and abilities; negative reduces it.</summary>
         public int DamageDealtPercent { get; set; }
 
-        /// <summary>Added to the holder's resistance to everything; see GameEffectManager.ResistMultiplier.</summary>
+        /// <summary>Added to the holder's resistance - to everything, or to ResistDamageType alone; see GameEffectManager.ResistMultiplier. Negative makes it a vulnerability.</summary>
         public int ResistModifier { get; set; }
+
+        /// <summary>The one damage type ResistModifier applies to (Polarity Field); 0 for all of them.</summary>
+        public DamageType ResistDamageType { get; set; }
+
+        /// <summary>Percent of every hit on the holder that goes past its armour straight to health (Target Painting).</summary>
+        public int ArmorPiercePercent { get; set; }
 
         /// <summary>Percent added to the holder's health and power regeneration: 400 is five times the rate.</summary>
         public int RegenPercent { get; set; }

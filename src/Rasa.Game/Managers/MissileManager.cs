@@ -85,7 +85,9 @@ namespace Rasa.Managers
         /// </summary>
         private static void Resist(Actor victim, Missile missile)
         {
-            missile.DamageA = GameEffectManager.ApplyResist(victim, missile.DamageA, out var resisted);
+            // Typed when the attack has a type (players' weapons do; creatures' attacks do not yet),
+            // so a type-limited resistance (Polarity Field) counts only against its own type.
+            missile.DamageA = GameEffectManager.ApplyResist(victim, missile.DamageA, out var resisted, missile.DamageType);
 
             if (resisted > 0)
                 foreach (var hit in missile.Args.HitData)
@@ -103,10 +105,13 @@ namespace Rasa.Managers
         /// </summary>
         public static int ArmorShare(Missile missile)
         {
-            if (missile.ArmorBypassPercent <= 0)
+            // The weapon's own bypass and the target's Target Painting pierce add up.
+            var bypass = Math.Min(100, missile.ArmorBypassPercent + (missile.TargetActor != null ? GameEffectManager.ArmorPiercePercentOf(missile.TargetActor) : 0));
+
+            if (bypass <= 0)
                 return missile.DamageA;
 
-            return missile.DamageA - missile.DamageA * missile.ArmorBypassPercent / 100;
+            return missile.DamageA - missile.DamageA * bypass / 100;
         }
 
         private void DoDamageToCreature(MapChannel mapChannel, Missile missile)

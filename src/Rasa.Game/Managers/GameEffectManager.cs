@@ -465,7 +465,7 @@ namespace Rasa.Managers
             foreach (var target in targets)
             {
                 var rolled = AbilityManager.Scale(effect.SourceLevel, _random.Next(effect.TickDamageMin, effect.TickDamageMax + 1), effect.TickScaleType);
-                var amount = ApplyResist(target, rolled, out var resisted);
+                var amount = ApplyResist(target, rolled, out var resisted, effect.TickDamageType);
                 var taken = ActorManager.Instance.Damage(mapChannel, target, amount, source, effect.TickDamageType);
 
                 hits.Add(new TickEntry
@@ -582,14 +582,27 @@ namespace Rasa.Managers
             return resist < 0 ? (100.0 - resist) / 100.0 : 1.0 / ((100.0 + 2.0 * resist) / 100.0);
         }
 
-        public static int ResistModifierOf(Actor actor)
+        /// <param name="damageType">The hit's type; an effect limited to one type (Polarity Field) counts only against that type, and not against an untyped hit.</param>
+        public static int ResistModifierOf(Actor actor, DamageType damageType = 0)
         {
             var total = 0;
 
             foreach (var effect in actor.ActiveEffects.Values)
-                total += effect.ResistModifier;
+                if (effect.ResistDamageType == 0 || effect.ResistDamageType == damageType)
+                    total += effect.ResistModifier;
 
             return total;
+        }
+
+        /// <summary>Percent of each hit on the actor that goes past its armour (Target Painting), at most 100.</summary>
+        public static int ArmorPiercePercentOf(Actor actor)
+        {
+            var total = 0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                total += effect.ArmorPiercePercent;
+
+            return Math.Max(0, Math.Min(100, total));
         }
 
         /// <summary>Whether an effect changes what UpdateStatsValues works out for a player.</summary>
@@ -738,7 +751,7 @@ namespace Rasa.Managers
             if (target == null || amount <= 0)
                 return amount;
 
-            var resist = ResistModifierOf(target);
+            var resist = ResistModifierOf(target, damageType);
 
             if (damageType != 0 && target is Manifestation player)
                 foreach (var own in player.ResistanceData)

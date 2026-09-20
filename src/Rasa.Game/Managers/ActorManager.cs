@@ -198,7 +198,8 @@ namespace Rasa.Managers
             // Armour first - unless an EMP crit is suppressing it, when it all goes to health.
             if (target.Attributes.TryGetValue(Attributes.Armor, out var armor) && armor.Current > 0 && !GameEffectManager.ArmorSuppressed(target))
             {
-                armorTaken = Math.Min(amount, armor.Current);
+                // Target Painting: that share of the hit goes past the armour.
+                armorTaken = Math.Min(amount - amount * GameEffectManager.ArmorPiercePercentOf(target) / 100, armor.Current);
                 armor.Current -= armorTaken;
                 CellManager.Instance.CellCallMethod(mapChannel, target, new UpdateArmorPacket(armor, target is Creature ? target.EntityId : 0));
             }

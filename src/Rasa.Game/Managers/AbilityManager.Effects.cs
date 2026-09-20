@@ -46,6 +46,11 @@ namespace Rasa.Managers
         private const int BioAugmentationTypeId = 329;              // BIO_AUGMENTATION_EFFECT
         private const int WeaponEnhancementTypeId = 10000035;       // WEAPON_ENHANCEMENT (Shredder Ammo)
         private const int DamageConversionTypeId = 354;             // DAMAGE_CONVERSION (Viral Conversion)
+        private const int PaintTargetTypeId = 10000045;             // PAINT_TARGET_EFFECT
+        private const int PolarityFieldTypeId = 262;                // POLARITY_FIELD
+
+        /// <summary>skilldata T4_SPY_POLARITY_FIELD: every pump of it the player owns adds PER_PUMP_MOD.</summary>
+        private const int PolarityFieldSkillId = 161;
 
         /// <summary>skilldata T4_SNIPER_SHREDDER_AMMO; its pump shortens Shredder Ammo's interval.</summary>
         private const int ShredderAmmoSkillId = 150;
@@ -77,6 +82,25 @@ namespace Rasa.Managers
                     AttachSacrifice(mapChannel, player, info);
                     Hit(recovery, player);
                     break;
+
+                case "abilities.painttarget":
+                case "abilities.polarityfield":
+                {
+                    var target = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
+
+                    if (target != null && IsHostile(player, target))
+                    {
+                        if (actionInfo.Module == "abilities.painttarget")
+                            AttachTargetPainting(mapChannel, player, target, info);
+                        else
+                            AttachPolarityField(mapChannel, player, target, info);
+
+                        ManifestationManager.Instance.EnterCombat(client);
+                        Hit(recovery, target);
+                    }
+
+                    break;
+                }
 
                 case "abilities.decay":
                 {
@@ -413,6 +437,49 @@ namespace Rasa.Managers
             effect.Tooltip["threatMod"] = info.Get(AbilityProperty.ThreatModifierPercent);
 
             GameEffectManager.Instance.Attach(mapChannel, player, effect);
+        }
+
+        /// <summary>
+        /// Target Painting: PAINT_TARGET_EFFECT on an enemy for DURATION (15 s).
+        /// EFFECT_ARMOR_PIERCE_PERCENT (0 / 10 / 20 / 30 / 40) of every hit on it goes past its
+        /// armour to health, whoever hits it. The tooltip ("Reduced Cover: %(coverMod)s%%, Armor
+        /// Recharge: %(armorMod)s%%, Armor Piercing: +%(pierceMod)s%%") also shows
+        /// EFFECT_COVER_MODIFIER and EFFECT_ARMOR_REGEN_MODIFIER; neither does anything on the
+        /// server yet - there is no cover, and creature armour does not regenerate server-side.
+        /// </summary>
+        private static void AttachTargetPainting(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
+        {
+            var effect = NewEffect(mapChannel, player, info, PaintTargetTypeId, info.Get(AbilityProperty.Duration, 15));
+
+            effect.IsBuff = false;
+            effect.ArmorPiercePercent = info.Get(AbilityProperty.EffectArmorPiercePercent);
+            effect.Tooltip["coverMod"] = info.Get(AbilityProperty.EffectCoverModifier);
+            effect.Tooltip["armorMod"] = info.Get(AbilityProperty.EffectArmorRegenModifier, 100);
+            effect.Tooltip["pierceMod"] = effect.ArmorPiercePercent;
+
+            GameEffectManager.Instance.Attach(mapChannel, target, effect);
+        }
+
+        /// <summary>
+        /// Polarity Field: POLARITY_FIELD on an enemy for DURATION_MS (30 s), lowering its
+        /// resistance to the pump's DAMAGE_TYPE (electric, photonic, physical, incendiary,
+        /// cryogenic for pumps 1-5) by PER_PUMP_MOD (-10) for every pump of the skill the player
+        /// owns - the abilities' "Proficiency: ... per pump" reading. Below zero it is a
+        /// vulnerability: -30 takes (100 + 30)% damage of that type (ResistMultiplier). Only hits
+        /// of that type are affected.
+        /// </summary>
+        private static void AttachPolarityField(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
+        {
+            var durationMs = info.Get(AbilityProperty.DurationMs, 30000);
+            var effect = NewEffect(mapChannel, player, info, PolarityFieldTypeId, null);
+            var pumps = Math.Max((int)info.Level, ManifestationManager.SkillPump(player, PolarityFieldSkillId));
+
+            effect.IsBuff = false;
+            effect.ExpiresTick = Environment.TickCount64 + durationMs;
+            effect.ResistDamageType = (DamageType)info.Get(AbilityProperty.DamageType, (int)DamageType.Electrical);
+            effect.ResistModifier = info.Get(AbilityProperty.PerPumpMod, -10) * pumps;
+
+            GameEffectManager.Instance.Attach(mapChannel, target, effect);
         }
 
         /// <summary>

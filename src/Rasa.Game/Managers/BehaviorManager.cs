@@ -125,7 +125,8 @@ namespace Rasa.Managers
                     // check distance so creature attack closes target
                     var dist = Vector3.Distance(creature.Position, client.Player.Position);
 
-                    if (dist <= range)
+                    // Stealth Armor: noticed that much closer (Manifestation.DetectionRangePercent).
+                    if (dist <= range * client.Player.DetectionRangePercent / 100f)
                     {
                         // set target and change state
                         if (dist < foundEntity_distance)

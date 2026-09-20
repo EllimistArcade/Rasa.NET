@@ -71,7 +71,7 @@ namespace Rasa.Structures
         public bool AllowDetach { get; set; }
 
         /// <summary>
-        /// A weapon skill's standing effect (ManifestationManager.SyncWeaponSkills): there for as
+        /// A weapon skill's standing effect (ManifestationManager.SyncSkillPassives): there for as
         /// long as the player has the skill, one per skill rather than one per type, and seen by
         /// the player's own client alone - it is how that client learns what its heat meter and
         /// reload bar should do, and nobody else's client has any use for it.
@@ -102,6 +102,18 @@ namespace Rasa.Structures
 
         /// <summary>Percent added to the holder's armour regeneration.</summary>
         public int ArmorRegenPercent { get; set; }
+
+        /// <summary>Percent added to the holder's health regeneration alone (Bio Armor).</summary>
+        public int HealthRegenPercent { get; set; }
+
+        /// <summary>Percent added to the holder's power regeneration alone (Mech Armor).</summary>
+        public int PowerRegenPercent { get; set; }
+
+        /// <summary>Percent of the damage the holder takes from an attacker that is reflected back at it (Reflective Armor).</summary>
+        public int ReflectPercent { get; set; }
+
+        /// <summary>Whether it changes any regeneration rate, which the holder's client has to be told.</summary>
+        public bool ChangesRegen => RegenPercent != 0 || ArmorRegenPercent != 0 || HealthRegenPercent != 0 || PowerRegenPercent != 0;
 
         /// <summary>Percent change to the holder's maximum health while on; negative lowers it.</summary>
         public int MaxHealthPercent { get; set; }

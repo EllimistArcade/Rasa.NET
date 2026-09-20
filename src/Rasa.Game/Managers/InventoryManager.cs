@@ -347,6 +347,9 @@ namespace Rasa.Managers
             ManifestationManager.Instance.UpdateStatsValues(client, false);
             ManifestationManager.Instance.NotifyEquipmentUpdate(client);
 
+            // A piece of armour on or off changes what its armour skill gives.
+            ManifestationManager.Instance.SyncSkillPassives(client);
+
             // Send Data to client
             client.CallMethod(client.Player.EntityId, new AttributeInfoPacket(client.Player.Attributes));
         }

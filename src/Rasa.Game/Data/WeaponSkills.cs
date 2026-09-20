@@ -21,7 +21,7 @@ namespace Rasa.Data
     ///
     /// The heat and reload bonuses the client predicts for itself, from hidden game effects the
     /// original server attached to the player (SKILL_LIMITED_COOL_RATE_MODIFIER_EFFECT and
-    /// SKILL_LIMITED_BY_TYPE_RELOAD_MODIFIER_EFFECT, see ManifestationManager.SyncWeaponSkills):
+    /// SKILL_LIMITED_BY_TYPE_RELOAD_MODIFIER_EFFECT, see ManifestationManager.SyncSkillPassives):
     /// its heat meter cools at coolRate x modifier, its reload bar runs reloadTime / (1 + sum of
     /// modifiers). The numbers here are in those terms so the server's clock and the client's
     /// agree.

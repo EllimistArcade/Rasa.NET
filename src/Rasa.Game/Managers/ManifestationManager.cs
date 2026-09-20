@@ -266,7 +266,7 @@ namespace Rasa.Managers
         /// <summary>
         /// How long this player takes to reload this weapon: its reload time under the reload
         /// bonus of its skill and tool type (Leech Guns, Launchers' rockets, Firearms' pistols),
-        /// timed as weaponreload.py times it from the effects SyncWeaponSkills gives the client.
+        /// timed as weaponreload.py times it from the effects SyncSkillPassives gives the client.
         /// </summary>
         public static long ReloadTimeFor(Manifestation player, Item weapon)
         {
@@ -373,7 +373,7 @@ namespace Rasa.Managers
         /// every hit did. Run on every map arrival - effects end with the map - and whenever the
         /// player's skills change.
         /// </summary>
-        public void SyncWeaponSkills(Client client)
+        public void SyncSkillPassives(Client client)
         {
             var player = client?.Player;
             var mapChannel = player?.MapChannel;
@@ -397,6 +397,194 @@ namespace Rasa.Managers
             foreach (var (haste, skillId, toolType) in WeaponSkills.ReloadBonuses(id => SkillPump(player, id)))
                 GameEffectManager.Instance.Attach(mapChannel, player, SkillPassive(mapChannel, player, SkillLimitedReloadTypeId, SkillPump(player, skillId)),
                     haste, new List<int> { skillId }, toolType.HasValue ? new List<int> { (int)toolType.Value } : null);
+
+            SyncArmorSkills(client, mapChannel, player);
+        }
+
+        /// <summary>
+        /// The armour skills: for each of the seven, the player's pump in it times the pieces of
+        /// that armour they are wearing (ArmorSkills), as the status effect the client shows for
+        /// it - with the effect carrying what the server applies. Motor Assist is a movement
+        /// modifier, Graviton an armour regeneration bonus, Reflective a reflect percent (on the
+        /// hidden MEDIUM_ARMOR_SKILL, whose Recv_AnnounceReflect plays the reflection), Bio and Mech
+        /// an aura that regenerates the wearer and gives the squad in range a copy, Hazmat a
+        /// resistance that goes into the player's resistance list, Stealth a shorter distance at
+        /// which creatures notice them. Nothing is attached for an armour the player has no
+        /// pieces of or no pump in.
+        /// </summary>
+        private void SyncArmorSkills(Client client, MapChannel mapChannel, Manifestation player)
+        {
+            // Motor Assist: movement, as the effect's modifier - UpdateMovementMod multiplies it
+            // with sprint and the rest, and it is what the move check measures against.
+            var (pump, pieces) = ArmorOf(player, ArmorSkills.MotorAssist);
+            var movement = ArmorSkills.MovementPercent(pump, pieces);
+
+            if (movement > 0)
+            {
+                var effect = SkillPassive(mapChannel, player, ArmorSkills.MotorAssistVisibleTypeId, pump, true);
+                effect.MovementModifierPercent = 100 + movement;
+                effect.Tooltip["movementMod"] = 100 + movement;
+                GameEffectManager.Instance.Attach(mapChannel, player, effect);
+            }
+
+            // Reflective: shown on the visible effect, applied from the hidden one.
+            (pump, pieces) = ArmorOf(player, ArmorSkills.Reflective);
+            var reflect = ArmorSkills.ReflectPercent(pump, pieces);
+
+            if (reflect > 0)
+            {
+                var shown = SkillPassive(mapChannel, player, ArmorSkills.ReflectiveVisibleTypeId, pump, true);
+                shown.Tooltip["reflectAmt"] = reflect;
+                GameEffectManager.Instance.Attach(mapChannel, player, shown);
+
+                var hidden = SkillPassive(mapChannel, player, ArmorSkills.ReflectiveHiddenTypeId, pump, false);
+                hidden.ReflectPercent = reflect;
+                GameEffectManager.Instance.Attach(mapChannel, player, hidden);
+            }
+
+            // Graviton: armour regeneration. Knockback and stun resistance are shown and wait for
+            // knockback and stun.
+            (pump, pieces) = ArmorOf(player, ArmorSkills.Graviton);
+            var graviton = ArmorSkills.GravitonPercent(pump, pieces);
+
+            if (graviton > 0)
+            {
+                var effect = SkillPassive(mapChannel, player, ArmorSkills.GravitonVisibleTypeId, pump, true);
+                effect.ArmorRegenPercent = graviton;
+                effect.Tooltip["resistMod"] = graviton;
+                effect.Tooltip["regenMod"] = graviton;
+                GameEffectManager.Instance.Attach(mapChannel, player, effect);
+            }
+
+            // Bio and Mech: an aura on the wearer, copied onto the squad within reach on each tick.
+            (pump, pieces) = ArmorOf(player, ArmorSkills.Bio);
+            var bio = ArmorSkills.RegenPercent(pump, pieces);
+
+            if (bio > 0)
+            {
+                var effect = SkillPassive(mapChannel, player, ArmorSkills.BioAuraTypeId, pump, true);
+                effect.HealthRegenPercent = bio;
+                effect.Tooltip["regenMod"] = bio;
+                MakeAura(effect, ArmorSkills.AuraRadius(pump));
+                GameEffectManager.Instance.Attach(mapChannel, player, effect);
+            }
+
+            (pump, pieces) = ArmorOf(player, ArmorSkills.Mech);
+            var mech = ArmorSkills.RegenPercent(pump, pieces);
+
+            if (mech > 0)
+            {
+                var effect = SkillPassive(mapChannel, player, ArmorSkills.MechAuraTypeId, pump, true);
+                effect.PowerRegenPercent = mech;
+                effect.Tooltip["regenMod"] = 100 + mech;      // "Power regen N% of normal"
+                MakeAura(effect, ArmorSkills.AuraRadius(pump));
+                GameEffectManager.Instance.Attach(mapChannel, player, effect);
+            }
+
+            // Hazmat: into the resistance list, which the client's character window reads.
+            (pump, pieces) = ArmorOf(player, ArmorSkills.Hazmat);
+            var hazmat = ArmorSkills.HazmatResist(pump, pieces);
+
+            if (hazmat > 0)
+            {
+                var effect = SkillPassive(mapChannel, player, ArmorSkills.HazmatVisibleTypeId, pump, true);
+                effect.Tooltip["resistMod"] = hazmat;
+                GameEffectManager.Instance.Attach(mapChannel, player, effect);
+            }
+
+            RebuildResistances(client, player, hazmat);
+
+            // Stealth: creatures notice the wearer that much closer.
+            (pump, pieces) = ArmorOf(player, ArmorSkills.Stealth);
+            var stealth = ArmorSkills.DetectionCutPercent(pump, pieces);
+
+            player.DetectionRangePercent = Math.Max(0, 100 - stealth);
+
+            if (stealth > 0)
+            {
+                var effect = SkillPassive(mapChannel, player, ArmorSkills.StealthVisibleTypeId, pump, true);
+                effect.Tooltip["perceptionMod"] = -stealth;
+                GameEffectManager.Instance.Attach(mapChannel, player, effect);
+            }
+        }
+
+        /// <summary>The Bio and Mech aura: re-read every five seconds, copies of the same effect on the squad in reach.</summary>
+        private static void MakeAura(GameEffect effect, float radius)
+        {
+            effect.AuraRadius = radius;
+            effect.AuraChildTypeId = effect.TypeId;
+            effect.TickIntervalMs = 5000;
+            effect.NextTickTick = Environment.TickCount64;
+        }
+
+        /// <summary>The player's pump in an armour skill and how many pieces of that armour they are wearing.</summary>
+        public static (int Pump, int Pieces) ArmorOf(Manifestation player, int skillId)
+        {
+            var pump = SkillPump(player, skillId);
+
+            if (pump <= 0)
+                return (0, 0);
+
+            var pieces = 0;
+
+            foreach (var item in ArmorWorn(player))
+                if (item.ItemTemplate?.EquipableInfo?.SkillId == skillId)
+                    pieces++;
+
+            return (pump, pieces);
+        }
+
+        /// <summary>The items in the player's five armour slots.</summary>
+        private static IEnumerable<Item> ArmorWorn(Manifestation player)
+        {
+            var equipped = player.Inventory?.EquippedInventory;
+
+            if (equipped == null)
+                yield break;
+
+            foreach (var slot in ArmorSkills.ArmorSlots)
+            {
+                var index = (int)slot;
+
+                if (index >= equipped.Count || equipped[index] == 0)
+                    continue;
+
+                var item = EntityManager.Instance.GetItem(equipped[index]);
+
+                if (item != null)
+                    yield return item;
+            }
+        }
+
+        /// <summary>
+        /// The player's resistance to each damage type: what their armour pieces carry
+        /// (itemtemplate_resistance) plus Hazmat Armor's bonus to its four types. Nothing built
+        /// this list before, so the character window read zero for every resistance whatever was
+        /// worn. Sent to the player's own client, which is who reads it; others get it in the
+        /// player's entity data when they meet them.
+        /// </summary>
+        private static void RebuildResistances(Client client, Manifestation player, int hazmat)
+        {
+            var totals = new Dictionary<DamageType, int>();
+
+            foreach (var item in ArmorWorn(player))
+            {
+                var list = item.ItemTemplate?.EquipableInfo?.ResistList;
+
+                if (list == null)
+                    continue;
+
+                foreach (var resist in list)
+                    totals[resist.ResistanceType] = totals.GetValueOrDefault(resist.ResistanceType) + resist.ResistanceAmmount;
+            }
+
+            if (hazmat > 0)
+                foreach (var type in ArmorSkills.HazmatTypes)
+                    totals[type] = totals.GetValueOrDefault(type) + hazmat;
+
+            player.ResistanceData = totals.Where(t => t.Value != 0).Select(t => new ResistanceData(t.Key, t.Value)).ToList();
+
+            client.CallMethod(player.EntityId, new ResistanceDataPacket(player.ResistanceData));
         }
 
         /// <summary>gameeffectdata.SKILL_LIMITED_COOL_RATE_MODIFIER_EFFECT.</summary>
@@ -405,7 +593,11 @@ namespace Rasa.Managers
         /// <summary>gameeffectdata.SKILL_LIMITED_BY_TYPE_RELOAD_MODIFIER_EFFECT.</summary>
         public const int SkillLimitedReloadTypeId = 252;
 
-        private static GameEffect SkillPassive(MapChannel mapChannel, Manifestation player, int typeId, int pump)
+        /// <param name="shown">
+        /// Announced, so the client posts its status icon and tooltip: the armour skills'
+        /// visible effects. The weapon skills' effects and the hidden reflect effect are not.
+        /// </param>
+        private static GameEffect SkillPassive(MapChannel mapChannel, Manifestation player, int typeId, int pump, bool shown = false)
         {
             return new GameEffect
             {
@@ -416,7 +608,7 @@ namespace Rasa.Managers
                 Source = player,
                 SourceLevel = player.Level,
                 ExpiresTick = long.MaxValue,
-                AnnounceOnAttach = false,
+                AnnounceOnAttach = shown,
                 AllowDetach = false,
                 IsSkillPassive = true
             };
@@ -1084,7 +1276,7 @@ namespace Rasa.Managers
             client.CallMethod(player.EntityId, new LockboxFundsPacket(player.LockboxCredits));
 
             // After the skills: the weapon skill bonuses the client predicts from its own effects.
-            SyncWeaponSkills(client);
+            SyncSkillPassives(client);
         }
 
         public void AutoFireTimerDoWork(long delta)
@@ -1699,7 +1891,7 @@ namespace Rasa.Managers
             // update allocation points
             SendAvailableAllocationPoints(client);
             // a pump in a weapon skill changes what the client's heat meter and reload bar do
-            SyncWeaponSkills(client);
+            SyncSkillPassives(client);
             // update database with new character skills
             foreach (var skill in skillLevelupArray)
             {

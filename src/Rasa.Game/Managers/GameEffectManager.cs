@@ -143,7 +143,7 @@ namespace Rasa.Managers
             if (effect.MovementModifierPercent != 0)
                 UpdateMovementMod(mapChannel, actor);
 
-            if (effect.RegenPercent != 0 || effect.ArmorRegenPercent != 0)
+            if (effect.ChangesRegen)
                 SyncRegen(mapChannel, actor);
         }
 
@@ -224,7 +224,7 @@ namespace Rasa.Managers
             if (gameEffect.MovementModifierPercent != 0)
                 UpdateMovementMod(mapChannel, actor);
 
-            if (gameEffect.RegenPercent != 0 || gameEffect.ArmorRegenPercent != 0)
+            if (gameEffect.ChangesRegen)
                 SyncRegen(mapChannel, actor);
         }
 
@@ -524,6 +524,8 @@ namespace Rasa.Managers
                     ResistModifier = effect.ResistModifier,
                     RegenPercent = effect.RegenPercent,
                     ArmorRegenPercent = effect.ArmorRegenPercent,
+                    HealthRegenPercent = effect.HealthRegenPercent,
+                    PowerRegenPercent = effect.PowerRegenPercent,
                     Parent = effect
                 };
 
@@ -563,6 +565,17 @@ namespace Rasa.Managers
             return total;
         }
 
+        /// <summary>Percent of damage taken that the effects on an actor reflect back at the attacker (Reflective Armor).</summary>
+        public static int ReflectPercentOf(Actor actor)
+        {
+            var total = 0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                total += effect.ReflectPercent;
+
+            return total;
+        }
+
         public static int DamageDealtPercentOf(Actor actor)
         {
             var total = 0;
@@ -590,10 +603,12 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Damage a victim takes, after the resistance the effects on them add up to (Rage,
-        /// Resistance, Sacrifice, Base Wave); resisted is what came off. The armour's own
-        /// resistance list is not in this yet - incoming damage does not carry a type.
+        /// Resistance, Sacrifice, Base Wave) and, for damage of a known type, a player's own
+        /// resistance to that type (armour and Hazmat Armor, Manifestation.ResistanceData);
+        /// resisted is what came off. Creature attacks carry no type yet, so theirs meet only
+        /// the effects.
         /// </summary>
-        public static int ApplyResist(Actor target, int amount, out int resisted)
+        public static int ApplyResist(Actor target, int amount, out int resisted, DamageType damageType = 0)
         {
             resisted = 0;
 
@@ -601,6 +616,11 @@ namespace Rasa.Managers
                 return amount;
 
             var resist = ResistModifierOf(target);
+
+            if (damageType != 0 && target is Manifestation player)
+                foreach (var own in player.ResistanceData)
+                    if (own.ResistanceType == damageType)
+                        resist += own.ResistanceAmmount;
 
             if (resist == 0)
                 return amount;
@@ -613,8 +633,9 @@ namespace Rasa.Managers
 
         /// <summary>
         /// What an attribute regenerates per period with the effects on its owner: health and
-        /// power take RegenPercent (Regeneration Wave), armour takes ArmorRegenPercent (Base
-        /// Wave); 400 is five times the base.
+        /// power take RegenPercent (Regeneration Wave) and their own HealthRegenPercent (Bio
+        /// Armor) or PowerRegenPercent (Mech Armor), armour takes ArmorRegenPercent (Base Wave,
+        /// Graviton Armor); 400 is five times the base.
         /// </summary>
         public static int RegenAmount(Actor actor, ActorAttributes attribute)
         {
@@ -625,8 +646,10 @@ namespace Rasa.Managers
                 switch (attribute.AttributeId)
                 {
                     case Attributes.Health:
+                        percent += effect.RegenPercent + effect.HealthRegenPercent;
+                        break;
                     case Attributes.Power:
-                        percent += effect.RegenPercent;
+                        percent += effect.RegenPercent + effect.PowerRegenPercent;
                         break;
                     case Attributes.Armor:
                         percent += effect.ArmorRegenPercent;

@@ -155,6 +155,12 @@ namespace Rasa.Structures
         /// </summary>
         public long NextMeleeAt { get; set; }
 
+        /// <summary>
+        /// Percent of a creature's aggro range at which it notices this player: 100 normally, less
+        /// in Stealth Armor (ManifestationManager.SyncSkillPassives keeps it).
+        /// </summary>
+        public int DetectionRangePercent { get; set; } = 100;
+
         /// <summary>Environment.TickCount64 when the pending logout was requested.</summary>
         public long LogoutRequestedTick { get; set; }
         public bool RemoveFromMap { get; set; }

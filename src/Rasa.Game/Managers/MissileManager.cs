@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 namespace Rasa.Managers
@@ -192,6 +193,42 @@ namespace Rasa.Managers
             {
 
             }
+
+            Reflect(mapChannel, actor, missile);
+        }
+
+        /// <summary>
+        /// Reflective Armor: ReflectPercent of what the attack did comes back at a creature that
+        /// made it. The wearer has already taken all of it ("User still takes full damage"). The
+        /// creature takes it through ActorManager.Damage, so a reflection can kill and the kill
+        /// is the wearer's; the wearer's client is told through the hidden MEDIUM_ARMOR_SKILL
+        /// effect's AnnounceReflect, which flies the hit back and floats it on the creature.
+        /// </summary>
+        private static void Reflect(MapChannel mapChannel, Actor victim, Missile missile)
+        {
+            if (!(missile.Source is Creature attacker) || attacker.State == CharacterState.Dead)
+                return;
+
+            var percent = GameEffectManager.ReflectPercentOf(victim);
+
+            if (percent <= 0 || missile.DamageA <= 0)
+                return;
+
+            var amount = missile.DamageA * percent / 100;
+
+            if (amount <= 0)
+                return;
+
+            var carrier = victim.ActiveEffects.Values.FirstOrDefault(e => e.ReflectPercent > 0);
+            var taken = ActorManager.Instance.Damage(mapChannel, attacker, amount, victim);
+
+            if (carrier == null || !(victim is Manifestation player))
+                return;
+
+            var client = mapChannel.ClientList.Find(c => c?.Player == player);
+
+            client?.CallMethod(player.EntityId, new GameEffectAnnounceReflectPacket(carrier.EffectId, attacker.EntityId, DamageType.Physical, amount,
+                taken > 0 && attacker.Attributes[Attributes.Health].Current <= 0));
         }
 
         public void RequestWeaponAttack(Client client, RequestWeaponAttackPacket packet)

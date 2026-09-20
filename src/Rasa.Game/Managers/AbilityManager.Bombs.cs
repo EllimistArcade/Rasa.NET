@@ -133,6 +133,17 @@ namespace Rasa.Managers
 
             var now = Environment.TickCount64;
 
+            // An armed Called Shot goes off first: taken off, then run, so the wound it opens
+            // cannot set it off a second time.
+            foreach (var armed in creature.ActiveEffects.Values.Where(e => e.OnDamaged != null).ToList())
+            {
+                var land = armed.OnDamaged;
+
+                armed.OnDamaged = null;
+                GameEffectManager.Instance.DettachEffect(mapChannel, creature, armed);
+                land(mapChannel, creature, armed);
+            }
+
             foreach (var nanites in creature.ActiveEffects.Values.Where(e => e.OnDamagedCharges > 0 && e.OnDamagedMax > 0).ToList())
             {
                 if (now < nanites.OnDamagedReadyAt || nanites.IsExpired)

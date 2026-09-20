@@ -273,6 +273,30 @@ namespace Rasa.Structures
         /// <summary>Self Destruct: where the holder is sent back to when it detonates.</summary>
         public System.Numerics.Vector3? ReturnTo { get; set; }
 
+        #region Called Shot and Feedback
+
+        /// <summary>
+        /// Run the next time the holder takes damage, from anyone, and then cleared: Called Shot's
+        /// aim, which lies on its target until something wounds it. The effect is taken off before
+        /// this runs, so what it does cannot set it off again.
+        /// </summary>
+        public Action<MapChannel, Actor, GameEffect> OnDamaged { get; set; }
+
+        /// <summary>
+        /// What a creature's action cooldowns are multiplied by while this is on it (Called Shot:
+        /// Arm, 2.0 for half the attack rate); 0 for no change.
+        /// </summary>
+        public double AttackRateModifier { get; set; }
+
+        /// <summary>
+        /// Whether the holder's own hostile actions, or its friendly ones, set this effect off
+        /// (Feedback); the damage is the Tick fields, without a TickIntervalMs to tick on.
+        /// </summary>
+        public bool ActsOnHostile { get; set; }
+        public bool ActsOnFriendly { get; set; }
+
+        #endregion
+
         /// <summary>
         /// A tick of the effect's own, run by GameEffectManager in place of the standard ones when
         /// set - for an effect whose tick has a shape of its own (Lightning's storm).

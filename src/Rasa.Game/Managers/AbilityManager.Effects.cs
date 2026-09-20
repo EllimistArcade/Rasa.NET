@@ -98,6 +98,25 @@ namespace Rasa.Managers
                     break;
                 }
 
+                case "abilities.calledshot":
+                case "abilities.feedback":
+                {
+                    var target = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
+
+                    if (target != null && IsHostile(player, target))
+                    {
+                        if (actionInfo.Module == "abilities.calledshot")
+                            ArmCalledShot(mapChannel, client, player, target, info);
+                        else
+                            AttachFeedback(mapChannel, player, target, info);
+
+                        ManifestationManager.Instance.EnterCombat(client);
+                        Hit(recovery, target);
+                    }
+
+                    break;
+                }
+
                 case "abilities.selfdestruct":
                     ArmSelfDestruct(mapChannel, player, info);
                     Hit(recovery, player);

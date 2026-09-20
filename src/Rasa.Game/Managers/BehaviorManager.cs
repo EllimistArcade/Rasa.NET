@@ -546,8 +546,11 @@ namespace Rasa.Managers
                     // do damage
                     MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, melee: action.ActionId == ActionId.WeaponMelee);
 
-                    // set cooldown
-                    action.CooldownTimer = action.Cooldown;
+                    // Feedback on it burns it for acting: this is the hostile action the server has.
+                    AbilityManager.OnCreatureActed(mapChannel, creature, true);
+
+                    // set cooldown, lengthened by whatever slows its attacks (Called Shot: Arm)
+                    action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
 
                     // creature used action, break loop
                     break;

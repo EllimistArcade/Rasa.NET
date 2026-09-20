@@ -84,7 +84,7 @@ namespace Rasa.Managers
             "abilities.shieldextender", "abilities.shieldwave", "abilities.bioaugmentation", "abilities.weaponenhancement",
             "abilities.damageconversion", "abilities.critwave", "abilities.painttarget", "abilities.polarityfield",
             "abilities.controlledfission", "abilities.explodingnanites", "abilities.disease", "abilities.firesupport",
-            "abilities.selfdestruct", "abilities.scatterbombs"
+            "abilities.selfdestruct", "abilities.scatterbombs", "abilities.calledshot", "abilities.feedback"
         };
 
         /// <summary>

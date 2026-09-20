@@ -713,6 +713,21 @@ namespace Rasa.Managers
             return percent == 0 ? amount : Math.Max(0, amount * (100 + percent) / 100);
         }
 
+        /// <summary>
+        /// What the actor's action cooldowns are multiplied by, the effects on it multiplied
+        /// together (Called Shot: Arm); 1 when nothing slows it.
+        /// </summary>
+        public static double AttackRateModifierOf(Actor actor)
+        {
+            var modifier = 1.0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                if (effect.AttackRateModifier > 0)
+                    modifier *= effect.AttackRateModifier;
+
+            return modifier;
+        }
+
         /// <summary>Percent added to the actor's chance of a critical hit by the effects on them (Crit Wave).</summary>
         public static int CritChancePercentOf(Actor actor)
         {

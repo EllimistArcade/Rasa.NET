@@ -197,8 +197,8 @@ namespace Rasa.Managers
                 return; // creature dead
             }
 
-            // Held in its Critical Death window: it neither moves nor fights until it is finished or dies.
-            if (creature.State == CharacterState.Dying)
+            // Held in its Critical Death window, or stunned: it neither moves nor fights.
+            if (creature.State == CharacterState.Dying || Stuns.IsStunned(creature))
                 return;
 
             // calculate new cell position

@@ -35,9 +35,12 @@ namespace Rasa.Managers
     /// setup) set, which the client words as "You gained %(xp)s experience points by Crit
     /// Killing."
     ///
-    /// Not in the client, and chosen here: the window opens when a player's damage leaves a
-    /// creature alive at HealthThresholdPercent of its health or less, and a finish is worth
-    /// XpBonusPercent more experience than the kill. The window length (6900 ms) and each death
+    /// The help text: "when an enemy is stunned and near death, a red skull icon may appear".
+    /// The window opens when a creature a player is fighting is both stunned (Stuns) and alive at
+    /// HealthThresholdPercent of its health or less - checked when the player's damage lands
+    /// and when a stun is put on it, so either may come first. Not in the client, and chosen
+    /// here: the threshold, and that a finish is worth XpBonusPercent more experience than the
+    /// kill. The window length (6900 ms) and each death
     /// animation's length are critdeathdata's.
     /// </summary>
     public class CritDeathManager
@@ -128,8 +131,8 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// After a player's damage has landed on a creature that is still alive: if it is now near
-        /// death, holds it there and opens the window. Returns whether it did - the creature is then
+        /// After a player's damage has landed on a creature that is still alive, or a stun has been
+        /// put on it: if it is now stunned and near death, holds it there and opens the window. Returns whether it did - the creature is then
         /// out of the fight and takes no more damage.
         /// </summary>
         public bool TryEnterPreDeath(MapChannel mapChannel, Creature creature, Actor source, DamageType damageType)
@@ -141,6 +144,9 @@ namespace Rasa.Managers
                 return false;
 
             if (!creature.Attributes.TryGetValue(Attributes.Health, out var health) || !IsNearDeath(health.Current, health.CurrentMax))
+                return false;
+
+            if (!Stuns.IsStunned(creature))
                 return false;
 
             creature.State = CharacterState.Dying;

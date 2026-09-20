@@ -147,7 +147,7 @@ namespace Rasa.Managers
                 // kill craeture
                 CreatureManager.Instance.HandleCreatureKill(mapChannel, creature, missile.Source);
             }
-            else if (!CritDeathManager.Instance.TryEnterPreDeath(mapChannel, creature, missile.Source, missile.DamageType == 0 ? DamageType.Physical : missile.DamageType))
+            else if (!StunAndCheckCritDeath(mapChannel, creature, missile))
             {
                 // shooting at wandering creatures makes them ANGRY
                 if (creature.Controller.CurrentAction == BehaviorManager.BehaviorActionWander || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath)
@@ -158,6 +158,30 @@ namespace Rasa.Managers
         }
 
         private readonly Random _random = new Random();
+
+        /// <summary>
+        /// A hit that left its creature alive: the stuns it carries (an Ice or Sonic crit, Hand to
+        /// Hand, a grenade), then whether the creature is now stunned and near death, which opens
+        /// its Critical Death window. Returns whether the window opened.
+        /// </summary>
+        private static bool StunAndCheckCritDeath(MapChannel mapChannel, Creature creature, Missile missile)
+        {
+            var damageType = missile.DamageType == 0 ? DamageType.Physical : missile.DamageType;
+
+            if (missile.Source is Manifestation)
+            {
+                if (missile.IsCritical)
+                    Stuns.OnCritical(mapChannel, creature, missile.Source, damageType);
+
+                if (creature.State != CharacterState.Dying && missile.StunMs > 0 && Stuns.Roll(missile.StunChance))
+                    Stuns.Apply(mapChannel, creature, missile.Source, Stuns.StunTypeId, missile.StunMs, damageType);
+            }
+
+            if (creature.State == CharacterState.Dying)
+                return true;
+
+            return CritDeathManager.Instance.TryEnterPreDeath(mapChannel, creature, missile.Source, damageType);
+        }
 
         /// <summary>
         /// Shredder Ammo: a weapon hit by someone carrying it does the effect's extra damage too,
@@ -389,7 +413,8 @@ namespace Rasa.Managers
         /// <param name="armorBypassPercent">Percent of the damage that skips armour: the Torqueshell and Injection Gun skills.</param>
         /// <param name="critBonus">Crit chance in percent the attack adds to the shooter's own (Firearms on a rifle).</param>
         /// <param name="melee">A melee swing, for the crouching crit modifiers.</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false)
+        /// <param name="stunChance">Chance in percent the hit stuns a creature for stunMs (Hand to Hand, grenades).</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0)
         {
             var missile = new Missile
             {
@@ -398,7 +423,9 @@ namespace Rasa.Managers
                 ArmorBypassPercent = Math.Max(0, Math.Min(100, armorBypassPercent)),
                 Source = action.Actor,
                 IsMelee = melee,
-                CritChance = CriticalHits.AttackerChance(action.Actor, melee, critBonus)
+                CritChance = CriticalHits.AttackerChance(action.Actor, melee, critBonus),
+                StunChance = stunChance,
+                StunMs = stunMs
             };
 
             // get distance between actors

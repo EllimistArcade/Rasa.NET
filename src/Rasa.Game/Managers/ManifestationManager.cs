@@ -356,7 +356,8 @@ namespace Rasa.Managers
             var action = new ActionData(player, packet.ActionId, (uint)packet.ActionArgId, targetId, 0);
 
             MissileManager.Instance.MissileLaunch(mapChannel, action, damage, 0,
-                WeaponDamageType(player, (DamageType)(weaponInfo.WeaponAltInfo?.AltDamageType ?? 0)), melee: true);
+                WeaponDamageType(player, (DamageType)(weaponInfo.WeaponAltInfo?.AltDamageType ?? 0)), melee: true,
+                stunChance: Stuns.HandToHandChance(pump), stunMs: Stuns.HandToHandMs(pump));
         }
 
         /// <summary>
@@ -759,8 +760,12 @@ namespace Rasa.Managers
                 ? CriticalHits.FirearmsRifleChance(pump)
                 : 0;
 
+            // Launchers on a grenade launcher: a chance to stun ("Grenades: +25% Stun Chance" from pump 3).
+            var grenades = skillId == WeaponSkills.Launchers && weapon.ItemTemplate.WeaponInfo.ToolType == ToolType.GrenadeLauncher;
+
             MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage, WeaponSkills.ArmorBypassPercent(skillId, pump),
-                WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType), critBonus);
+                WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType), critBonus,
+                stunChance: grenades ? Stuns.GrenadeChance(pump) : 0, stunMs: grenades ? Stuns.GrenadeStunMs : 0);
             
             return FireResult.Fired;
         }

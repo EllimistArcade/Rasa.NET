@@ -704,6 +704,7 @@ namespace Rasa.Managers
                 ManifestationManager.Instance.EnterCombat(client);
 
             var critChance = CriticalHits.AttackerChance(player, false);
+            var stun = Stuns.OfAbility(actionInfo.Module, info);
 
             foreach (var target in targets)
             {
@@ -724,6 +725,17 @@ namespace Rasa.Managers
                     IsCritical = crit,
                     DeathBlow = taken > 0 && target.Attributes[Attributes.Health].Current <= 0
                 });
+
+                // Still standing: the stuns the hit carries - the ability's own, and an Ice or
+                // Sonic crit's - each of which opens the Critical Death window if it is low enough.
+                if (target.State != CharacterState.Dead && target.State != CharacterState.Dying && target.Attributes[Attributes.Health].Current > 0)
+                {
+                    if (crit)
+                        Stuns.OnCritical(mapChannel, target, player, damageType);
+
+                    if (target.State != CharacterState.Dying && stun.Ms > 0 && Stuns.Roll(stun.Chance))
+                        Stuns.Apply(mapChannel, target, player, Stuns.StunTypeId, stun.Ms, damageType);
+                }
             }
 
             CellManager.Instance.CellCallMethod(mapChannel, player, recovery);

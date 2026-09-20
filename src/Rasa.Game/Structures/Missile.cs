@@ -22,6 +22,9 @@
         public double CritChance { get; set; }
         /// <summary>Whether it landed as a critical hit, DamageA already multiplied.</summary>
         public bool IsCritical { get; set; }
+        /// <summary>Chance in percent that the hit stuns a creature (Hand to Hand, grenades), and for how long.</summary>
+        public int StunChance { get; set; }
+        public int StunMs { get; set; }
         public long TriggerTime { get; set; }       // amount of milliseconds left before the missile is triggered, is decreased on every tick
         public MissileArgs Args = new MissileArgs();
     }

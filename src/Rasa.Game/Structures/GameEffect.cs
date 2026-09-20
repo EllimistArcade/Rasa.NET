@@ -148,6 +148,9 @@ namespace Rasa.Structures
         /// <summary>Percent added to the holder's chance of a critical hit (Crit Wave); see CriticalHits.</summary>
         public int CritChancePercent { get; set; }
 
+        /// <summary>A stun: while it is on, a creature neither moves nor attacks; see Stuns.</summary>
+        public bool IsStun { get; set; }
+
         /// <summary>Whether it changes any regeneration rate, which the holder's client has to be told.</summary>
         public bool ChangesRegen => RegenPercent != 0 || ArmorRegenPercent != 0 || HealthRegenPercent != 0 || PowerRegenPercent != 0;
 

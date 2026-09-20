@@ -160,6 +160,10 @@ namespace Rasa.Managers
                     BehaviorManager.Instance.SetActionFighting(creature, missile.Source.EntityId);
 
                 WeaponBonus(mapChannel, creature, missile);
+
+                // Explosive Nanites go off on damage taken.
+                if (missile.DamageA > 0)
+                    AbilityManager.OnCreatureDamaged(mapChannel, creature);
             }
         }
 

@@ -83,6 +83,25 @@ namespace Rasa.Managers
                     Hit(recovery, player);
                     break;
 
+                case "abilities.controlledfission":
+                case "abilities.explodingnanites":
+                {
+                    var target = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
+
+                    if (target != null && IsHostile(player, target))
+                    {
+                        if (actionInfo.Module == "abilities.controlledfission")
+                            AttachControlledFission(mapChannel, player, target, info);
+                        else
+                            AttachExplosiveNanites(mapChannel, player, target, info);
+
+                        ManifestationManager.Instance.EnterCombat(client);
+                        Hit(recovery, target);
+                    }
+
+                    break;
+                }
+
                 case "abilities.painttarget":
                 case "abilities.polarityfield":
                 {

@@ -82,7 +82,8 @@ namespace Rasa.Managers
             "abilities.rage", "abilities.resistance", "abilities.sacrifice", "abilities.decay",
             "abilities.scourge", "abilities.reconstruction", "abilities.regenerationwave", "abilities.basewave",
             "abilities.shieldextender", "abilities.shieldwave", "abilities.bioaugmentation", "abilities.weaponenhancement",
-            "abilities.damageconversion", "abilities.critwave", "abilities.painttarget", "abilities.polarityfield"
+            "abilities.damageconversion", "abilities.critwave", "abilities.painttarget", "abilities.polarityfield",
+            "abilities.controlledfission", "abilities.explodingnanites"
         };
 
         /// <summary>
@@ -95,7 +96,7 @@ namespace Rasa.Managers
         };
 
         /// <summary>Of those, the ones aimed at a single enemy (client targetType TARGET_NON_FRIENDLY).</summary>
-        private static readonly HashSet<string> HostileEffectModules = new HashSet<string> { "abilities.decay", "abilities.painttarget", "abilities.polarityfield" };
+        private static readonly HashSet<string> HostileEffectModules = new HashSet<string> { "abilities.decay", "abilities.painttarget", "abilities.polarityfield", "abilities.controlledfission", "abilities.explodingnanites" };
 
         /// <summary>
         /// Abilities the client marks isToggle without a sourceGameEffect or targetGameEffect

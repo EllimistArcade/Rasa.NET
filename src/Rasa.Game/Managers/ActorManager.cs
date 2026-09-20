@@ -237,6 +237,10 @@ namespace Rasa.Managers
                 {
                     BehaviorManager.Instance.SetActionFighting(creature, source.EntityId);
                 }
+
+                // Explosive Nanites go off on damage taken.
+                if (healthTaken + armorTaken > 0 && health.Current > 0)
+                    AbilityManager.OnCreatureDamaged(mapChannel, creature);
             }
             else if (health.Current <= 0)
             {

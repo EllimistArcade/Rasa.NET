@@ -244,6 +244,22 @@ namespace Rasa.Structures
         /// <summary>The player whose finisher is winding up on this CRIT_PREDEATH_EFFECT; 0 while nobody has claimed it.</summary>
         public ulong FinisherId { get; set; }
 
+        #endregion
+
+        #region Explosive Nanites
+
+        /// <summary>
+        /// Damage done to the holder each time it takes damage, rolled OnDamagedMin..Max (scaled
+        /// like ability damage) of OnDamagedType, at most OnDamagedCharges times and no more
+        /// often than every OnDamagedIntervalMs. The effect ends with its last charge.
+        /// </summary>
+        public int OnDamagedMin { get; set; }
+        public int OnDamagedMax { get; set; }
+        public DamageType OnDamagedType { get; set; }
+        public int OnDamagedCharges { get; set; }
+        public int OnDamagedIntervalMs { get; set; }
+        public long OnDamagedReadyAt { get; set; }
+
         /// <summary>
         /// A tick of the effect's own, run by GameEffectManager in place of the standard ones when
         /// set - for an effect whose tick has a shape of its own (Lightning's storm).

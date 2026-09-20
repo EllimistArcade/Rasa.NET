@@ -46,9 +46,9 @@ namespace Rasa.Managers
         public const int LaserMs = 6000;
 
         public const int CritElectricTypeId = 418;  // CRIT_ELECTRIC
-        public const int ElectricArcTargets = 3;
+        public const int ElectricArcTargets = 1;
         public const float ElectricArcRadius = 10f;
-        public const int ElectricArcPercent = 25;
+        public const int ElectricArcPercent = 50;
 
         /// <summary>How long the CRIT_ELECTRIC effect stays on for its arc FX to play out.</summary>
         private const int ElectricEffectMs = 1500;

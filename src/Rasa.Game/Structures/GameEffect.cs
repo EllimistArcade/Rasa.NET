@@ -112,6 +112,39 @@ namespace Rasa.Structures
         /// <summary>Percent of the damage the holder takes from an attacker that is reflected back at it (Reflective Armor).</summary>
         public int ReflectPercent { get; set; }
 
+        /// <summary>An attribute raised (or lowered) by AttributePercent while on - Bio Augmentation's Health, Power, Body, Mind or Spirit.</summary>
+        public Attributes? AttributeId { get; set; }
+
+        /// <summary>Percent change to AttributeId; players only, applied in ManifestationManager.UpdateStatsValues.</summary>
+        public int AttributePercent { get; set; }
+
+        /// <summary>
+        /// Percent of each incoming hit the effect takes out of AbsorbPool instead of the holder:
+        /// 100 for Shield Wave, 15-60 for Shield Extender. The effect ends when the pool is empty.
+        /// </summary>
+        public int AbsorbPercent { get; set; }
+
+        /// <summary>What the shield has left to absorb. Shared by an aura and its copies - one bubble, one pool.</summary>
+        public AbsorbPool AbsorbPool { get; set; }
+
+        /// <summary>
+        /// Shredder Ammo: extra damage the holder's weapon hits do, at most once per
+        /// WeaponBonusIntervalMs, rolled WeaponBonusMin..Max and scaled like ability damage.
+        /// </summary>
+        public int WeaponBonusMin { get; set; }
+        public int WeaponBonusMax { get; set; }
+        public DamageType WeaponBonusType { get; set; } = DamageType.Physical;
+        public int WeaponBonusIntervalMs { get; set; }
+
+        /// <summary>Environment.TickCount64 before which the weapon bonus does not fire again.</summary>
+        public long WeaponBonusReadyAt { get; set; }
+
+        /// <summary>Viral Conversion: the type the holder's virulent weapon damage becomes; 0 for none.</summary>
+        public DamageType ConvertVirulentTo { get; set; }
+
+        /// <summary>The attribute the client's tooltip names for "%(attrId)s"; 1 (Body) when there is none.</summary>
+        public int TooltipAttrId { get; set; } = 1;
+
         /// <summary>Whether it changes any regeneration rate, which the holder's client has to be told.</summary>
         public bool ChangesRegen => RegenPercent != 0 || ArmorRegenPercent != 0 || HealthRegenPercent != 0 || PowerRegenPercent != 0;
 
@@ -188,5 +221,11 @@ namespace Rasa.Structures
 
         /// <summary>Whether a tick of this effect does anything besides announce itself.</summary>
         public bool TicksDoWork => AdrenalineDrainPercentPerSecond > 0 || TickDamageMax > 0 || TickHealMax > 0 || TickAdrenaline > 0 || AuraRadius > 0;
+    }
+
+    /// <summary>A shield's remaining absorption, shared by everything the one shield covers.</summary>
+    public class AbsorbPool
+    {
+        public int Remaining { get; set; }
     }
 }

@@ -355,7 +355,25 @@ namespace Rasa.Managers
 
             var action = new ActionData(player, packet.ActionId, (uint)packet.ActionArgId, targetId, 0);
 
-            MissileManager.Instance.MissileLaunch(mapChannel, action, damage);
+            MissileManager.Instance.MissileLaunch(mapChannel, action, damage, 0,
+                WeaponDamageType(player, (DamageType)(weaponInfo.WeaponAltInfo?.AltDamageType ?? 0)));
+        }
+
+        /// <summary>
+        /// The damage type a player's weapon attack lands as: the weapon's own, unless it is
+        /// virulent and Viral Conversion is on them, in which case it is what the conversion
+        /// makes it.
+        /// </summary>
+        public static DamageType WeaponDamageType(Manifestation player, DamageType weaponType)
+        {
+            if (weaponType != DamageType.Virulent)
+                return weaponType;
+
+            foreach (var effect in player.ActiveEffects.Values)
+                if (effect.ConvertVirulentTo != 0)
+                    return effect.ConvertVirulentTo;
+
+            return weaponType;
         }
 
         /// <summary>
@@ -736,7 +754,8 @@ namespace Rasa.Managers
             damage = GameEffectManager.ApplyDamageDealt(client.Player, damage, WeaponSkills.DamagePercent(skillId, pump));
             var action = new ActionData(client.Player, weaponClassInfo.WeaponAttackActionId, weaponClassInfo.WeaponAttackArgId, client.Player.Target, 0);
             // launch correct missile type depending on weapon type
-            MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage, WeaponSkills.ArmorBypassPercent(skillId, pump));
+            MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage, WeaponSkills.ArmorBypassPercent(skillId, pump),
+                WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType));
             
             return FireResult.Fired;
         }
@@ -2677,6 +2696,35 @@ namespace Rasa.Managers
          * Does not send values to clients
          * If fullreset is true, the current values of each attribute are set to the maximum
          */
+        private static int WithPercent(int value, int percent)
+        {
+            return percent == 0 ? value : (int)Math.Round(value * (100 + percent) / 100.0);
+        }
+
+        /// <summary>
+        /// Works the player's attributes out again and tells them and those around them: an
+        /// effect that changes an attribute (Bio Augmentation, Reconstruction's health pools) has
+        /// gone on or come off. Health and power keep their current values, capped to the new
+        /// maximums.
+        /// </summary>
+        public void RefreshStats(Manifestation player)
+        {
+            var client = player?.MapChannel == null ? null : Server.Clients.Find(c => c?.Player == player);
+
+            if (client == null)
+                return;
+
+            UpdateStatsValues(client, false);
+
+            client.CallMethod(player.EntityId, new AttributeInfoPacket(player.Attributes));
+            client.CallMethod(player.EntityId, new UpdatePowerPacket(player.Attributes[Attributes.Power], 0));
+            CellManager.Instance.CellCallMethod(player.MapChannel, player, new UpdateHealthPacket(player.Attributes[Attributes.Health], 0));
+
+            // Those carried the base regeneration rates; the effects' rates go back on top.
+            if (player.ActiveEffects.Values.Any(e => e.ChangesRegen))
+                GameEffectManager.SyncRegen(player.MapChannel, player);
+        }
+
         public void UpdateStatsValues(Client client, bool fullreset)
         {
             var player = client.Player;
@@ -2720,10 +2768,19 @@ namespace Rasa.Managers
             int totalMind   = levelBasedMind   + player.SpentMind;
             int totalSpirit = levelBasedSpirit + player.SpentSpirit;
 
+            // What the effects on the player add (Bio Augmentation), before anything is derived
+            // from the three, so +Body is also the health and armour that Body brings.
+            totalBody   = WithPercent(totalBody,   GameEffectManager.AttributePercentOf(player, Attributes.Body));
+            totalMind   = WithPercent(totalMind,   GameEffectManager.AttributePercentOf(player, Attributes.Mind));
+            totalSpirit = WithPercent(totalSpirit, GameEffectManager.AttributePercentOf(player, Attributes.Spirit));
+
             // Health
             float levelBasedHealth = HealthBaselinePerLevel[level - 1];
             levelBasedHealth = levelBasedHealth / (2 * (level - 1) + 2 * (2 * (level - 1) + 10) + 10);
             int totalHealth = (int)(levelBasedHealth * (totalSpirit + 2 * totalBody));
+
+            // Bio Augmentation's +Health and Reconstruction's health pools.
+            totalHealth = Math.Max(1, WithPercent(totalHealth, GameEffectManager.AttributePercentOf(player, Attributes.Health)));
 
             // The per-point factor shrinks with level; the attribute totals grow. Both sides of
             // these divisions were int, so the factor was truncated: 3 at level 1 instead of
@@ -2869,7 +2926,8 @@ namespace Rasa.Managers
             // added by krssrb
             // power test
             attribute[Attributes.Power].NormalMax = 100 + (player.Level - 1) * 2 * 4 + player.SpentMind * 3;
-            var powerBonus = 0;
+            // Bio Augmentation's +Power.
+            var powerBonus = WithPercent(attribute[Attributes.Power].NormalMax, GameEffectManager.AttributePercentOf(player, Attributes.Power)) - attribute[Attributes.Power].NormalMax;
             attribute[Attributes.Power].CurrentMax = attribute[Attributes.Power].NormalMax + powerBonus;
             if (fullreset)
                 attribute[Attributes.Power].Current = attribute[Attributes.Power].CurrentMax;

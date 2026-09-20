@@ -151,6 +151,51 @@ namespace Rasa.Managers
                 // shooting at wandering creatures makes them ANGRY
                 if (creature.Controller.CurrentAction == BehaviorManager.BehaviorActionWander || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath)
                     BehaviorManager.Instance.SetActionFighting(creature, missile.Source.EntityId);
+
+                WeaponBonus(mapChannel, creature, missile);
+            }
+        }
+
+        private readonly Random _random = new Random();
+
+        /// <summary>
+        /// Shredder Ammo: a weapon hit by someone carrying it does the effect's extra damage too,
+        /// at most once per its interval. Taken through ActorManager.Damage, so it can kill and
+        /// the kill is the shooter's, and shown through the effect's own AnnounceDamage, which
+        /// floats it on the target from the shooter.
+        /// </summary>
+        private void WeaponBonus(MapChannel mapChannel, Creature target, Missile missile)
+        {
+            var shooter = missile.Source;
+
+            if (shooter == null || target.State == CharacterState.Dead)
+                return;
+
+            var now = Environment.TickCount64;
+
+            foreach (var effect in shooter.ActiveEffects.Values)
+            {
+                if (effect.WeaponBonusMax <= 0 || now < effect.WeaponBonusReadyAt)
+                    continue;
+
+                effect.WeaponBonusReadyAt = now + Math.Max(100, effect.WeaponBonusIntervalMs);
+
+                var rolled = AbilityManager.Scale(effect.SourceLevel, _random.Next(effect.WeaponBonusMin, effect.WeaponBonusMax + 1), effect.TickScaleType);
+                var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted, effect.WeaponBonusType);
+                var taken = ActorManager.Instance.Damage(mapChannel, target, amount, shooter);
+
+                var announce = new GameEffectAnnounceDamagePacket(effect.EffectId);
+                announce.Hits.Add(new TickEntry
+                {
+                    EntityId = target.EntityId,
+                    Amount = amount,
+                    Resisted = resisted,
+                    DamageType = effect.WeaponBonusType,
+                    DeathBlow = taken > 0 && target.Attributes[Attributes.Health].Current <= 0
+                });
+
+                CellManager.Instance.CellCallMethod(mapChannel, shooter, announce);
+                return;
             }
         }
 
@@ -169,6 +214,17 @@ namespace Rasa.Managers
             // Base Wave), and off the missile too, since the recovery packet reports its DamageA
             // as the amount that landed.
             Resist(actor, missile);
+
+            // Then a shield takes its share (Shield Extender, Shield Wave).
+            missile.DamageA = GameEffectManager.Instance.ApplyAbsorb(mapChannel, actor, missile.DamageA, out var absorbed);
+
+            if (absorbed > 0)
+                foreach (var hit in missile.Args.HitData)
+                    if (hit.EntityId == actor.EntityId)
+                    {
+                        hit.Absorbed = (uint)absorbed;
+                        hit.FinalAmt = missile.DamageA;
+                    }
 
             // decrease armor first - all of it but what bypasses armour
             var armorDecrease = Math.Min(ArmorShare(missile), actor.Attributes[Attributes.Armor].Current);
@@ -330,11 +386,12 @@ namespace Rasa.Managers
         }
 
         /// <param name="armorBypassPercent">Percent of the damage that skips armour: the Torqueshell and Injection Gun skills.</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0)
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0)
         {
             var missile = new Missile
             {
                 DamageA = damage,
+                DamageType = damageType,
                 ArmorBypassPercent = Math.Max(0, Math.Min(100, armorBypassPercent)),
                 Source = action.Actor
             };

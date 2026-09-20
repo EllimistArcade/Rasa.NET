@@ -80,7 +80,18 @@ namespace Rasa.Managers
         private static readonly HashSet<string> TimedEffectModules = new HashSet<string>
         {
             "abilities.rage", "abilities.resistance", "abilities.sacrifice", "abilities.decay",
-            "abilities.scourge", "abilities.reconstruction", "abilities.regenerationwave", "abilities.basewave"
+            "abilities.scourge", "abilities.reconstruction", "abilities.regenerationwave", "abilities.basewave",
+            "abilities.shieldextender", "abilities.shieldwave", "abilities.bioaugmentation", "abilities.weaponenhancement",
+            "abilities.damageconversion"
+        };
+
+        /// <summary>
+        /// Of those, the ones aimed at a friend (client targetType TARGET_FRIENDLY): another
+        /// player, or the performer when nobody else is targeted.
+        /// </summary>
+        private static readonly HashSet<string> FriendlyEffectModules = new HashSet<string>
+        {
+            "abilities.shieldextender", "abilities.bioaugmentation", "abilities.weaponenhancement"
         };
 
         /// <summary>Of those, the ones aimed at a single enemy (client targetType TARGET_NON_FRIENDLY).</summary>
@@ -311,6 +322,13 @@ namespace Rasa.Managers
             }
 
             var wantsHostile = IsDirectDamage(action, info) || HostileEffectModules.Contains(action.Module);
+
+            // A friendly buff lands on a player; a creature is not a friend to buff.
+            if (FriendlyEffectModules.Contains(action.Module) && target != null && !(target is Manifestation))
+            {
+                Fail(client, actionId, level, PlayerMessage.PmTargetInvalid);
+                return;
+            }
 
             if (wantsHostile && target == null && !SelfCentred(info) && packet.Target.Kind != ActionTargetKind.Location)
             {

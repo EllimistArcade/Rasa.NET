@@ -114,7 +114,13 @@ namespace Rasa.Managers
             AddToList(actor, effect);
             mapChannel.ActorsWithEffects.Add(actor);
 
-            if (effect.MaxHealthPercent != 0)
+            // A player's attributes are worked out in one place, UpdateStatsValues, which reads
+            // the effects; anything else would be undone by the next time it runs - putting on a
+            // piece of armour, spending a point. A creature has no such place, and takes a
+            // maximum-health change directly.
+            if (actor is Manifestation && ChangesStats(effect))
+                ManifestationManager.Instance.RefreshStats(actor as Manifestation);
+            else if (effect.MaxHealthPercent != 0)
                 ApplyMaxHealth(mapChannel, actor, effect);
 
             var attached = new GameEffectAttachedPacket
@@ -126,7 +132,7 @@ namespace Rasa.Managers
                 Announced = effect.AnnounceOnAttach,
                 Duration = effect.HasDuration ? effect.RemainingSeconds : (int?)null,
                 DamageType = effect.TickDamageMax > 0 ? (int)effect.TickDamageType : 0,
-                AttrId = 1,
+                AttrId = effect.TooltipAttrId,
                 IsActive = true,
                 IsBuff = effect.IsBuff,
                 IsDebuff = !effect.IsBuff,
@@ -220,6 +226,8 @@ namespace Rasa.Managers
 
             if (gameEffect.MaxHealthApplied != 0)
                 RevertMaxHealth(mapChannel, actor, gameEffect, true);
+            else if (actor is Manifestation && ChangesStats(gameEffect))
+                ManifestationManager.Instance.RefreshStats(actor as Manifestation);
 
             if (gameEffect.MovementModifierPercent != 0)
                 UpdateMovementMod(mapChannel, actor);
@@ -525,6 +533,8 @@ namespace Rasa.Managers
                     RegenPercent = effect.RegenPercent,
                     ArmorRegenPercent = effect.ArmorRegenPercent,
                     HealthRegenPercent = effect.HealthRegenPercent,
+                    AbsorbPercent = effect.AbsorbPercent,
+                    AbsorbPool = effect.AbsorbPool,
                     PowerRegenPercent = effect.PowerRegenPercent,
                     Parent = effect
                 };
@@ -563,6 +573,70 @@ namespace Rasa.Managers
                 total += effect.ResistModifier;
 
             return total;
+        }
+
+        /// <summary>Whether an effect changes what UpdateStatsValues works out for a player.</summary>
+        private static bool ChangesStats(GameEffect effect)
+        {
+            return effect.MaxHealthPercent != 0 || (effect.AttributeId.HasValue && effect.AttributePercent != 0);
+        }
+
+        /// <summary>
+        /// The percent the effects on an actor add to an attribute: Bio Augmentation's
+        /// AttributePercent for its attribute, and for Health also Reconstruction's
+        /// MaxHealthPercent. Read by ManifestationManager.UpdateStatsValues.
+        /// </summary>
+        public static int AttributePercentOf(Actor actor, Attributes attribute)
+        {
+            var total = 0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+            {
+                if (effect.AttributeId == attribute)
+                    total += effect.AttributePercent;
+
+                if (attribute == Attributes.Health)
+                    total += effect.MaxHealthPercent;
+            }
+
+            return total;
+        }
+
+        /// <summary>
+        /// Shields: what of an incoming hit the effects on the victim take instead of them. The
+        /// first effect with something left in its pool takes AbsorbPercent of the hit, up to
+        /// what the pool holds; a pool emptied ends its shield - the aura, and with it every copy
+        /// it put on the squad. Returns what is left of the hit; absorbed is what the shield took.
+        /// </summary>
+        public int ApplyAbsorb(MapChannel mapChannel, Actor victim, int amount, out int absorbed)
+        {
+            absorbed = 0;
+
+            if (victim == null || amount <= 0)
+                return amount;
+
+            foreach (var effect in victim.ActiveEffects.Values.ToList())
+            {
+                var pool = effect.AbsorbPool;
+
+                if (pool == null || pool.Remaining <= 0 || effect.AbsorbPercent <= 0)
+                    continue;
+
+                absorbed = Math.Min(pool.Remaining, (int)Math.Round(amount * Math.Min(100, effect.AbsorbPercent) / 100.0));
+                pool.Remaining -= absorbed;
+
+                if (pool.Remaining <= 0)
+                {
+                    var shield = effect.Parent ?? effect;
+
+                    if (shield.Holder != null)
+                        DettachEffect(mapChannel, shield.Holder, shield);
+                }
+
+                break;
+            }
+
+            return amount - absorbed;
         }
 
         /// <summary>Percent of damage taken that the effects on an actor reflect back at the attacker (Reflective Armor).</summary>
@@ -666,7 +740,7 @@ namespace Rasa.Managers
         /// would show as a bar that jumps on every real update; the attribute itself keeps the
         /// base rate, since UpdateStatsValues rebuilds it from the stats.
         /// </summary>
-        private static void SyncRegen(MapChannel mapChannel, Actor actor)
+        public static void SyncRegen(MapChannel mapChannel, Actor actor)
         {
             var client = ClientOf(mapChannel, actor);
 

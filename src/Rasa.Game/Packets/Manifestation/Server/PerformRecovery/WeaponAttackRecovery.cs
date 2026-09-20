@@ -31,7 +31,7 @@
                 pw.WriteTuple(3);
                 pw.WriteULong(hit.EntityId);         // target entityid
                 pw.WriteTuple(12);              // rawinfo start
-                    pw.WriteUInt((uint)DamageType.Physical); // self.damagetype
+                    pw.WriteUInt((uint)(Missile.DamageType == 0 ? DamageType.Physical : Missile.DamageType)); // self.damagetype
                     pw.WriteUInt(hit.Reflected);        // self.reflected
                     pw.WriteUInt(hit.Filtered);         // self.filtered
                     pw.WriteUInt(hit.Absorbed);         // self.absorbed

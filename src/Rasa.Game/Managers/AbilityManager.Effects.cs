@@ -39,6 +39,15 @@ namespace Rasa.Managers
         private const int ReconstructionHarmPoolTypeId = 10000065;  // RECONSTRUCTION_HARM_POOL_EFFECT
         private const int RegenerationWaveTypeId = 10000019;        // REGENERATIONWAVE
         private const int BaseWaveTypeId = 206;                     // BASEWAVEEFFECT
+        private const int ShieldExtenderSourceTypeId = 10000056;    // SHIELD_EXTENDER_SOURCE, on the target
+        private const int ShieldExtenderShieldedTypeId = 10000055;  // SHIELD_EXTENDER_SHIELDED, on the squad near it
+        private const int ShieldWaveTypeId = 201;                   // SHIELDWAVEEFFECT
+        private const int BioAugmentationTypeId = 329;              // BIO_AUGMENTATION_EFFECT
+        private const int WeaponEnhancementTypeId = 10000035;       // WEAPON_ENHANCEMENT (Shredder Ammo)
+        private const int DamageConversionTypeId = 354;             // DAMAGE_CONVERSION (Viral Conversion)
+
+        /// <summary>skilldata T4_SNIPER_SHREDDER_AMMO; its pump shortens Shredder Ammo's interval.</summary>
+        private const int ShredderAmmoSkillId = 150;
 
         /// <summary>
         /// How long the effect that carries an instant Reconstruction's numbers stays on. The
@@ -107,6 +116,72 @@ namespace Rasa.Managers
 
                     break;
 
+                case "abilities.shieldextender":
+                {
+                    var ally = FriendlyTarget(mapChannel, player, action);
+
+                    if (ally != null)
+                    {
+                        AttachShieldExtender(mapChannel, player, ally, info);
+                        Hit(recovery, ally);
+                    }
+
+                    break;
+                }
+
+                case "abilities.shieldwave":
+                    foreach (var member in SquadWithin(mapChannel, player, info.Get(AbilityProperty.RadiusAroundSource, 25)))
+                    {
+                        var shield = NewEffect(mapChannel, player, info, ShieldWaveTypeId, info.Get(AbilityProperty.Duration, 120));
+                        shield.AbsorbPercent = 100;
+                        shield.AbsorbPool = new AbsorbPool { Remaining = Scale(player.Level, info.Get(AbilityProperty.EffectModifier, 300), info.Get(AbilityProperty.AttrScaleType)) };
+                        shield.AllowDetach = true;
+                        GameEffectManager.Instance.Attach(mapChannel, member, shield);
+                        Hit(recovery, member);
+                    }
+
+                    break;
+
+                case "abilities.bioaugmentation":
+                {
+                    var ally = FriendlyTarget(mapChannel, player, action);
+
+                    if (ally != null)
+                    {
+                        AttachBioAugmentation(mapChannel, player, ally, info);
+                        Hit(recovery, ally);
+                    }
+
+                    break;
+                }
+
+                case "abilities.weaponenhancement":
+                {
+                    var ally = FriendlyTarget(mapChannel, player, action);
+
+                    if (ally != null)
+                    {
+                        AttachShredderAmmo(mapChannel, player, ally, info);
+                        Hit(recovery, ally);
+                    }
+
+                    break;
+                }
+
+                case "abilities.damageconversion":
+                {
+                    // The client picks the tooltip by the effect's level - (354, damage type) -
+                    // so the level is the damage type the virulent damage becomes.
+                    var to = (DamageType)info.Get(AbilityProperty.DamageType, (int)DamageType.Physical);
+                    var conversion = NewEffect(mapChannel, player, info, DamageConversionTypeId, info.Get(AbilityProperty.Duration, 30));
+                    conversion.EffectLevel = (uint)to;
+                    conversion.ConvertVirulentTo = to;
+                    conversion.AllowDetach = true;
+                    GameEffectManager.Instance.Attach(mapChannel, player, conversion);
+                    Hit(recovery, player);
+                    break;
+                }
+
                 case "abilities.basewave":
                     foreach (var member in SquadWithin(mapChannel, player, info.Get(AbilityProperty.RadiusAroundSource, 25)))
                     {
@@ -148,6 +223,106 @@ namespace Rasa.Managers
         private static void Hit(AbilityRecoveryPacket recovery, Actor actor, int effectTypeId = 0)
         {
             recovery.Hits.Add(new AbilityHit { EntityId = actor.EntityId, EffectTypeId = effectTypeId });
+        }
+
+        /// <summary>
+        /// Who a friendly ability lands on: the player targeted, or the performer when the target
+        /// is nobody, themselves, or not a player; null when the one targeted has died or left
+        /// during the windup.
+        /// </summary>
+        private static Manifestation FriendlyTarget(MapChannel mapChannel, Manifestation player, ActionData action)
+        {
+            if (action.TargetId == 0 || action.TargetId == player.EntityId)
+                return player;
+
+            var target = ResolveTarget(mapChannel, action.TargetId);
+
+            if (target == null)
+                return null;
+
+            if (!(target is Manifestation ally))
+                return player;
+
+            return ally.State == CharacterState.Dead ? null : ally;
+        }
+
+        /// <summary>An effect running for a number of milliseconds rather than seconds - the *_MS properties.</summary>
+        private static void RunForMs(GameEffect effect, int milliseconds)
+        {
+            effect.ExpiresTick = Environment.TickCount64 + Math.Max(1000, milliseconds);
+        }
+
+        /// <summary>
+        /// Shield Extender: a bubble on a friend and the squad within EFFECT_RADIUS of them, that
+        /// takes EFFECT_MODIFIER percent of every hit until it has taken EFFECT_DAMAGE_MAX or
+        /// EFFECT_DURATION_MS has passed. One pool for the whole bubble, shared by the target's
+        /// SHIELD_EXTENDER_SOURCE and the copies (SHIELD_EXTENDER_SHIELDED) on those in range,
+        /// re-read every second as they move.
+        /// </summary>
+        private static void AttachShieldExtender(MapChannel mapChannel, Manifestation player, Manifestation ally, ActionLevelInfo info)
+        {
+            var shield = NewEffect(mapChannel, player, info, ShieldExtenderSourceTypeId, null);
+
+            RunForMs(shield, info.Get(AbilityProperty.EffectDurationMs, 45000));
+            shield.AbsorbPercent = info.Get(AbilityProperty.EffectModifier, 15);
+            shield.AbsorbPool = new AbsorbPool { Remaining = info.Get(AbilityProperty.EffectDamageMax, 120) };
+            shield.AllowDetach = true;
+            shield.AuraRadius = info.Get(AbilityProperty.EffectRadius, 6);
+            shield.AuraChildTypeId = ShieldExtenderShieldedTypeId;
+            shield.TickIntervalMs = 1000;
+            shield.NextTickTick = Environment.TickCount64;
+
+            GameEffectManager.Instance.Attach(mapChannel, ally, shield);
+        }
+
+        /// <summary>
+        /// Bio Augmentation: EFFECT_MODIFIER percent more of ATTRIBUTE_ID (Health, Power, Body,
+        /// Mind or Spirit by pump) on a friend for EFFECT_DURATION_MS - fifteen minutes. One at a
+        /// time on a target; a second replaces the first. Applied through the target's stats, so
+        /// +Body is also the health and armour Body brings.
+        /// </summary>
+        private static void AttachBioAugmentation(MapChannel mapChannel, Manifestation player, Manifestation ally, ActionLevelInfo info)
+        {
+            var attribute = (Attributes)info.Get(AbilityProperty.AttributeId, (int)Attributes.Health);
+            var percent = info.Get(AbilityProperty.EffectModifier, 30);
+            var augmentation = NewEffect(mapChannel, player, info, BioAugmentationTypeId, null);
+
+            RunForMs(augmentation, info.Get(AbilityProperty.EffectDurationMs, 900000));
+            augmentation.AttributeId = attribute;
+            augmentation.AttributePercent = percent;
+            augmentation.AllowDetach = true;
+            augmentation.TooltipAttrId = (int)attribute;                // "Increases %(attrId)s by %(amount)s"
+            augmentation.Tooltip["amount"] = $"{percent}%";
+
+            GameEffectManager.Instance.Attach(mapChannel, ally, augmentation);
+        }
+
+        /// <summary>
+        /// Shredder Ammo: a friend's weapon hits do DAMAGE_AMOUNT (scaled to the caster's level)
+        /// of the pump's DAMAGE_TYPE extra, once per interval, for DURATION_MS. The client's text
+        /// has the interval shorten with every pump the caster owns but gives no figures, and
+        /// the data has none: this uses 5 s at pump 1 and a second less per pump, 1 s at pump 5.
+        /// </summary>
+        private static void AttachShredderAmmo(MapChannel mapChannel, Manifestation player, Manifestation ally, ActionLevelInfo info)
+        {
+            var pump = Math.Max(1, ManifestationManager.SkillPump(player, ShredderAmmoSkillId));
+            var ammo = NewEffect(mapChannel, player, info, WeaponEnhancementTypeId, null);
+
+            RunForMs(ammo, info.Get(AbilityProperty.DurationMs, 30000));
+            ammo.WeaponBonusMin = info.Get(AbilityProperty.DamageAmountMin);
+            ammo.WeaponBonusMax = Math.Max(ammo.WeaponBonusMin, info.Get(AbilityProperty.DamageAmountMax, ammo.WeaponBonusMin));
+            ammo.WeaponBonusType = (DamageType)info.Get(AbilityProperty.DamageType, (int)DamageType.Physical);
+            ammo.TickScaleType = info.Get(AbilityProperty.DamageScaleType);
+            ammo.WeaponBonusIntervalMs = ShredderIntervalMs(pump);
+            ammo.AllowDetach = true;
+
+            GameEffectManager.Instance.Attach(mapChannel, ally, ammo);
+        }
+
+        /// <summary>Shredder Ammo's interval for a caster with this many pumps in the skill; see AttachShredderAmmo.</summary>
+        public static int ShredderIntervalMs(int pump)
+        {
+            return Math.Max(1000, 5000 - 1000 * (Math.Max(1, pump) - 1));
         }
 
         /// <summary>

@@ -237,7 +237,12 @@ namespace Rasa.Managers
 
                     // check for effects (buffs)
                     if (Timer.IsTriggered("ClientEffectUpdate"))
+                    {
                         GameEffectManager.Instance.DoWork(mapChannel, delta);
+
+                        // Fire Support's beacons: their blasts and napalm pools.
+                        AbilityManager.Instance.FireSupportWorker(mapChannel);
+                    }
 
                     // a second's health, armour, power and chi for everyone here
                     if (Timer.IsTriggered("Regenerate"))

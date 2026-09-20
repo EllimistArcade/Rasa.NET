@@ -804,6 +804,16 @@ namespace Rasa.Managers
         /// </summary>
         public static void SyncRegen(MapChannel mapChannel, Actor actor)
         {
+            // A creature's bars are predicted by everyone who sees it from the rates it was last
+            // given; Disease P4 stopping its regeneration has to reach them too.
+            if (actor is Creature)
+            {
+                if (actor.Attributes.TryGetValue(Attributes.Health, out var creatureHealth))
+                    CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateHealthPacket(WithRegen(actor, creatureHealth), actor.EntityId));
+
+                return;
+            }
+
             var client = ClientOf(mapChannel, actor);
 
             if (client == null)

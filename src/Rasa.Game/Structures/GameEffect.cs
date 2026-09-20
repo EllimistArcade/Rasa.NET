@@ -100,6 +100,9 @@ namespace Rasa.Structures
         /// <summary>The one damage type ResistModifier applies to (Polarity Field); 0 for all of them.</summary>
         public DamageType ResistDamageType { get; set; }
 
+        /// <summary>The holder cannot be healed while it is on (Disease P5, "All Healing: Disabled").</summary>
+        public bool BlocksHealing { get; set; }
+
         /// <summary>Percent of every hit on the holder that goes past its armour straight to health (Target Painting).</summary>
         public int ArmorPiercePercent { get; set; }
 

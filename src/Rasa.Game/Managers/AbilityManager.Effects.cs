@@ -46,6 +46,7 @@ namespace Rasa.Managers
         private const int BioAugmentationTypeId = 329;              // BIO_AUGMENTATION_EFFECT
         private const int WeaponEnhancementTypeId = 10000035;       // WEAPON_ENHANCEMENT (Shredder Ammo)
         private const int DamageConversionTypeId = 354;             // DAMAGE_CONVERSION (Viral Conversion)
+        private const int DiseaseTypeId = 179;                      // DISEASE_EFFECT
         private const int PaintTargetTypeId = 10000045;             // PAINT_TARGET_EFFECT
         private const int PolarityFieldTypeId = 262;                // POLARITY_FIELD
 
@@ -81,6 +82,24 @@ namespace Rasa.Managers
                 case "abilities.sacrifice":
                     AttachSacrifice(mapChannel, player, info);
                     Hit(recovery, player);
+                    break;
+
+                case "abilities.disease":
+                {
+                    var target = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
+
+                    if (target != null && IsHostile(player, target))
+                    {
+                        AttachDisease(mapChannel, player, target, info);
+                        ManifestationManager.Instance.EnterCombat(client);
+                        Hit(recovery, target);
+                    }
+
+                    break;
+                }
+
+                case "abilities.firesupport":
+                    CallFireSupport(mapChannel, client, player, info, action, recovery);
                     break;
 
                 case "abilities.controlledfission":
@@ -456,6 +475,44 @@ namespace Rasa.Managers
             effect.Tooltip["threatMod"] = info.Get(AbilityProperty.ThreatModifierPercent);
 
             GameEffectManager.Instance.Attach(mapChannel, player, effect);
+        }
+
+        /// <summary>
+        /// Disease: DISEASE_EFFECT on an enemy for DURATION (20 s), what it does by pump (the
+        /// effect's per-level tooltips): P1-P3 ATTRIBUTE_ID (Spirit, Body, Mind) -ATTRIBUTE_MAX_CHANGE
+        /// (70) percent, "Spirit: %(modifier)s%%"; P4 EFFECT_HEALTH_REGEN_MODIFIER and
+        /// EFFECT_POWER_REGEN_MODIFIER 0, "Health Regen: Disabled / Power Regen: Disabled"; P5
+        /// HEALING_MODIFIER 0, "All Healing: Disabled". Built as the modifiers the server has -
+        /// AttributePercent, Health/PowerRegenPercent -100, BlocksHealing - so they would apply to
+        /// a player. On a creature they are shown and change little: a creature's attributes feed
+        /// nothing, it does not regenerate on the server and nothing heals it.
+        /// </summary>
+        private static void AttachDisease(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
+        {
+            var effect = NewEffect(mapChannel, player, info, DiseaseTypeId, info.Get(AbilityProperty.Duration, 20));
+
+            effect.IsBuff = false;
+
+            if (info.Has(AbilityProperty.AttributeId))
+            {
+                var percent = -info.Get(AbilityProperty.AttributeMaxChange, 70);
+
+                effect.AttributeId = (Attributes)info.Get(AbilityProperty.AttributeId);
+                effect.AttributePercent = percent;
+                effect.TooltipAttrId = info.Get(AbilityProperty.AttributeId);
+                effect.Tooltip["modifier"] = percent;
+            }
+
+            if (info.Has(AbilityProperty.EffectHealthRegenModifier))
+                effect.HealthRegenPercent = info.Get(AbilityProperty.EffectHealthRegenModifier) - 100;
+
+            if (info.Has(AbilityProperty.EffectPowerRegenModifier))
+                effect.PowerRegenPercent = info.Get(AbilityProperty.EffectPowerRegenModifier) - 100;
+
+            if (info.Has(AbilityProperty.HealingModifier) && info.Get(AbilityProperty.HealingModifier) == 0)
+                effect.BlocksHealing = true;
+
+            GameEffectManager.Instance.Attach(mapChannel, target, effect);
         }
 
         /// <summary>

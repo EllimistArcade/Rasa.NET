@@ -542,8 +542,10 @@ namespace Rasa.Managers
         ///  - an EFFECT_MODIFIER and no amounts (pump 5): that percent on the squad's maximum
         ///    health and off the enemies', for DURATION;
         ///  - otherwise (pumps 1 and 3): HEAL_AMOUNT to the squad and DAMAGE_AMOUNT to the enemies
-        ///    at once. Pump 3's ATTRIBUTE_MAX_CHANGE (Spirit up for the squad, down for the
-        ///    enemies) is not applied; its tooltip says 0.
+        ///    at once. Pump 3 also has ATTRIBUTE_MAX_CHANGE (30) for DURATION (20 s): the squad's
+        ///    Spirit +30% ("Spirit: +%(spiritBuff)s%%" on HELP) through UpdateStatsValues, as Bio
+        ///    Augmentation does, and the enemies' "Spirit: -%(spiritMod)s%%" on HARM. A creature's
+        ///    Spirit feeds nothing on the server, so that half is shown and has no effect.
         ///
         /// Each recipient gets the pump's effect - HELP or HARM, or the POOL pair - and the
         /// recovery's hitdata names it, so ReconstructionAction.DoAbility announces the right
@@ -597,7 +599,12 @@ namespace Rasa.Managers
             }
 
             var instant = interval <= 0;
-            var effectSeconds = instant ? InstantMarkerSeconds : info.Get(AbilityProperty.Duration, 15);
+            var spiritPercent = info.Get(AbilityProperty.AttributeMaxChange);
+
+            // Pump 3's Spirit change lasts DURATION; the effect carrying it stays that long.
+            var effectSeconds = instant
+                ? (spiritPercent != 0 ? info.Get(AbilityProperty.Duration, 20) : InstantMarkerSeconds)
+                : info.Get(AbilityProperty.Duration, 15);
             var tickMs = instant ? 0 : Math.Max(1, interval) * 1000;
 
             foreach (var ally in allies)
@@ -605,7 +612,14 @@ namespace Rasa.Managers
                 var help = NewEffect(mapChannel, player, info, ReconstructionHelpTypeId, effectSeconds);
                 help.AllowDetach = true;
                 help.TickScaleType = scaleType;
-                help.Tooltip["spiritBuff"] = 0;
+                help.Tooltip["spiritBuff"] = spiritPercent;
+
+                if (spiritPercent != 0)
+                {
+                    help.AttributeId = Attributes.Spirit;
+                    help.AttributePercent = spiritPercent;
+                    help.TooltipAttrId = (int)Attributes.Spirit;
+                }
                 help.Tooltip["healMin"] = Scale(player.Level, healMin, scaleType);
                 help.Tooltip["healMax"] = Scale(player.Level, healMax, scaleType);
                 help.Tooltip["adrenalineMin"] = adrenaline;
@@ -642,7 +656,7 @@ namespace Rasa.Managers
                 harm.IsBuff = false;
                 harm.TickDamageType = damageType;
                 harm.TickScaleType = scaleType;
-                harm.Tooltip["spiritMod"] = 0;
+                harm.Tooltip["spiritMod"] = spiritPercent;
                 harm.Tooltip["dmgMin"] = Scale(player.Level, damageMin, scaleType);
                 harm.Tooltip["dmgMax"] = Scale(player.Level, damageMax, scaleType);
                 harm.Tooltip["adrenalineMin"] = 0;
@@ -664,7 +678,7 @@ namespace Rasa.Managers
                 {
                     var rolled = GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, _random.Next(damageMin, damageMax + 1), scaleType));
                     var crit = CriticalHits.Resolve(player, enemy, false, CriticalHits.AttackerChance(player, false), ref rolled);
-                    var amount = GameEffectManager.ApplyResist(enemy, rolled, out var resisted);
+                    var amount = GameEffectManager.ApplyResist(enemy, rolled, out var resisted, damageType);
                     var taken = ActorManager.Instance.Damage(mapChannel, enemy, amount, player, damageType);
                     var tick = new GameEffectTickPacket(harm.EffectId, GameEffectTickPacket.TickKind.Damage);
 

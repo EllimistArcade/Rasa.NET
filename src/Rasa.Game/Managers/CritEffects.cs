@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 
 namespace Rasa.Managers
 {
     using Data;
+    using Packets.MapChannel.Server;
     using Structures;
 
     /// <summary>
@@ -18,6 +20,12 @@ namespace Rasa.Managers
     ///    nothing: every hit goes straight to its health (GameEffect.SuppressesArmor).
     ///  - Laser: CRIT_LIGHT 6, "Ranged Damage: %(dmgMod)s%%" - the creature's ranged attacks do
     ///    LaserRangedDamagePercent less for LaserMs.
+    ///  - Electric: CRIT_ELECTRIC 418, whose OnTick(target, arcTargets) draws its arcs from the
+    ///    creature to the ids it is given. Up to ElectricArcTargets other hostile creatures within
+    ///    ElectricArcRadius metres of it take ElectricArcPercent of the crit's damage as
+    ///    electrical, floated through the effect's AnnounceDamage.
+    ///  - Physical: CRIT_PHYSICAL 131's client class is an empty DamageEffect - no tooltip, no
+    ///    icon, no behaviour - so a Physical crit is its extra damage and nothing more.
     ///
     /// The client has the effects and their tooltips but none of the numbers; every figure
     /// below is chosen here.
@@ -36,6 +44,17 @@ namespace Rasa.Managers
 
         public const int LaserRangedDamagePercent = 25;
         public const int LaserMs = 6000;
+
+        public const int CritElectricTypeId = 418;  // CRIT_ELECTRIC
+        public const int ElectricArcTargets = 3;
+        public const float ElectricArcRadius = 10f;
+        public const int ElectricArcPercent = 25;
+
+        /// <summary>How long the CRIT_ELECTRIC effect stays on for its arc FX to play out.</summary>
+        private const int ElectricEffectMs = 1500;
+
+        /// <summary>An arc's damage: ElectricArcPercent of the crit's, at least 1.</summary>
+        public static int ArcDamage(int critDamage) => Math.Max(1, critDamage * ElectricArcPercent / 100);
 
         /// <summary>A Fire crit's burn per tick: FireDotPercent of the crit's damage, at least 1.</summary>
         public static int FireTick(int critDamage) => Math.Max(1, critDamage * FireDotPercent / 100);
@@ -68,6 +87,9 @@ namespace Rasa.Managers
                     break;
                 case DamageType.Laser:
                     WeakenRanged(mapChannel, target, source);
+                    break;
+                case DamageType.Electrical:
+                    Arc(mapChannel, target, source, damage);
                     break;
             }
         }
@@ -117,6 +139,57 @@ namespace Rasa.Managers
             suppression.SuppressesArmor = true;
 
             GameEffectManager.Instance.Attach(mapChannel, target, suppression);
+        }
+
+        /// <summary>
+        /// Electric: arcs from the creature to the nearest ElectricArcTargets other hostiles
+        /// within ElectricArcRadius, each taking ArcDamage(damage) as electrical damage (resisted,
+        /// not a crit, a kill for the player). The effect goes on first so its FX exists, then
+        /// one tick draws the arcs and an AnnounceDamage floats the numbers.
+        /// </summary>
+        public static void Arc(MapChannel mapChannel, Creature target, Actor source, int damage)
+        {
+            if (!(source is Manifestation player))
+                return;
+
+            var arcTo = AbilityManager.HostilesWithin(mapChannel, player, target.Position, ElectricArcRadius)
+                .Where(c => c != target)
+                .OrderBy(c => System.Numerics.Vector3.DistanceSquared(c.Position, target.Position))
+                .Take(ElectricArcTargets)
+                .ToList();
+
+            var arc = NewDebuff(mapChannel, source, CritElectricTypeId, ElectricEffectMs);
+
+            GameEffectManager.Instance.Attach(mapChannel, target, arc);
+
+            if (arcTo.Count == 0)
+                return;
+
+            var draw = new GameEffectTickPacket(arc.EffectId, GameEffectTickPacket.TickKind.EntityIds);
+            var announce = new GameEffectAnnounceDamagePacket(arc.EffectId);
+            var perArc = ArcDamage(damage);
+
+            foreach (var other in arcTo)
+                draw.Entries.Add(new TickEntry { EntityId = other.EntityId });
+
+            CellManager.Instance.CellCallMethod(mapChannel, target, draw);
+
+            foreach (var other in arcTo)
+            {
+                var amount = GameEffectManager.ApplyResist(other, perArc, out var resisted, DamageType.Electrical);
+                var taken = ActorManager.Instance.Damage(mapChannel, other, amount, player, DamageType.Electrical);
+
+                announce.Hits.Add(new TickEntry
+                {
+                    EntityId = other.EntityId,
+                    Amount = amount,
+                    Resisted = resisted,
+                    DamageType = DamageType.Electrical,
+                    DeathBlow = taken > 0 && other.Attributes[Attributes.Health].Current <= 0
+                });
+            }
+
+            CellManager.Instance.CellCallMethod(mapChannel, target, announce);
         }
 
         /// <summary>Laser: the creature's ranged attacks do LaserRangedDamagePercent less for LaserMs.</summary>

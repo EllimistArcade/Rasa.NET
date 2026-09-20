@@ -33,7 +33,11 @@ namespace Rasa.Managers
     /// laser, electrical, virulent); one standing where the circles cross is hit by each. Each
     /// hit rolls to crit with PER_PUMP_MOD (15) percent added for every pump of the skill owned,
     /// "+15% chance to crit per pump". The client's ScatterBombsBombEffect,
-    /// SCATTER_BOMB_EXPLOSION 355, goes on the performer for the blasts, one DoExplosion each.
+    /// SCATTER_BOMB_EXPLOSION 355, is a BombEffect, and a BombEffect plays its explosion on
+    /// whoever holds it, so the bombs are five dynamic objects (Sys_GameEffect_Proxy 10000043,
+    /// the class made to hold an effect at a spot) put down on the circle, one DoExplosion each,
+    /// and taken away a couple of seconds later. Its removeTarget of 0 says the same: the client
+    /// leaves the bombs standing for the server to clear, as it does the Fire Support beacon.
     /// </summary>
     public partial class AbilityManager
     {
@@ -43,7 +47,24 @@ namespace Rasa.Managers
         /// <summary>skilldata T3_DEMOLITIONIST_SCATTERBOMBS: pumps owned add crit chance.</summary>
         private const int ScatterbombsSkillId = 79;
 
+        /// <summary>Sys_GameEffect_Proxy, the empty entity an effect is put on to play it at a spot.</summary>
+        private const EntityClasses ScatterbombClass = (EntityClasses)10000043;
+
+        /// <summary>How long a spent bomb stays, so its blast has something to play on.</summary>
+        private const int ScatterbombLingerMs = 2000;
+
         public const int ScatterbombCount = 5;
+
+        private sealed class SpentBomb
+        {
+            public MapChannel MapChannel;
+            public DynamicObject Proxy;
+            public int EffectId;
+            public long RemoveAt;
+        }
+
+        private static readonly List<SpentBomb> SpentBombs = new List<SpentBomb>();
+        private static readonly object SpentBombsLock = new object();
 
         private void ArmSelfDestruct(MapChannel mapChannel, Manifestation player, ActionLevelInfo info)
         {
@@ -153,21 +174,44 @@ namespace Rasa.Managers
             var reach = info.Get(AbilityProperty.EffectRadius, 7);
             var pumps = Math.Max((int)info.Level, ManifestationManager.SkillPump(player, ScatterbombsSkillId));
             var critChance = CriticalHits.AttackerChance(player, false, info.Get(AbilityProperty.PerPumpMod, 15) * pumps);
-
-            var bombs = NewEffect(mapChannel, player, info, ScatterBombTypeId, 3);
-
-            bombs.IsBuff = false;
-            bombs.AnnounceOnAttach = true;
-
-            GameEffectManager.Instance.Attach(mapChannel, player, bombs);
-
+            var now = Environment.TickCount64;
             var hitAny = false;
 
             foreach (var point in ScatterbombPoints(player.Position, FacingOf(player), ring))
             {
-                var blast = new GameEffectAnnounceDamagePacket(bombs.EffectId, "DoExplosion");
+                var bomb = new DynamicObject
+                {
+                    EntityClassId = ScatterbombClass,
+                    Position = NavMeshManager.SnapToGround(mapChannel, point),
+                    MapContextId = mapChannel.MapInfo.MapContextId,
+                    IsEnabled = false
+                };
 
-                foreach (var victim in HostilesWithin(mapChannel, player, point, reach))
+                CellManager.Instance.AddToWorld(mapChannel, bomb);
+
+                var effectId = GameEffectManager.Instance.NextEffectId(mapChannel);
+
+                CellManager.Instance.CellCallMethod(bomb, new GameEffectAttachedPacket
+                {
+                    EffectTypeId = ScatterBombTypeId,
+                    EffectId = effectId,
+                    EffectLevel = Math.Max(1u, info.Level),
+                    SourceId = player.EntityId,
+                    Announced = true,
+                    Duration = null,
+                    DamageType = (int)damageType,
+                    AttrId = 1,
+                    IsActive = true,
+                    IsBuff = false,
+                    IsDebuff = true,
+                    IsNegativeEffect = true,
+                    Extras = new Dictionary<string, object>(),
+                    Args = new List<object>()
+                });
+
+                var blast = new GameEffectAnnounceDamagePacket(effectId, "DoExplosion");
+
+                foreach (var victim in HostilesWithin(mapChannel, player, bomb.Position, reach))
                 {
                     if (victim.State == CharacterState.Dead || victim.State == CharacterState.Dying || victim.Attributes[Attributes.Health].Current <= 0)
                         continue;
@@ -193,12 +237,35 @@ namespace Rasa.Managers
                         CritEffects.OnCritical(mapChannel, victim, player, damageType, amount);
                 }
 
-                if (blast.Hits.Count > 0)
-                    CellManager.Instance.CellCallMethod(mapChannel, player, blast);
+                CellManager.Instance.CellCallMethod(bomb, blast);
+
+                lock (SpentBombsLock)
+                    SpentBombs.Add(new SpentBomb { MapChannel = mapChannel, Proxy = bomb, EffectId = effectId, RemoveAt = now + ScatterbombLingerMs });
             }
 
             if (hitAny && client != null)
                 ManifestationManager.Instance.EnterCombat(client);
+        }
+
+        /// <summary>Takes spent scatterbombs on this map away once their blasts have played.</summary>
+        internal void ScatterbombWorker(MapChannel mapChannel)
+        {
+            List<SpentBomb> done;
+            var now = Environment.TickCount64;
+
+            lock (SpentBombsLock)
+            {
+                done = SpentBombs.Where(b => b.MapChannel == mapChannel && now >= b.RemoveAt).ToList();
+
+                foreach (var bomb in done)
+                    SpentBombs.Remove(bomb);
+            }
+
+            foreach (var bomb in done)
+            {
+                CellManager.Instance.CellCallMethod(bomb.Proxy, new GameEffectDetachedPacket { EffectId = bomb.EffectId });
+                CellManager.Instance.RemoveFromWorld(mapChannel, bomb.Proxy);
+            }
         }
     }
 }

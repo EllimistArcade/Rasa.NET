@@ -242,6 +242,9 @@ namespace Rasa.Managers
 
                         // Fire Support's beacons: their blasts and napalm pools.
                         AbilityManager.Instance.FireSupportWorker(mapChannel);
+
+                        // Scatterbombs: the spent bombs are taken away once their blasts have played.
+                        AbilityManager.Instance.ScatterbombWorker(mapChannel);
                     }
 
                     // a second's health, armour, power and chi for everyone here

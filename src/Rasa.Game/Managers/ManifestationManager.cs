@@ -1448,7 +1448,7 @@ namespace Rasa.Managers
             return entityData;
         }
 
-        internal void GainExperience(Client client, uint experience)
+        internal void GainExperience(Client client, uint experience, CritKill critKill = CritKill.None)
         {
             if (client.Player.Level >= MaxPlayerLevel)
                 return; // cannot gain xp over level 50
@@ -1457,7 +1457,11 @@ namespace Rasa.Managers
 
             CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Expirience, client.Player.Experience);
 
-            var xpInfo = new XPInfo(client.Player.Experience, experience, experience);
+            var xpInfo = new XPInfo(client.Player.Experience, experience, experience)
+            {
+                WasCritKill = critKill == CritKill.Own,
+                WasTeamCritKill = critKill == CritKill.Team
+            };
 
             client.CallMethod(client.Player.EntityId, new ExperienceChangedPacket(xpInfo));
 

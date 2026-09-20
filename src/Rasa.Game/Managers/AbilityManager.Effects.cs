@@ -595,7 +595,7 @@ namespace Rasa.Managers
                     var rolled = GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, _random.Next(damageMin, damageMax + 1), scaleType));
                     var crit = CriticalHits.Resolve(player, enemy, false, CriticalHits.AttackerChance(player, false), ref rolled);
                     var amount = GameEffectManager.ApplyResist(enemy, rolled, out var resisted);
-                    var taken = ActorManager.Instance.Damage(mapChannel, enemy, amount, player);
+                    var taken = ActorManager.Instance.Damage(mapChannel, enemy, amount, player, damageType);
                     var tick = new GameEffectTickPacket(harm.EffectId, GameEffectTickPacket.TickKind.Damage);
 
                     tick.Entries.Add(new TickEntry

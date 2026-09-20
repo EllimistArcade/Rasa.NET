@@ -119,7 +119,8 @@ namespace Rasa.Managers
             }
         }
 
-        internal void HandleCreatureKill(MapChannel mapChannel, Creature creature, Actor killedBy)
+        /// <param name="critKill">A Critical Death finish: the experience is worth CritDeathManager.XpBonusPercent more, and the client is told how it was earned.</param>
+        internal void HandleCreatureKill(MapChannel mapChannel, Creature creature, Actor killedBy, CritKill critKill = CritKill.None)
         {
             if (creature.State == CharacterState.Dead)
                 return; // creature already dead
@@ -161,8 +162,11 @@ namespace Rasa.Managers
                 var experienceRange = creature.Level * 10;
                 experience += (uint)(new Random().Next() % (experienceRange * 2 + 1)) - experienceRange;
 
+                if (critKill != CritKill.None)
+                    experience += experience * CritDeathManager.XpBonusPercent / 100;
+
                 // todo: Depending on level difference reduce experience
-                ManifestationManager.Instance.GainExperience(client, experience);
+                ManifestationManager.Instance.GainExperience(client, experience, critKill);
 
                 // Adrenaline is earned here and nowhere else: it does not regenerate. See
                 // ManifestationManager.AdrenalinePerKillPercent.

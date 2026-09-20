@@ -184,9 +184,10 @@ namespace Rasa.Managers
         /// standing at zero.
         /// </summary>
         /// <param name="source">Who did it; credited with a kill, and what a surviving creature turns on.</param>
-        public int Damage(MapChannel mapChannel, Actor target, int amount, Actor source)
+        /// <param name="damageType">What it was, for the death animation of a creature it brings to its Critical Death window.</param>
+        public int Damage(MapChannel mapChannel, Actor target, int amount, Actor source, DamageType damageType = DamageType.Physical)
         {
-            if (target == null || amount <= 0 || target.State == CharacterState.Dead)
+            if (target == null || amount <= 0 || target.State == CharacterState.Dead || target.State == CharacterState.Dying)
                 return 0;
 
             if (!target.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
@@ -225,6 +226,10 @@ namespace Rasa.Managers
                         CreatureManager.Instance.HandleCreatureKill(mapChannel, creature, source);
                     else
                         Logger.WriteLog(LogType.Error, $"Creature {creature.EntityId} was killed with no source to credit; it stays at zero.");
+                }
+                else if (CritDeathManager.Instance.TryEnterPreDeath(mapChannel, creature, source, damageType))
+                {
+                    // Held near death for a finisher; it does not turn on anyone.
                 }
                 else if (source != null && (creature.Controller.CurrentAction == BehaviorManager.BehaviorActionWander || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath))
                 {

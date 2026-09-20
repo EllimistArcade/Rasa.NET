@@ -213,6 +213,21 @@ namespace Rasa.Structures
 
         #endregion
 
+        #region Critical Death
+
+        /// <summary>
+        /// Run by GameEffectManager after the effect has been taken off because its time ran out -
+        /// not when something else detaches it. The Critical Death window uses it to kill the
+        /// creature when nobody finished it, and the finisher's death animation to hand out the
+        /// kill once it has played.
+        /// </summary>
+        public Action<MapChannel, Actor, GameEffect> OnExpired { get; set; }
+
+        /// <summary>The player whose finisher is winding up on this CRIT_PREDEATH_EFFECT; 0 while nobody has claimed it.</summary>
+        public ulong FinisherId { get; set; }
+
+        #endregion
+
         public bool IsExpired => Environment.TickCount64 >= ExpiresTick;
 
         public bool TickDue => TickIntervalMs > 0 && Environment.TickCount64 >= NextTickTick;

@@ -454,7 +454,7 @@ namespace Rasa.Managers
         /// </summary>
         private static bool IsHostile(Manifestation player, Actor target)
         {
-            return target is Creature creature && creature.Faction != Factions.AFS && creature.Attributes[Attributes.Health].Current > 0;
+            return target is Creature creature && creature.Faction != Factions.AFS && creature.State != CharacterState.Dying && creature.Attributes[Attributes.Health].Current > 0;
         }
 
         /// <summary>The first attribute the player cannot pay, or null if they can pay them all.</summary>
@@ -713,7 +713,7 @@ namespace Rasa.Managers
                 var rolled = GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, _random.Next(min, max + 1), scaleType));
                 var crit = CriticalHits.Resolve(player, target, false, critChance, ref rolled);
                 var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted);
-                var taken = ActorManager.Instance.Damage(mapChannel, target, amount, player);
+                var taken = ActorManager.Instance.Damage(mapChannel, target, amount, player, damageType);
 
                 recovery.Hits.Add(new AbilityHit
                 {

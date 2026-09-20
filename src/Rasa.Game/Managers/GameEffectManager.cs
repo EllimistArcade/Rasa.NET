@@ -301,9 +301,20 @@ namespace Rasa.Managers
                     if (!actor.ActiveEffects.ContainsKey(effect.EffectId))
                         continue;
 
+                    // A creature held in its Critical Death window keeps only the window and
+                    // its animations: a Ruin ticking on something that takes no damage would float
+                    // numbers over it for nothing. Taken off here, on the pass after the window
+                    // opened, so the tick that brought it down is told before its effect goes.
+                    if (actor.State == CharacterState.Dying && actor is Creature && !CritDeathManager.IsCritDeathType(effect.TypeId))
+                    {
+                        DettachEffect(mapChannel, actor, effect);
+                        continue;
+                    }
+
                     if (effect.IsExpired)
                     {
                         DettachEffect(mapChannel, actor, effect);
+                        effect.OnExpired?.Invoke(mapChannel, actor, effect);
                         continue;
                     }
 
@@ -449,7 +460,7 @@ namespace Rasa.Managers
             {
                 var rolled = AbilityManager.Scale(effect.SourceLevel, _random.Next(effect.TickDamageMin, effect.TickDamageMax + 1), effect.TickScaleType);
                 var amount = ApplyResist(target, rolled, out var resisted);
-                var taken = ActorManager.Instance.Damage(mapChannel, target, amount, source);
+                var taken = ActorManager.Instance.Damage(mapChannel, target, amount, source, effect.TickDamageType);
 
                 hits.Add(new TickEntry
                 {

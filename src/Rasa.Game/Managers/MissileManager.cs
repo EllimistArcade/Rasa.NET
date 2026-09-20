@@ -113,7 +113,8 @@ namespace Rasa.Managers
         {
             var creature = EntityManager.Instance.GetCreature(missile.TargetEntityId);
 
-            if (creature.State == CharacterState.Dead)
+            // Dead, or held in its Critical Death window, where nothing but the finisher touches it.
+            if (creature.State == CharacterState.Dead || creature.State == CharacterState.Dying)
                 return;
 
             // Shooting something is being in a fight, not only being shot at - otherwise a player
@@ -146,7 +147,7 @@ namespace Rasa.Managers
                 // kill craeture
                 CreatureManager.Instance.HandleCreatureKill(mapChannel, creature, missile.Source);
             }
-            else
+            else if (!CritDeathManager.Instance.TryEnterPreDeath(mapChannel, creature, missile.Source, missile.DamageType == 0 ? DamageType.Physical : missile.DamageType))
             {
                 // shooting at wandering creatures makes them ANGRY
                 if (creature.Controller.CurrentAction == BehaviorManager.BehaviorActionWander || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath)
@@ -182,7 +183,7 @@ namespace Rasa.Managers
 
                 var rolled = AbilityManager.Scale(effect.SourceLevel, _random.Next(effect.WeaponBonusMin, effect.WeaponBonusMax + 1), effect.TickScaleType);
                 var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted, effect.WeaponBonusType);
-                var taken = ActorManager.Instance.Damage(mapChannel, target, amount, shooter);
+                var taken = ActorManager.Instance.Damage(mapChannel, target, amount, shooter, effect.WeaponBonusType);
 
                 var announce = new GameEffectAnnounceDamagePacket(effect.EffectId);
                 announce.Hits.Add(new TickEntry
@@ -434,8 +435,8 @@ namespace Rasa.Managers
                         return;
                 };
 
-                if (targetActor == null || targetActor.State == CharacterState.Dead)
-                    return; // actor is dead, cannot be shot at
+                if (targetActor == null || targetActor.State == CharacterState.Dead || targetActor.State == CharacterState.Dying)
+                    return; // actor is dead (or dying in its Critical Death window), cannot be shot at
 
                 if (!IsOnMap(mapChannel, targetActor))
                 {

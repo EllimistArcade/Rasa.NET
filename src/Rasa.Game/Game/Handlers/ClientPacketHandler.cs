@@ -451,6 +451,12 @@
             ActorManager.Instance.RequestVisualCombatMode(Client, packet.CombatMode);
         }
 
+        [PacketHandler(GameOpcode.RequestCritDeathFinish)]
+        private void RequestCritDeathFinish(RequestCritDeathFinishPacket packet)
+        {
+            CritDeathManager.Instance.RequestCritDeathFinish(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestWeaponAttack)]
         private void RequestWeaponAttack(RequestWeaponAttackPacket packet)
         {

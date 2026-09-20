@@ -139,7 +139,7 @@ namespace Rasa.Managers
 
                 foreach (var tCreature in cell.CreatureList)
                 {
-                    if (tCreature.Attributes[Attributes.Health].Current <= 0)
+                    if (tCreature.Attributes[Attributes.Health].Current <= 0 || tCreature.State == CharacterState.Dying)
                         continue;
 
                     if (tCreature == creature)
@@ -196,6 +196,11 @@ namespace Rasa.Managers
 
                 return; // creature dead
             }
+
+            // Held in its Critical Death window: it neither moves nor fights until it is finished or dies.
+            if (creature.State == CharacterState.Dying)
+                return;
+
             // calculate new cell position
             var cellX = (uint)((creature.Position.X / CellManager.CellSize) + CellManager.CellBias);
             var cellZ = (uint)((creature.Position.Z / CellManager.CellSize) + CellManager.CellBias);
@@ -483,7 +488,7 @@ namespace Rasa.Managers
                 {
                     var targetCreature = EntityManager.Instance.GetCreature(creature.Controller.ActionFighting.TargetEntityId);
 
-                    if (targetCreature.Attributes[Attributes.Health].Current <= 0 || targetCreature.State == CharacterState.Dead)
+                    if (targetCreature.Attributes[Attributes.Health].Current <= 0 || targetCreature.State == CharacterState.Dead || targetCreature.State == CharacterState.Dying)
                     {
                         // exit visual combat mode
                         CellManager.Instance.CellCallMethod(mapChannel, creature, new RequestVisualCombatModePacket(false));

@@ -149,6 +149,9 @@ namespace Rasa.Managers
                     action.Client.CellCallMethod(action.Client, action.Client.MapClient.Player.Actor.EntityId, new PerformRecoveryPacket(action.ActionId, action.ActionArgId, new List<int> { 1 }));
                     */
                     break;
+                case ActionId.CriticalDeathFinisher:
+                    CritDeathManager.Instance.PerformRecovery(mapChannel, action);
+                    break;
                 case ActionId.WeaponDraw:
                     CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformRecoveryPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
                     action.Actor.WeaponReady = true;

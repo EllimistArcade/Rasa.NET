@@ -26,9 +26,13 @@ namespace Rasa.Data
     /// modifiers). The numbers here are in those terms so the server's clock and the client's
     /// agree.
     ///
-    /// Not here, because nothing on the server yet does what they modify: Firearms' rifle crit
-    /// and shotgun knockback, Hand to Hand's knockback and stun, Launchers' grenade stun, Staff
-    /// deflect, Blades backstab, Leech Guns' conversion to health.
+    /// Firearms' rifle crit (+3/5/7%) is CriticalHits.FirearmsRifleChance; its larger figure
+    /// "with full bead" is not applied, since the attack request does not say how far the bead
+    /// had closed.
+    ///
+    /// Not here, because nothing on the server yet does what they modify: Firearms' shotgun
+    /// knockback, Hand to Hand's knockback and stun, Launchers' grenade stun, Staff deflect,
+    /// Blades backstab, Leech Guns' conversion to health.
     /// </summary>
     public static class WeaponSkills
     {

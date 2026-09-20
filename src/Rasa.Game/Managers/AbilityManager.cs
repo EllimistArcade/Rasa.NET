@@ -82,7 +82,7 @@ namespace Rasa.Managers
             "abilities.rage", "abilities.resistance", "abilities.sacrifice", "abilities.decay",
             "abilities.scourge", "abilities.reconstruction", "abilities.regenerationwave", "abilities.basewave",
             "abilities.shieldextender", "abilities.shieldwave", "abilities.bioaugmentation", "abilities.weaponenhancement",
-            "abilities.damageconversion"
+            "abilities.damageconversion", "abilities.critwave"
         };
 
         /// <summary>
@@ -703,11 +703,15 @@ namespace Rasa.Managers
             if (targets.Count > 0)
                 ManifestationManager.Instance.EnterCombat(client);
 
+            var critChance = CriticalHits.AttackerChance(player, false);
+
             foreach (var target in targets)
             {
                 // Rolled, scaled to the performer's level, raised or lowered by the effects on
-                // them (Rage, Sacrifice), and cut by what the target's effects resist.
+                // them (Rage, Sacrifice), made a crit or not, and cut by what the target's
+                // effects resist.
                 var rolled = GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, _random.Next(min, max + 1), scaleType));
+                var crit = CriticalHits.Resolve(player, target, false, critChance, ref rolled);
                 var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted);
                 var taken = ActorManager.Instance.Damage(mapChannel, target, amount, player);
 
@@ -717,6 +721,7 @@ namespace Rasa.Managers
                     Amount = amount,
                     Resisted = resisted,
                     DamageType = damageType,
+                    IsCritical = crit,
                     DeathBlow = taken > 0 && target.Attributes[Attributes.Health].Current <= 0
                 });
             }

@@ -650,6 +650,17 @@ namespace Rasa.Managers
             return total;
         }
 
+        /// <summary>Percent added to the actor's chance of a critical hit by the effects on them (Crit Wave).</summary>
+        public static int CritChancePercentOf(Actor actor)
+        {
+            var total = 0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                total += effect.CritChancePercent;
+
+            return total;
+        }
+
         public static int DamageDealtPercentOf(Actor actor)
         {
             var total = 0;

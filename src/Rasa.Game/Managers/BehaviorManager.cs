@@ -536,7 +536,7 @@ namespace Rasa.Managers
 
                     var actionData = new ActionData(creature, action.ActionId, action.ActionArgId, creature.Controller.ActionFighting.TargetEntityId, 0);
                     // do damage
-                    MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg);
+                    MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, melee: action.ActionId == ActionId.WeaponMelee);
 
                     // set cooldown
                     action.CooldownTimer = action.Cooldown;

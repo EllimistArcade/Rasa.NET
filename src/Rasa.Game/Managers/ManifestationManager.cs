@@ -356,7 +356,7 @@ namespace Rasa.Managers
             var action = new ActionData(player, packet.ActionId, (uint)packet.ActionArgId, targetId, 0);
 
             MissileManager.Instance.MissileLaunch(mapChannel, action, damage, 0,
-                WeaponDamageType(player, (DamageType)(weaponInfo.WeaponAltInfo?.AltDamageType ?? 0)));
+                WeaponDamageType(player, (DamageType)(weaponInfo.WeaponAltInfo?.AltDamageType ?? 0)), melee: true);
         }
 
         /// <summary>
@@ -754,8 +754,13 @@ namespace Rasa.Managers
             damage = GameEffectManager.ApplyDamageDealt(client.Player, damage, WeaponSkills.DamagePercent(skillId, pump));
             var action = new ActionData(client.Player, weaponClassInfo.WeaponAttackActionId, weaponClassInfo.WeaponAttackArgId, client.Player.Target, 0);
             // launch correct missile type depending on weapon type
+            // Firearms on a rifle adds to the crit chance ("Rifles: +3% Crit Hit" from pump 3).
+            var critBonus = skillId == WeaponSkills.Firearms && weapon.ItemTemplate.WeaponInfo.ToolType == ToolType.Rifle
+                ? CriticalHits.FirearmsRifleChance(pump)
+                : 0;
+
             MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage, WeaponSkills.ArmorBypassPercent(skillId, pump),
-                WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType));
+                WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType), critBonus);
             
             return FireResult.Fired;
         }

@@ -39,6 +39,7 @@ namespace Rasa.Managers
         private const int ReconstructionHarmPoolTypeId = 10000065;  // RECONSTRUCTION_HARM_POOL_EFFECT
         private const int RegenerationWaveTypeId = 10000019;        // REGENERATIONWAVE
         private const int BaseWaveTypeId = 206;                     // BASEWAVEEFFECT
+        private const int CritWaveTypeId = 202;                     // CRITWAVEEFFECT
         private const int ShieldExtenderSourceTypeId = 10000056;    // SHIELD_EXTENDER_SOURCE, on the target
         private const int ShieldExtenderShieldedTypeId = 10000055;  // SHIELD_EXTENDER_SHIELDED, on the squad near it
         private const int ShieldWaveTypeId = 201;                   // SHIELDWAVEEFFECT
@@ -181,6 +182,19 @@ namespace Rasa.Managers
                     Hit(recovery, player);
                     break;
                 }
+
+                case "abilities.critwave":
+                    foreach (var member in SquadWithin(mapChannel, player, info.Get(AbilityProperty.RadiusAroundSource, 25)))
+                    {
+                        var wave = NewEffect(mapChannel, player, info, CritWaveTypeId, info.Get(AbilityProperty.Duration, 120));
+                        wave.CritChancePercent = info.Get(AbilityProperty.EffectModifier, 50);
+                        wave.Tooltip["critAmt"] = wave.CritChancePercent;
+                        wave.AllowDetach = true;
+                        GameEffectManager.Instance.Attach(mapChannel, member, wave);
+                        Hit(recovery, member);
+                    }
+
+                    break;
 
                 case "abilities.basewave":
                     foreach (var member in SquadWithin(mapChannel, player, info.Get(AbilityProperty.RadiusAroundSource, 25)))
@@ -579,6 +593,7 @@ namespace Rasa.Managers
                 if (instant && damageMax > 0)
                 {
                     var rolled = GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, _random.Next(damageMin, damageMax + 1), scaleType));
+                    var crit = CriticalHits.Resolve(player, enemy, false, CriticalHits.AttackerChance(player, false), ref rolled);
                     var amount = GameEffectManager.ApplyResist(enemy, rolled, out var resisted);
                     var taken = ActorManager.Instance.Damage(mapChannel, enemy, amount, player);
                     var tick = new GameEffectTickPacket(harm.EffectId, GameEffectTickPacket.TickKind.Damage);
@@ -589,6 +604,7 @@ namespace Rasa.Managers
                         Amount = amount,
                         Resisted = resisted,
                         DamageType = damageType,
+                        IsCritical = crit,
                         DeathBlow = taken > 0 && enemy.Attributes[Attributes.Health].Current <= 0
                     });
 

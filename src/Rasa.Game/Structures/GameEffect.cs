@@ -13,7 +13,7 @@ namespace Rasa.Structures
     /// on how often the effect worker happens to run.
     ///
     /// What an effect does is the sum of the fields below that are set. While it is on, the
-    /// modifiers (damage dealt, resistance, regeneration, maximum health, movement) are read by
+    /// modifiers (damage dealt, critical chance, resistance, regeneration, maximum health, movement) are read by
     /// whoever computes the thing they modify. On each tick it may drain adrenaline, damage or
     /// heal its holder, damage everything hostile around its holder, or, as an aura, keep a copy
     /// of itself on the squad within reach. GameEffectManager runs all of it.
@@ -144,6 +144,9 @@ namespace Rasa.Structures
 
         /// <summary>The attribute the client's tooltip names for "%(attrId)s"; 1 (Body) when there is none.</summary>
         public int TooltipAttrId { get; set; } = 1;
+
+        /// <summary>Percent added to the holder's chance of a critical hit (Crit Wave); see CriticalHits.</summary>
+        public int CritChancePercent { get; set; }
 
         /// <summary>Whether it changes any regeneration rate, which the holder's client has to be told.</summary>
         public bool ChangesRegen => RegenPercent != 0 || ArmorRegenPercent != 0 || HealthRegenPercent != 0 || PowerRegenPercent != 0;

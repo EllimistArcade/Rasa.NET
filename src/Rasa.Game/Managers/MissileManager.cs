@@ -386,14 +386,18 @@ namespace Rasa.Managers
         }
 
         /// <param name="armorBypassPercent">Percent of the damage that skips armour: the Torqueshell and Injection Gun skills.</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0)
+        /// <param name="critBonus">Crit chance in percent the attack adds to the shooter's own (Firearms on a rifle).</param>
+        /// <param name="melee">A melee swing, for the crouching crit modifiers.</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false)
         {
             var missile = new Missile
             {
                 DamageA = damage,
                 DamageType = damageType,
                 ArmorBypassPercent = Math.Max(0, Math.Min(100, armorBypassPercent)),
-                Source = action.Actor
+                Source = action.Actor,
+                IsMelee = melee,
+                CritChance = CriticalHits.AttackerChance(action.Actor, melee, critBonus)
             };
 
             // get distance between actors
@@ -474,19 +478,29 @@ namespace Rasa.Managers
         {
             // ToDo: Some weapons can hit multiple targets
             var targetType = EntityManager.Instance.GetEntityType(missile.TargetEntityId);
-            var hitData = new HitData
-            {
-                FinalAmt = missile.DamageA,
-                EntityId = missile.TargetEntityId
-            };
-
-            missile.Args.HitEntities.Add(missile.TargetEntityId);
-            missile.Args.HitData.Add(hitData);     // ToDo: add suport for multiple targets
 
             // Checked again here: the missile was queued a tick ago, and the target can have
             // left the map (or the world) since.
             if (missile.TargetEntityId != 0 && !IsOnMap(mapChannel, missile.TargetActor))
                 targetType = 0;
+
+            // The crit comes first, before resistance, shields or armour take their share of it.
+            if (targetType == EntityType.Creature || targetType == EntityType.Character)
+            {
+                var amount = missile.DamageA;
+                missile.IsCritical = CriticalHits.Resolve(missile.Source, missile.TargetActor, missile.IsMelee, missile.CritChance, ref amount);
+                missile.DamageA = amount;
+            }
+
+            var hitData = new HitData
+            {
+                FinalAmt = missile.DamageA,
+                EntityId = missile.TargetEntityId,
+                IsCritical = missile.IsCritical ? 1 : 0
+            };
+
+            missile.Args.HitEntities.Add(missile.TargetEntityId);
+            missile.Args.HitData.Add(hitData);     // ToDo: add suport for multiple targets
 
             switch (targetType)
             {

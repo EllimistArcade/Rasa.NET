@@ -53,7 +53,7 @@ namespace Rasa.Packets.MapChannel.Server
                     case TickKind.Damage:
                         pw.WriteTuple(2);
                         pw.WriteULong(entry.EntityId);
-                        DamageInfoWriter.WriteRawInfo(pw, entry.DamageType, entry.Amount, entry.Resisted, false, entry.DeathBlow);
+                        DamageInfoWriter.WriteRawInfo(pw, entry.DamageType, entry.Amount, entry.Resisted, entry.IsCritical, entry.DeathBlow);
                         break;
                     case TickKind.Heal:
                         pw.WriteTuple(2);
@@ -74,6 +74,7 @@ namespace Rasa.Packets.MapChannel.Server
         public int Amount { get; set; }
         public int Resisted { get; set; }
         public DamageType DamageType { get; set; }
+        public bool IsCritical { get; set; }
         public bool DeathBlow { get; set; }
     }
 }

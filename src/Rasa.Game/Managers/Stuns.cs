@@ -17,9 +17,9 @@ namespace Rasa.Managers
     ///    STUN_DURATION 3 (seconds). Tectonic Strike: DURATION_MS 4000-8000, the tooltip's "Stun
     ///    Duration: 4s".."8s". Concussive Wave: DURATION 10, "Stun Duration: 10s". Rushing Blow:
     ///    DURATION 1-5, its "knockback, and stun". Those three always stun. Effect STUN 86.
-    ///  - Critical hits by Ice (CRIT_ICE 3, "Frozen", a StunEffect) and Sonic (CRIT_SONIC 7,
-    ///    "Stunned", a KnockbackEffect whose OnAttach takes the duration). How long is not in the
-    ///    client: CritStunMs.
+    ///  - Critical hits by Ice (CRIT_ICE 3, "Frozen", a StunEffect), for CritStunMs - not in the
+    ///    client. A Sonic crit (CRIT_SONIC 7, "Stunned") is a knockback: CrowdControl.
+    ///  - Knockbacks, which stun for the flight and the getup after it: CrowdControl.
     ///  - Hand to Hand on melee hits: pump 4 "Knockback Chance: +50%, Stun Duration: 1s", pump 5
     ///    "+75%, 2s". Taken as a stun at the knockback chance, since there is no knockback yet.
     ///  - Launchers on grenades: "Grenades: +25% / +40% / +50% Stun Chance" at pumps 3-5. The
@@ -82,20 +82,6 @@ namespace Rasa.Managers
             }
         }
 
-        /// <summary>The crit stun for a damage type: Ice freezes, Sonic stuns; 0 for the others.</summary>
-        public static int CritStunTypeFor(DamageType damageType)
-        {
-            switch (damageType)
-            {
-                case DamageType.Ice:
-                    return CritIceTypeId;
-                case DamageType.Sonic:
-                    return CritSonicTypeId;
-                default:
-                    return 0;
-            }
-        }
-
         public static bool IsStunned(Actor actor)
         {
             foreach (var effect in actor.ActiveEffects.Values)
@@ -131,24 +117,35 @@ namespace Rasa.Managers
                 ExpiresTick = Environment.TickCount64 + durationMs
             };
 
-            // The Sonic crit's client class is a KnockbackEffect, whose OnAttach wants the duration.
-            if (typeId == CritSonicTypeId)
-                GameEffectManager.Instance.Attach(mapChannel, target, stun, durationMs / 1000.0);
-            else
-                GameEffectManager.Instance.Attach(mapChannel, target, stun);
+            GameEffectManager.Instance.Attach(mapChannel, target, stun);
+
+            // Whatever it was doing, it stops where it is: without this the clients keep
+            // extrapolating its last movement for the length of the stun.
+            BehaviorManager.Instance.StopMoving(target);
 
             CritDeathManager.Instance.TryEnterPreDeath(mapChannel, target, source, damageType);
 
             return true;
         }
 
-        /// <summary>A critical hit's stun, if its damage type has one.</summary>
+        /// <summary>
+        /// A critical hit's side effect on a creature, by damage type: Ice freezes (a stun),
+        /// Sonic knocks back (a stun too, see CrowdControl), Virulent cripples (a slow).
+        /// </summary>
         public static void OnCritical(MapChannel mapChannel, Creature target, Actor source, DamageType damageType)
         {
-            var typeId = CritStunTypeFor(damageType);
-
-            if (typeId != 0)
-                Apply(mapChannel, target, source, typeId, CritStunMs, damageType);
+            switch (damageType)
+            {
+                case DamageType.Ice:
+                    Apply(mapChannel, target, source, CritIceTypeId, CritStunMs, damageType);
+                    break;
+                case DamageType.Sonic:
+                    CrowdControl.Knockback(mapChannel, target, source, CrowdControl.DefaultKnockbackDistance, CrowdControl.CritSonicTypeId, damageType);
+                    break;
+                case DamageType.Virulent:
+                    CrowdControl.Slow(mapChannel, target, source, CrowdControl.CritVirulentTypeId, CrowdControl.VirulentCrippleSlowPercent, CrowdControl.VirulentCrippleMs, "snareMod");
+                    break;
+            }
         }
     }
 }

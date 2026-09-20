@@ -197,9 +197,19 @@ namespace Rasa.Managers
                 return; // creature dead
             }
 
-            // Held in its Critical Death window, or stunned: it neither moves nor fights.
-            if (creature.State == CharacterState.Dying || Stuns.IsStunned(creature))
+            // Held in its Critical Death window: it neither moves nor fights.
+            if (creature.State == CharacterState.Dying)
                 return;
+
+            // Knocked back, or stunned: it goes where the knockback carries it and nothing else,
+            // but it can still cross into another cell doing so.
+            var knockedBack = StepKnockback(mapChannel, creature, delta);
+
+            if (knockedBack || Stuns.IsStunned(creature))
+            {
+                needCellUpdate = CellChanged(creature, delta);
+                return;
+            }
 
             // calculate new cell position
             var cellX = (uint)((creature.Position.X / CellManager.CellSize) + CellManager.CellBias);
@@ -251,19 +261,8 @@ namespace Rasa.Managers
             }
 
             // do we need to check for updated cell position?
-            creature.UpdatePositionCounter -= delta;
-
-            if (creature.UpdatePositionCounter <= 0)
-            {
-                // check for changed cell
-                var cellSeed = CellManager.Instance.GetCellSeed(creature.Position);
-
-                // calculate initial cell
-                if (cellSeed != creature.Cells[2, 2])
-                    needCellUpdate = true;
-
-                creature.UpdatePositionCounter = CreatureManager.CreatureLocationUpdateTime;
-            }
+            if (CellChanged(creature, delta))
+                needCellUpdate = true;
 
             if (creature.Controller.CurrentAction == BehaviorActionWander)
             {
@@ -696,6 +695,62 @@ namespace Rasa.Managers
             return false;
         }
 
+        /// <summary>Counts down to the creature's next cell check and, when it is due, says whether it has moved into another cell.</summary>
+        private static bool CellChanged(Creature creature, long delta)
+        {
+            creature.UpdatePositionCounter -= delta;
+
+            if (creature.UpdatePositionCounter > 0)
+                return false;
+
+            creature.UpdatePositionCounter = CreatureManager.CreatureLocationUpdateTime;
+
+            return CellManager.Instance.GetCellSeed(creature.Position) != creature.Cells[2, 2];
+        }
+
+        /// <summary>
+        /// One tick of a knockback in progress (CrowdControl.Knockback): the creature slides
+        /// toward where it is being carried at the knockback's speed, still facing whoever hit it,
+        /// and is told to stop when it gets there. Returns whether it was moving.
+        /// </summary>
+        private bool StepKnockback(MapChannel mapChannel, Creature creature, long delta)
+        {
+            if (creature.KnockbackTo == null)
+                return false;
+
+            var to = creature.KnockbackTo.Value;
+            var difX = to.X - creature.Position.X;
+            var difY = to.Y - creature.Position.Y;
+            var difZ = to.Z - creature.Position.Z;
+            var remaining = Math.Sqrt(difX * difX + difZ * difZ);
+
+            if (remaining > 0.05)
+            {
+                var moved = UpdateEntityMovement(difX, difY, difZ, creature, mapChannel, CrowdControl.KnockbackSpeed, true, delta, knockback: true);
+
+                if (moved < remaining - 0.05)
+                    return true;
+            }
+
+            creature.KnockbackTo = null;
+            StopMoving(creature);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Tells everyone who can see the creature that it is standing still where it is, facing
+        /// the way it last faced. Used when something stops it in its tracks - a stun, a freeze, the
+        /// end of a knockback - since the clients otherwise carry on extrapolating its last
+        /// movement.
+        /// </summary>
+        public void StopMoving(Creature creature)
+        {
+            var movement = new Movement(new Vector3(creature.Position.X, creature.Position.Y, creature.Position.Z), 0.0f, 0x08, new Vector2(creature.LastYaw, 0f));
+
+            CellManager.Instance.CellMoveObject(creature, movement);
+        }
+
         private double GetDistanceSqr(Vector3 p1, Vector3 p2)
         {
             float dx = p2.X - p1.X;
@@ -906,15 +961,29 @@ namespace Rasa.Managers
         /// </summary>
         /// <param name="speed">Units per second; also what the client is told to extrapolate at.</param>
         /// <param name="elapsedMs">Time since the creature last moved.</param>
+        /// <param name="knockback">
+        /// A knockback carrying it: at the given speed whatever slows it, frozen or not, and facing
+        /// back the way it came. Otherwise the speed is the creature's own times MovementSpeed (its
+        /// slows), and a frozen creature only turns.
+        /// </param>
         /// <returns>The distance actually moved.</returns>
-        float UpdateEntityMovement(double difX, double difY, double difZ, Creature creature, MapChannel mapChannel, float speed, bool isMoved, long elapsedMs)
+        float UpdateEntityMovement(double difX, double difY, double difZ, Creature creature, MapChannel mapChannel, float speed, bool isMoved, long elapsedMs, bool knockback = false)
         {
+            if (!knockback)
+            {
+                speed = (float)(speed * creature.MovementSpeed);
+
+                if (isMoved && CrowdControl.IsRooted(creature))
+                    isMoved = false;
+            }
+
             var remaining = Math.Sqrt(difX * difX + difY * difY + difZ * difZ);
             var length = 1.0d / remaining;
             difX *= length;
             difY *= length;
             difZ *= length;
-            var vX = (float)Math.Atan2(-difX, -difZ);
+            var vX = knockback ? (float)Math.Atan2(difX, difZ) : (float)Math.Atan2(-difX, -difZ);
+            creature.LastYaw = vX;
 
             var velocity = isMoved ? speed : 0.0f;
 

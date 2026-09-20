@@ -765,7 +765,8 @@ namespace Rasa.Managers
 
             MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage, WeaponSkills.ArmorBypassPercent(skillId, pump),
                 WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType), critBonus,
-                stunChance: grenades ? Stuns.GrenadeChance(pump) : 0, stunMs: grenades ? Stuns.GrenadeStunMs : 0);
+                stunChance: grenades ? Stuns.GrenadeChance(pump) : 0, stunMs: grenades ? Stuns.GrenadeStunMs : 0,
+                rootMs: skillId == WeaponSkills.NetGuns ? CrowdControl.NetGunRootMs : 0);
             
             return FireResult.Fired;
         }

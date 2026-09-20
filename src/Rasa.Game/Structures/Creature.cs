@@ -31,6 +31,13 @@ namespace Rasa.Structures
 
         public float WalkSpeed { get; set; }
         public float RunSpeed { get; set; }
+
+        /// <summary>Where a knockback in progress is carrying the creature, and which way (away from whoever hit it); null when none is.</summary>
+        public System.Numerics.Vector3? KnockbackTo { get; set; }
+        public System.Numerics.Vector3 KnockbackDirection { get; set; }
+
+        /// <summary>The way the creature last faced, as sent in its movement; what a stop is sent with.</summary>
+        public float LastYaw { get; set; }
         //sint32 movestate;
         //float wx,wy,wz; // target destination (can be far away)
         public BaseBehaviorBaseNode HomePos = new BaseBehaviorBaseNode();  //--- spawn location (used for wander)

@@ -151,6 +151,10 @@ namespace Rasa.Managers
 
             creature.State = CharacterState.Dying;
 
+            // Stopped where it is, mid-knockback or mid-stride: nothing moves it from here.
+            creature.KnockbackTo = null;
+            BehaviorManager.Instance.StopMoving(creature);
+
             // Nothing comes back while it is held: no health, no armour.
             health.RefreshAmount = 0;
             health.RefreshPeriod = 0;

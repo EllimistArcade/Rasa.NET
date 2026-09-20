@@ -160,8 +160,8 @@ namespace Rasa.Managers
         private readonly Random _random = new Random();
 
         /// <summary>
-        /// A hit that left its creature alive: the stuns it carries (an Ice or Sonic crit, Hand to
-        /// Hand, a grenade), then whether the creature is now stunned and near death, which opens
+        /// A hit that left its creature alive: the stuns, knockback, slow and freeze it carries (an
+        /// Ice, Sonic or Virulent crit, Hand to Hand, a grenade, a net gun), then whether the creature is now stunned and near death, which opens
         /// its Critical Death window. Returns whether the window opened.
         /// </summary>
         private static bool StunAndCheckCritDeath(MapChannel mapChannel, Creature creature, Missile missile)
@@ -175,6 +175,10 @@ namespace Rasa.Managers
 
                 if (creature.State != CharacterState.Dying && missile.StunMs > 0 && Stuns.Roll(missile.StunChance))
                     Stuns.Apply(mapChannel, creature, missile.Source, Stuns.StunTypeId, missile.StunMs, damageType);
+
+                // Net guns hold what they hit where it stands.
+                if (creature.State != CharacterState.Dying && missile.RootMs > 0)
+                    CrowdControl.Root(mapChannel, creature, missile.Source, CrowdControl.NetGunRootTypeId, missile.RootMs);
             }
 
             if (creature.State == CharacterState.Dying)
@@ -414,7 +418,8 @@ namespace Rasa.Managers
         /// <param name="critBonus">Crit chance in percent the attack adds to the shooter's own (Firearms on a rifle).</param>
         /// <param name="melee">A melee swing, for the crouching crit modifiers.</param>
         /// <param name="stunChance">Chance in percent the hit stuns a creature for stunMs (Hand to Hand, grenades).</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0)
+        /// <param name="rootMs">How long the hit holds a creature where it stands (net guns).</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0)
         {
             var missile = new Missile
             {
@@ -425,7 +430,8 @@ namespace Rasa.Managers
                 IsMelee = melee,
                 CritChance = CriticalHits.AttackerChance(action.Actor, melee, critBonus),
                 StunChance = stunChance,
-                StunMs = stunMs
+                StunMs = stunMs,
+                RootMs = rootMs
             };
 
             // get distance between actors

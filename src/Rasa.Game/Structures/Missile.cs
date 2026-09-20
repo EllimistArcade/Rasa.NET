@@ -25,6 +25,8 @@
         /// <summary>Chance in percent that the hit stuns a creature (Hand to Hand, grenades), and for how long.</summary>
         public int StunChance { get; set; }
         public int StunMs { get; set; }
+        /// <summary>How long the hit holds a creature where it stands (net guns); 0 for not at all.</summary>
+        public int RootMs { get; set; }
         public long TriggerTime { get; set; }       // amount of milliseconds left before the missile is triggered, is decreased on every tick
         public MissileArgs Args = new MissileArgs();
     }

@@ -705,6 +705,7 @@ namespace Rasa.Managers
 
             var critChance = CriticalHits.AttackerChance(player, false);
             var stun = Stuns.OfAbility(actionInfo.Module, info);
+            var knockback = info.Get(AbilityProperty.KnockbackDistance);
 
             foreach (var target in targets)
             {
@@ -735,6 +736,10 @@ namespace Rasa.Managers
 
                     if (target.State != CharacterState.Dying && stun.Ms > 0 && Stuns.Roll(stun.Chance))
                         Stuns.Apply(mapChannel, target, player, Stuns.StunTypeId, stun.Ms, damageType);
+
+                    // KNOCKBACK_DISTANCE: Tectonic Strike, Concussive Wave, Rushing Blow, Force Blast P6/P7.
+                    if (target.State != CharacterState.Dying && knockback > 0)
+                        CrowdControl.Knockback(mapChannel, target, player, knockback, CrowdControl.KnockbackTypeId, damageType);
                 }
             }
 

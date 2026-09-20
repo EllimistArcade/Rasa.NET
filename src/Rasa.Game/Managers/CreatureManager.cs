@@ -129,6 +129,7 @@ namespace Rasa.Managers
             var stateIds = new List<CharacterState> { CharacterState.Dead };
 
             creature.State = CharacterState.Dead;
+            creature.KnockbackTo = null;
             CellManager.Instance.CellCallMethod(mapChannel, creature, new StateChangePacket(stateIds));
 
             // A debuff does not outlive what it was on: a Ruin still ticking on a corpse would

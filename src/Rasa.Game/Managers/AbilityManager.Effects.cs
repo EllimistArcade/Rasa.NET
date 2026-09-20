@@ -419,8 +419,8 @@ namespace Rasa.Managers
         /// Ruin: DAMAGE_AMOUNT_MIN..MAX of DAMAGE_TYPE to one enemy every INTERVAL seconds for
         /// DURATION, scaled to the performer's level like any ability damage. The first tick is
         /// an interval in, as the tooltip's "every N seconds" reads. Pump 5's
-        /// EFFECT_MOVEMENT_MODIFIER (a slow) is not applied: creatures do not move by
-        /// MovementSpeed yet.
+        /// EFFECT_MOVEMENT_MODIFIER is a slow - its tooltip reads "Movement: -20%" - so the creature
+        /// moves at 80% of its speed while Ruin is on it.
         /// </summary>
         private static void AttachRuin(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
         {
@@ -437,6 +437,9 @@ namespace Rasa.Managers
             effect.Tooltip["dmgMin"] = Scale(player.Level, effect.TickDamageMin, effect.TickScaleType);
             effect.Tooltip["dmgMax"] = Scale(player.Level, effect.TickDamageMax, effect.TickScaleType);
             effect.Tooltip["interval"] = interval;
+
+            if (info.Has(AbilityProperty.EffectMovementModifier))
+                effect.MovementModifierPercent = Math.Max(1, 100 - info.Get(AbilityProperty.EffectMovementModifier));
 
             GameEffectManager.Instance.Attach(mapChannel, target, effect);
         }

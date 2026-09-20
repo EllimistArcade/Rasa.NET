@@ -335,6 +335,12 @@ namespace Rasa.Managers
             if (effect.NextTickTick <= now)
                 effect.NextTickTick = now + effect.TickIntervalMs;
 
+            if (effect.OnTick != null)
+            {
+                effect.OnTick(mapChannel, actor, effect);
+                return;
+            }
+
             if (effect.AdrenalineDrainPercentPerSecond > 0)
             {
                 if (!TickDrain(mapChannel, actor, effect))

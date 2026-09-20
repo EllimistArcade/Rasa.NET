@@ -238,6 +238,12 @@ namespace Rasa.Structures
         /// <summary>The player whose finisher is winding up on this CRIT_PREDEATH_EFFECT; 0 while nobody has claimed it.</summary>
         public ulong FinisherId { get; set; }
 
+        /// <summary>
+        /// A tick of the effect's own, run by GameEffectManager in place of the standard ones when
+        /// set - for an effect whose tick has a shape of its own (Lightning's storm).
+        /// </summary>
+        public Action<MapChannel, Actor, GameEffect> OnTick { get; set; }
+
         #endregion
 
         public bool IsExpired => Environment.TickCount64 >= ExpiresTick;
@@ -250,7 +256,7 @@ namespace Rasa.Structures
         public int RemainingSeconds => HasDuration ? (int)Math.Max(0, (ExpiresTick - Environment.TickCount64) / 1000) : 0;
 
         /// <summary>Whether a tick of this effect does anything besides announce itself.</summary>
-        public bool TicksDoWork => AdrenalineDrainPercentPerSecond > 0 || TickDamageMax > 0 || TickHealMax > 0 || TickAdrenaline > 0 || AuraRadius > 0;
+        public bool TicksDoWork => OnTick != null || AdrenalineDrainPercentPerSecond > 0 || TickDamageMax > 0 || TickHealMax > 0 || TickAdrenaline > 0 || AuraRadius > 0;
     }
 
     /// <summary>A shield's remaining absorption, shared by everything the one shield covers.</summary>

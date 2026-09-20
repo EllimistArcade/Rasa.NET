@@ -81,8 +81,18 @@ namespace Rasa.Packets.MapChannel.Server
                         DamageInfoWriter.WriteRawInfo(pw, hit.DamageType, hit.Amount, hit.Resisted, hit.IsCritical, hit.DeathBlow);
                         if (ArcData)
                         {
-                            pw.WriteTuple(1);               // onHitData = (arcData,)
-                            pw.WriteList(0);
+                            // onHitData = (arcData,): [(entityId, rawInfo), ...], which
+                            // LightningAbility.OnAbility hands to an ARC_EFFECT on the target -
+                            // it floats each as damage and draws an arc to each.
+                            pw.WriteTuple(1);
+                            pw.WriteList(hit.Arcs.Count);
+
+                            foreach (var arc in hit.Arcs)
+                            {
+                                pw.WriteTuple(2);
+                                pw.WriteULong(arc.EntityId);
+                                DamageInfoWriter.WriteRawInfo(pw, arc.DamageType, arc.Amount, arc.Resisted, arc.IsCritical, arc.DeathBlow);
+                            }
                         }
                         else
                             pw.WriteNoneStruct();           // onHitData
@@ -103,5 +113,8 @@ namespace Rasa.Packets.MapChannel.Server
 
         /// <summary>For HitDataKind.EffectAttach: the gameeffectdata id the client announces on this entity.</summary>
         public int EffectTypeId { get; set; }
+
+        /// <summary>For lightning (ArcData): the further damage this hit sets off - arcs, extra damage - as the client's arcData.</summary>
+        public List<TickEntry> Arcs { get; } = new List<TickEntry>();
     }
 }

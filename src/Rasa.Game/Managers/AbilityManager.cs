@@ -677,10 +677,19 @@ namespace Rasa.Managers
             var targets = new List<Creature>();
             var primary = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
 
-            if (info.Has(AbilityProperty.RadiusAroundSource) || info.Has(AbilityProperty.ConeRadius))
+            if (info.Has(AbilityProperty.ConeRadius))
             {
-                var radius = Math.Max(info.Get(AbilityProperty.RadiusAroundSource), info.Get(AbilityProperty.ConeRadius));
-                targets.AddRange(HostilesWithin(mapChannel, player, player.Position, radius));
+                // A cone: the action's range long, CONE_RADIUS degrees either side of the aim -
+                // at the target when there is one, otherwise the way the player faces.
+                var aim = primary != null && IsHostile(player, primary)
+                    ? primary.Position - player.Position
+                    : FacingOf(player);
+
+                targets.AddRange(HostilesInCone(mapChannel, player, aim, Math.Max(1, info.MaxRange) + RangeSlack, info.Get(AbilityProperty.ConeRadius)));
+            }
+            else if (info.Has(AbilityProperty.RadiusAroundSource))
+            {
+                targets.AddRange(HostilesWithin(mapChannel, player, player.Position, info.Get(AbilityProperty.RadiusAroundSource)));
             }
             else if (info.Has(AbilityProperty.RadiusAroundTarget))
             {
@@ -717,7 +726,7 @@ namespace Rasa.Managers
                 var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted);
                 var taken = ActorManager.Instance.Damage(mapChannel, target, amount, player, damageType);
 
-                recovery.Hits.Add(new AbilityHit
+                var hit = new AbilityHit
                 {
                     EntityId = target.EntityId,
                     Amount = amount,
@@ -725,7 +734,9 @@ namespace Rasa.Managers
                     DamageType = damageType,
                     IsCritical = crit,
                     DeathBlow = taken > 0 && target.Attributes[Attributes.Health].Current <= 0
-                });
+                };
+
+                recovery.Hits.Add(hit);
 
                 // Still standing: the stuns the hit carries - the ability's own, and an Ice or
                 // Sonic crit's - each of which opens the Critical Death window if it is low enough.
@@ -741,9 +752,54 @@ namespace Rasa.Managers
                     if (target.State != CharacterState.Dying && knockback > 0)
                         CrowdControl.Knockback(mapChannel, target, player, knockback, CrowdControl.KnockbackTypeId, damageType);
                 }
+
+                // Lightning's arc, extra sonic damage and storm (AbilityManager.Lightning.cs).
+                if (recovery.ArcData)
+                    ResolveLightningExtras(mapChannel, player, info, target, rolled, hit);
             }
 
             CellManager.Instance.CellCallMethod(mapChannel, player, recovery);
+        }
+
+        /// <summary>
+        /// The way a player faces, flat: their yaw (Actor.Rotation, the client's
+        /// Movement.ViewDirection.X) in the convention creature movement uses - facing along
+        /// (-sin yaw, -cos yaw).
+        /// </summary>
+        public static Vector3 FacingOf(Actor actor)
+        {
+            return new Vector3((float)-Math.Sin(actor.Rotation), 0f, (float)-Math.Cos(actor.Rotation));
+        }
+
+        /// <summary>Whether a point lies within a cone from an origin: within range, and within halfAngleDegrees of the aim on the flat.</summary>
+        public static bool InCone(Vector3 origin, Vector3 aim, Vector3 point, float range, float halfAngleDegrees)
+        {
+            var to = new Vector2(point.X - origin.X, point.Z - origin.Z);
+            var distance = to.Length();
+
+            if (distance > range)
+                return false;
+
+            // Standing on the caster counts as in front of them.
+            if (distance < 0.5f)
+                return true;
+
+            var dir = new Vector2(aim.X, aim.Z);
+
+            if (dir.LengthSquared() < 1e-6f)
+                return true;
+
+            var cos = Vector2.Dot(Vector2.Normalize(dir), to / distance);
+
+            return cos >= Math.Cos(halfAngleDegrees * Math.PI / 180.0);
+        }
+
+        /// <summary>Living, non-AFS creatures in a cone from the performer.</summary>
+        internal static List<Creature> HostilesInCone(MapChannel mapChannel, Manifestation player, Vector3 aim, float range, float halfAngleDegrees)
+        {
+            return HostilesWithin(mapChannel, player, player.Position, range)
+                .Where(c => InCone(player.Position, aim, c.Position, range, halfAngleDegrees))
+                .ToList();
         }
 
         /// <summary>Living, non-AFS creatures within radius metres of a point, from the cells around the performer.</summary>

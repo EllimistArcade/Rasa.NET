@@ -16,19 +16,24 @@ namespace Rasa.Packets.MapChannel.Server
     ///  - HealOverTime.OnTick(target, healData): [(targetId, amount), ...], announced as healing.
     ///  - RageSourceEffect.OnTick(target, targetIds): the ids of the squad members the aura just
     ///    reached, announced as attaches of the RAGE effect on them.
+    ///  - StormEffect.OnTick(target, dotData, arcData): lightning P5's storm - dotData announced
+    ///    as damage on the holder, arcData ([(targetId, rawInfo)]) floated and drawn as arcs from it.
     ///  - BaseGameEffect.OnTick(target): nothing but the tick marker on the effect's FX.
     ///
     /// Kind picks the shape. Entries is empty for the bare tick.
     /// </summary>
     public class GameEffectTickPacket : ServerPythonPacket
     {
-        public enum TickKind { Bare, Damage, Heal, EntityIds }
+        public enum TickKind { Bare, Damage, Heal, EntityIds, Storm }
 
         public override GameOpcode Opcode { get; } = GameOpcode.GameEffectTick;
 
         public int EffectId { get; }
         public TickKind Kind { get; }
         public List<TickEntry> Entries { get; } = new List<TickEntry>();
+
+        /// <summary>For TickKind.Storm: the arcs, written after Entries (the damage on the holder).</summary>
+        public List<TickEntry> ArcEntries { get; } = new List<TickEntry>();
 
         public GameEffectTickPacket(int effectId, TickKind kind)
         {
@@ -38,11 +43,18 @@ namespace Rasa.Packets.MapChannel.Server
 
         public override void Write(PythonWriter pw)
         {
-            pw.WriteTuple(Kind == TickKind.Bare ? 1 : 2);
+            pw.WriteTuple(Kind == TickKind.Bare ? 1 : Kind == TickKind.Storm ? 3 : 2);
             pw.WriteInt(EffectId);
 
             if (Kind == TickKind.Bare)
                 return;
+
+            if (Kind == TickKind.Storm)
+            {
+                WriteDamage(pw, Entries);
+                WriteDamage(pw, ArcEntries);
+                return;
+            }
 
             pw.WriteList(Entries.Count);
 
@@ -64,6 +76,18 @@ namespace Rasa.Packets.MapChannel.Server
                         pw.WriteULong(entry.EntityId);
                         break;
                 }
+            }
+        }
+
+        private static void WriteDamage(PythonWriter pw, List<TickEntry> entries)
+        {
+            pw.WriteList(entries.Count);
+
+            foreach (var entry in entries)
+            {
+                pw.WriteTuple(2);
+                pw.WriteULong(entry.EntityId);
+                DamageInfoWriter.WriteRawInfo(pw, entry.DamageType, entry.Amount, entry.Resisted, entry.IsCritical, entry.DeathBlow);
             }
         }
     }

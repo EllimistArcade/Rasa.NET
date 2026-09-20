@@ -195,7 +195,8 @@ namespace Rasa.Managers
 
             var armorTaken = 0;
 
-            if (target.Attributes.TryGetValue(Attributes.Armor, out var armor) && armor.Current > 0)
+            // Armour first - unless an EMP crit is suppressing it, when it all goes to health.
+            if (target.Attributes.TryGetValue(Attributes.Armor, out var armor) && armor.Current > 0 && !GameEffectManager.ArmorSuppressed(target))
             {
                 armorTaken = Math.Min(amount, armor.Current);
                 armor.Current -= armorTaken;

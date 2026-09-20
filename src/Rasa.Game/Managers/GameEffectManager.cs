@@ -661,6 +661,27 @@ namespace Rasa.Managers
             return total;
         }
 
+        /// <summary>Whether an EMP crit is suppressing the actor's armour.</summary>
+        public static bool ArmorSuppressed(Actor actor)
+        {
+            foreach (var effect in actor.ActiveEffects.Values)
+                if (effect.SuppressesArmor && !effect.IsExpired)
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>The actor's ranged damage after the effects on it (Laser crit): amount x (100 + sum of RangedDamagePercent) / 100, never below 0.</summary>
+        public static int ApplyRangedDamage(Actor actor, int amount)
+        {
+            var percent = 0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                percent += effect.RangedDamagePercent;
+
+            return percent == 0 ? amount : Math.Max(0, amount * (100 + percent) / 100);
+        }
+
         /// <summary>Percent added to the actor's chance of a critical hit by the effects on them (Crit Wave).</summary>
         public static int CritChancePercentOf(Actor actor)
         {

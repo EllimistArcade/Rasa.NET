@@ -538,6 +538,10 @@ namespace Rasa.Managers
                     // execute action and quit
                     var dmg = (int)(action.MinDamage + (new Random().Next() % (action.MaxDamage - action.MinDamage + 1)));
 
+                    // A Laser crit on it weakens its ranged attacks.
+                    if (action.ActionId != ActionId.WeaponMelee)
+                        dmg = GameEffectManager.ApplyRangedDamage(creature, dmg);
+
                     var actionData = new ActionData(creature, action.ActionId, action.ActionArgId, creature.Controller.ActionFighting.TargetEntityId, 0);
                     // do damage
                     MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, melee: action.ActionId == ActionId.WeaponMelee);

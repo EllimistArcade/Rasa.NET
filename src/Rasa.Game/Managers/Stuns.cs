@@ -18,7 +18,7 @@ namespace Rasa.Managers
     ///    Duration: 4s".."8s". Concussive Wave: DURATION 10, "Stun Duration: 10s". Rushing Blow:
     ///    DURATION 1-5, its "knockback, and stun". Those three always stun. Effect STUN 86.
     ///  - Critical hits by Ice (CRIT_ICE 3, "Frozen", a StunEffect), for CritStunMs - not in the
-    ///    client. A Sonic crit (CRIT_SONIC 7, "Stunned") is a knockback: CrowdControl.
+    ///    client (CritEffects). A Sonic crit (CRIT_SONIC 7, "Stunned") is a knockback: CrowdControl.
     ///  - Knockbacks, which stun for the flight and the getup after it: CrowdControl.
     ///  - Hand to Hand on melee hits: pump 4 "Knockback Chance: +50%, Stun Duration: 1s", pump 5
     ///    "+75%, 2s". Taken as a stun at the knockback chance, since there is no knockback yet.
@@ -126,26 +126,6 @@ namespace Rasa.Managers
             CritDeathManager.Instance.TryEnterPreDeath(mapChannel, target, source, damageType);
 
             return true;
-        }
-
-        /// <summary>
-        /// A critical hit's side effect on a creature, by damage type: Ice freezes (a stun),
-        /// Sonic knocks back (a stun too, see CrowdControl), Virulent cripples (a slow).
-        /// </summary>
-        public static void OnCritical(MapChannel mapChannel, Creature target, Actor source, DamageType damageType)
-        {
-            switch (damageType)
-            {
-                case DamageType.Ice:
-                    Apply(mapChannel, target, source, CritIceTypeId, CritStunMs, damageType);
-                    break;
-                case DamageType.Sonic:
-                    CrowdControl.Knockback(mapChannel, target, source, CrowdControl.DefaultKnockbackDistance, CrowdControl.CritSonicTypeId, damageType);
-                    break;
-                case DamageType.Virulent:
-                    CrowdControl.Slow(mapChannel, target, source, CrowdControl.CritVirulentTypeId, CrowdControl.VirulentCrippleSlowPercent, CrowdControl.VirulentCrippleMs, "snareMod");
-                    break;
-            }
         }
     }
 }

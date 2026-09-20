@@ -124,7 +124,8 @@ namespace Rasa.Managers
             Resist(creature, missile);
 
             // decrease armor first - all of it but what bypasses armour
-            var armorDecrease = Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
+            // all of it to health while an EMP crit suppresses its armour
+            var armorDecrease = GameEffectManager.ArmorSuppressed(creature) ? 0 : Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
             creature.Attributes[Attributes.Armor].Current -= armorDecrease;
             CellManager.Instance.CellCallMethod(mapChannel, creature, new UpdateArmorPacket(creature.Attributes[Attributes.Armor], creature.EntityId));
 
@@ -171,7 +172,7 @@ namespace Rasa.Managers
             if (missile.Source is Manifestation)
             {
                 if (missile.IsCritical)
-                    Stuns.OnCritical(mapChannel, creature, missile.Source, damageType);
+                    CritEffects.OnCritical(mapChannel, creature, missile.Source, damageType, missile.DamageA);
 
                 if (creature.State != CharacterState.Dying && missile.StunMs > 0 && Stuns.Roll(missile.StunChance))
                     Stuns.Apply(mapChannel, creature, missile.Source, Stuns.StunTypeId, missile.StunMs, damageType);

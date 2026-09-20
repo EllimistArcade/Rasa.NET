@@ -154,6 +154,12 @@ namespace Rasa.Structures
         /// <summary>A freeze: while it is on, a creature cannot move but can still attack; see CrowdControl.</summary>
         public bool IsRoot { get; set; }
 
+        /// <summary>EMP crit's Armor Suppression: while on, the holder's armour stops nothing and every hit goes to health.</summary>
+        public bool SuppressesArmor { get; set; }
+
+        /// <summary>Percent added to the damage of the holder's ranged attacks; negative reduces it (Laser crit).</summary>
+        public int RangedDamagePercent { get; set; }
+
         /// <summary>Whether it changes any regeneration rate, which the holder's client has to be told.</summary>
         public bool ChangesRegen => RegenPercent != 0 || ArmorRegenPercent != 0 || HealthRegenPercent != 0 || PowerRegenPercent != 0;
 

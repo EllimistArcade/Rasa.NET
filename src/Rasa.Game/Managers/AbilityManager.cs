@@ -732,7 +732,7 @@ namespace Rasa.Managers
                 if (target.State != CharacterState.Dead && target.State != CharacterState.Dying && target.Attributes[Attributes.Health].Current > 0)
                 {
                     if (crit)
-                        Stuns.OnCritical(mapChannel, target, player, damageType);
+                        CritEffects.OnCritical(mapChannel, target, player, damageType, amount);
 
                     if (target.State != CharacterState.Dying && stun.Ms > 0 && Stuns.Roll(stun.Chance))
                         Stuns.Apply(mapChannel, target, player, Stuns.StunTypeId, stun.Ms, damageType);

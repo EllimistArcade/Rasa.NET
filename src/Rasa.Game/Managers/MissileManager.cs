@@ -637,10 +637,11 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Aims a cone weapon (ConeWeapons) as it is fired: every hostile creature within its reach
-        /// and half-angle of the way the shooter faces. The one the missile flies at is the locked
-        /// target if it is a hostile creature within reach - a client that still locks one keeps
-        /// hitting it whichever way the server last saw the shooter face - and otherwise the
-        /// nearest in the cone; the rest are its other victims.
+        /// and half-angle of the way the shooter faces. A cone weapon cannot lock a target ("you
+        /// will not be able to lock onto a target while this type of weapon is equipped"), so
+        /// whatever the shooter had selected plays no part: the missile flies at the nearest
+        /// creature in the cone, the rest are its other victims, and an empty cone is a shot at
+        /// nothing.
         /// </summary>
         private static void AimCone(MapChannel mapChannel, Manifestation shooter, ActionData action, Missile missile, float halfAngle, int damage)
         {
@@ -650,31 +651,11 @@ namespace Rasa.Managers
                 .OrderBy(c => Vector3.DistanceSquared(c.Position, shooter.Position))
                 .ToList();
 
-            missile.ConeDamage = damage;
-
-            // A player the shooter has locked (there is no PvP to speak of, but a staff can
-            // deflect) stays what the shot flies at; the cone's creatures are hit besides.
-            if (action.TargetId != 0 && EntityManager.Instance.GetEntityType(action.TargetId) == EntityType.Character)
-            {
-                missile.ConeTargets = inCone;
-                return;
-            }
-
-            Creature primary = null;
-
-            if (action.TargetId != 0 && EntityManager.Instance.GetEntityType(action.TargetId) == EntityType.Creature)
-            {
-                var locked = EntityManager.Instance.GetCreature(action.TargetId);
-
-                if (locked != null && IsOnMap(mapChannel, locked) && AbilityManager.IsHostile(shooter, locked)
-                    && Vector3.Distance(locked.Position, shooter.Position) <= range)
-                    primary = locked;
-            }
-
-            primary ??= inCone.FirstOrDefault();
+            var primary = inCone.FirstOrDefault();
 
             action.TargetId = primary?.EntityId ?? 0;
-            missile.ConeTargets = inCone.Where(c => c != primary).ToList();
+            missile.ConeTargets = inCone.Skip(1).ToList();
+            missile.ConeDamage = damage;
         }
 
         public void MissileTrigger(MapChannel mapChannel, Missile missile)

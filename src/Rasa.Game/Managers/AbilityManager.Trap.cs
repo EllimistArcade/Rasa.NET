@@ -39,8 +39,8 @@ namespace Rasa.Managers
     ///   attack's range: the weapon's damage scaled to the owner's level as Polymorph scales a
     ///   creature weapon, less 75%, as CF_ABILITY_TURRET_EFFECT ticks. Its shots are its own, so
     ///   the hate is on it; a kill it makes is its owner's (CreatureManager.HandleCreatureKill);
-    /// - HATE_TRANSFER_PERCENT: every second, 10% of what each creature that hates the trap hates
-    ///   the owner for moves onto the trap;
+    /// - HATE_TRANSFER_PERCENT: of the hate the owner earns on a creature within the trap's
+    ///   range, 10% goes to the trap instead (AbilityManager.HateSinkFor, Threat);
     /// - destroyed, it ticks TRAP_DEATH_EFFECT with its killer and strikes every hostile creature
     ///   within EFFECT_RADIUS of the killer, credited to the owner, the damage announced through
     ///   the death effect; it is gone a moment later. Run out, it goes quietly.
@@ -288,13 +288,6 @@ namespace Rasa.Managers
                     continue;
 
                 trap.NextShotAt = now + TrapShotMs;
-
-                // HATE_TRANSFER_PERCENT: whatever hates the trap is drawn further off its owner.
-                foreach (var cell in CellManager.CellsIn(mapChannel, turret.Cells))
-                    foreach (var creature in cell.CreatureList)
-                        if (creature != turret && creature.Hate.Contains(turret.EntityId))
-                            creature.Hate.Move(trap.Owner.EntityId, turret.EntityId,
-                                HateTransferred(creature.Hate.Of(trap.Owner.EntityId), trap.HateTransferPercent));
 
                 Shoot(trap);
             }

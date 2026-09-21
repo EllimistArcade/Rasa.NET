@@ -78,6 +78,8 @@ namespace Rasa.Managers
 
             var hate = OfHit(landed, absorbed, resisted) * ThreatModifierOf(attacker) / 100.0;
 
+            hate = ToSummon(victim, attacker, hate);
+
             // A hit for nothing still says who is shooting.
             victim.Hate.Ensure(attacker.EntityId, NoticedThreat);
             victim.Hate.Add(attacker.EntityId, hate);
@@ -108,7 +110,31 @@ namespace Rasa.Managers
             foreach (var cell in CellManager.CellsIn(mapChannel, healed.Cells))
                 foreach (var creature in cell.CreatureList.ToList())
                     if (creature.State != CharacterState.Dead && creature.Hate.Contains(healed.EntityId))
-                        creature.Hate.Add(healer.EntityId, hate);
+                        creature.Hate.Add(healer.EntityId, ToSummon(creature, healer, hate));
+        }
+
+        /// <summary>
+        /// HATE_TRANSFER_PERCENT: a player with a summon - trap, turret, reality ripper - near the
+        /// creature has that share of the hate they have just earned go to the summon instead
+        /// (AbilityManager.HateSinkFor). Returns what is left for the player. Only new hate is
+        /// split; what the creature already held against the player stays where it is.
+        /// </summary>
+        public static double ToSummon(Creature victim, Actor attacker, double hate)
+        {
+            if (hate <= 0 || !(attacker is Manifestation owner))
+                return hate;
+
+            var (summon, percent) = AbilityManager.HateSinkFor(owner, victim);
+
+            if (summon == null)
+                return hate;
+
+            var share = AbilityManager.HateTransferred(hate, percent);
+
+            victim.Hate.Ensure(summon.EntityId, NoticedThreat);
+            victim.Hate.Add(summon.EntityId, share);
+
+            return hate - share;
         }
 
         /// <summary>

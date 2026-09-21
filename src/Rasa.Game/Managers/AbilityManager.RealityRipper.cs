@@ -31,8 +31,9 @@ namespace Rasa.Managers
     ///   CrowdControl.PullStopShort of the rift over TeleportMs (CrowdControl.Pull), and given 204
     ///   for what is left of the rift's time: rooted, and hurt every INTERVAL through the effect
     ///   tick, credited to the caster;
-    /// - HATE_TRANSFER_PERCENT: every INTERVAL, that percent of what each creature taken hates
-    ///   the caster for moves onto the rift - it draws them off the one who threw it;
+    /// - HATE_TRANSFER_PERCENT: of the hate the caster earns on a creature within the rift's
+    ///   radius - its own damage ticks included - 25% goes to the rift instead
+    ///   (AbilityManager.HateSinkFor, Threat);
     /// - when DURATION is up, or the rift is killed, its effects come off, the creatures are let
     ///   go, and the rift is taken away.
     ///
@@ -76,10 +77,54 @@ namespace Rasa.Managers
                 return Rippers.Any(r => r.Creature == creature);
         }
 
-        /// <summary>The share of a creature's hate for the caster that moves onto the rift each interval.</summary>
-        public static double HateTransferred(double hateForCaster, int percent)
+        /// <summary>The share of a piece of hate that goes to a summon with this HATE_TRANSFER_PERCENT.</summary>
+        public static double HateTransferred(double hate, int percent)
         {
-            return hateForCaster <= 0 || percent <= 0 ? 0 : hateForCaster * Math.Min(100, percent) / 100.0;
+            return hate <= 0 || percent <= 0 ? 0 : hate * Math.Min(100, percent) / 100.0;
+        }
+
+        /// <summary>
+        /// HATE_TRANSFER_PERCENT, as the share of the threat an owner generates that goes to their
+        /// summon instead: the owner's summon - trap, turret or rift - nearest the creature among
+        /// those whose reach the creature is in (a trap's or turret's attack range, a rift's
+        /// radius), and its percent. Null when there is none.
+        /// </summary>
+        public static (Creature Summon, int Percent) HateSinkFor(Manifestation owner, Creature victim)
+        {
+            if (owner == null || victim == null)
+                return (null, 0);
+
+            Creature best = null;
+            var percent = 0;
+            var bestDistance = float.MaxValue;
+
+            void Consider(Creature summon, float reach, int transfer)
+            {
+                if (summon == null || transfer <= 0 || summon == victim || summon.State == CharacterState.Dead
+                    || summon.MapContextId != victim.MapContextId)
+                    return;
+
+                var distance = System.Numerics.Vector3.Distance(summon.Position, victim.Position);
+
+                if (distance > reach || distance >= bestDistance)
+                    return;
+
+                best = summon;
+                percent = transfer;
+                bestDistance = distance;
+            }
+
+            lock (TrapsLock)
+                foreach (var trap in Traps)
+                    if (trap.Owner == owner && trap.RemoveAt == 0)
+                        Consider(trap.Creature, trap.Range, trap.HateTransferPercent);
+
+            lock (RippersLock)
+                foreach (var ripper in Rippers)
+                    if (ripper.Owner == owner)
+                        Consider(ripper.Creature, ripper.Radius, ripper.HateTransferPercent);
+
+            return (best, percent);
         }
 
         /// <summary>Opens a rift at the spot the ability was thrown at.</summary>
@@ -184,17 +229,6 @@ namespace Rasa.Managers
                 foreach (var creature in HostilesWithin(mapChannel, ripper.Owner, rift.Position, ripper.Radius))
                     if (!ripper.Taken.ContainsKey(creature) && creature.State != CharacterState.Dead && creature.State != CharacterState.Dying)
                         Take(ripper, creature, now);
-
-                // HATE_TRANSFER_PERCENT: the rift draws them off the one who threw it.
-                foreach (var creature in ripper.Taken.Keys)
-                {
-                    var moved = HateTransferred(creature.Hate.Of(ripper.Owner.EntityId), ripper.HateTransferPercent);
-
-                    if (moved <= 0)
-                        continue;
-
-                    creature.Hate.Move(ripper.Owner.EntityId, rift.EntityId, moved);
-                }
             }
         }
 

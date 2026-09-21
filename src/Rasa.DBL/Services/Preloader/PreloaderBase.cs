@@ -12,7 +12,17 @@ namespace Rasa.Services.Preloader
     {
         protected void Insert(MigrationBuilder migrationBuilder, string tableName, Type entityType)
         {
-            var columns = GetColumnNames(entityType);
+            Insert(migrationBuilder, tableName, GetColumnNames(entityType));
+        }
+
+        /// <summary>
+        /// The columns spelled out rather than taken from the entity. A preloader whose table has
+        /// grown a column since it was written uses this, so that the migration it runs in still
+        /// inserts the columns the table had at that point in the history and the later migration
+        /// that adds the column is what fills it.
+        /// </summary>
+        protected void Insert(MigrationBuilder migrationBuilder, string tableName, string[] columns)
+        {
             var values = CreateValues();
 
             migrationBuilder.InsertData(tableName,

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -768,8 +768,8 @@ namespace Rasa.Managers
         /// Damage a victim takes, after the resistance the effects on them add up to (Rage,
         /// Resistance, Sacrifice, Base Wave) and, for damage of a known type, a player's own
         /// resistance to that type (armour and Hazmat Armor, Manifestation.ResistanceData);
-        /// resisted is what came off. Creature attacks carry no type yet, so theirs meet only
-        /// the effects.
+        /// resisted is what came off. A creature's attack carries the type of the weapon it plays
+        /// (Managers.CreatureAttacks), so a player's own resistances meet it as well.
         /// </summary>
         public static int ApplyResist(Actor target, int amount, out int resisted, DamageType damageType = 0)
         {

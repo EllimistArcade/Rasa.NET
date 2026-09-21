@@ -543,8 +543,9 @@ namespace Rasa.Managers
                         dmg = GameEffectManager.ApplyRangedDamage(creature, dmg);
 
                     var actionData = new ActionData(creature, action.ActionId, action.ActionArgId, creature.Controller.ActionFighting.TargetEntityId, 0);
-                    // do damage
-                    MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, melee: action.ActionId == ActionId.WeaponMelee);
+                    // do damage, of the type the attack's weapon deals
+                    MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, damageType: CreatureAttacks.DamageTypeOf(action),
+                        melee: action.ActionId == ActionId.WeaponMelee);
 
                     // Feedback on it burns it for acting: this is the hostile action the server has.
                     AbilityManager.OnCreatureActed(mapChannel, creature, true);

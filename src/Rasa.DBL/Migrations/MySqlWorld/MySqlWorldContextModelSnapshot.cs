@@ -224,6 +224,10 @@ namespace Rasa.Migrations.MySqlWorld
                         .HasColumnType("int unsigned")
                         .HasColumnName("cooldown");
 
+                    b.Property<uint>("DamageType")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("damage_type");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("varchar(50)")

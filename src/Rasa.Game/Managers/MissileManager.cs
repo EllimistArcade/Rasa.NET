@@ -85,8 +85,8 @@ namespace Rasa.Managers
         /// </summary>
         private static void Resist(Actor victim, Missile missile)
         {
-            // Typed when the attack has a type (players' weapons do; creatures' attacks do not yet),
-            // so a type-limited resistance (Polarity Field) counts only against its own type.
+            // Typed: a player's weapon and a creature's both say what they deal, so a type-limited
+            // resistance (Polarity Field, Hazmat Armor) counts only against its own type.
             missile.DamageA = GameEffectManager.ApplyResist(victim, missile.DamageA, out var resisted, missile.DamageType);
 
             if (resisted > 0)

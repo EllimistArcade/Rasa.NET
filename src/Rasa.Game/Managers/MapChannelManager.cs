@@ -265,6 +265,9 @@ namespace Rasa.Managers
                         // Hortimonculus: the plants' healing, protection and decay.
                         AbilityManager.Instance.HortimonculusWorker(mapChannel);
 
+                        // Reanimation: the risen whose master has gone, and the spent ones.
+                        AbilityManager.Instance.ReanimationWorker(mapChannel);
+
                         // Tactical Evasion: the smoke screens, and the marks a retreat goes back to.
                         AbilityManager.Instance.SmokeWorker(mapChannel);
                     }

@@ -371,6 +371,9 @@ namespace Rasa.Managers
 
             // give some weapon to creature's
             GiveWeapon(creature);
+
+            // A reanimated creature: its REANIMATED, for a client meeting it after it rose.
+            AbilityManager.ShowReanimatedTo(client, creature);
         }
 
         public void CreatureInit()

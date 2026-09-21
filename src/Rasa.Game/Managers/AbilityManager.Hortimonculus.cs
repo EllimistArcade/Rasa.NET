@@ -92,7 +92,7 @@ namespace Rasa.Managers
         private static readonly object PlantsLock = new object();
 
         /// <summary>The client modules whose target is a corpse (canTargetDead).</summary>
-        private static readonly HashSet<string> CorpseModules = new HashSet<string> { "abilities.corpseexplode", HortimonculusModule };
+        private static readonly HashSet<string> CorpseModules = new HashSet<string> { "abilities.corpseexplode", HortimonculusModule, ReanimationModule };
 
         /// <summary>The plant's health: HEALTH_PERCENTAGE of the corpse's maximum.</summary>
         public static int PlantHealth(int corpseMaxHealth, int healthPercent)

@@ -85,9 +85,10 @@ namespace Rasa.Managers
 
         /// <summary>
         /// HATE_TRANSFER_PERCENT, as the share of the threat an owner generates that goes to their
-        /// summon instead: the owner's summon - trap, turret or rift - nearest the creature among
-        /// those whose reach the creature is in (a trap's or turret's attack range, a rift's
-        /// radius), and its percent. Null when there is none.
+        /// summon instead: the owner's summon - trap, turret, rift or reanimated creature -
+        /// nearest the creature among those whose reach the creature is in (a trap's, turret's or
+        /// reanimated creature's attack range, a rift's radius), and its percent. Null when there
+        /// is none.
         /// </summary>
         public static (Creature Summon, int Percent) HateSinkFor(Manifestation owner, Creature victim)
         {
@@ -123,6 +124,9 @@ namespace Rasa.Managers
                 foreach (var ripper in Rippers)
                     if (ripper.Owner == owner)
                         Consider(ripper.Creature, ripper.Radius, ripper.HateTransferPercent);
+
+            foreach (var (risen, reach, transfer) in RisenOf(owner))
+                Consider(risen, reach, transfer);
 
             return (best, percent);
         }

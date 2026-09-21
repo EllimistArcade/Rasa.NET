@@ -564,8 +564,9 @@ namespace Rasa.Managers
                 var targetDistSqr = (targetDistX * targetDistX + targetDistY * targetDistY + targetDistZ * targetDistZ);
                 // stop tracking target after target exceeds a certain distance to home pos
                 // Note: For patrolling creatures the homePos is the last arrived path node 
-                var homeLocDistX = (creature.HomePos.Position.X - targetPosition.X);
-                var homeLocDistZ = (creature.HomePos.Position.Z - targetPosition.Z);
+                var home = LeashCentre(creature);
+                var homeLocDistX = (home.X - targetPosition.X);
+                var homeLocDistZ = (home.Z - targetPosition.Z);
                 var homeLocDist = homeLocDistX * homeLocDistX + homeLocDistZ * homeLocDistZ;
 
                 if (homeLocDist >= 60.0f * 60.0f)
@@ -999,7 +1000,33 @@ namespace Rasa.Managers
             if (creature.Controller == null)
                 return;
 
+            // A creature with a master that was following someone, or holding a spot, goes back
+            // to that rather than wandering off where the fight left it.
+            if (creature.MasterEntityId != 0 && (creature.Controller.ActionFollow.FollowTargetId != 0 || creature.Controller.ActionFollow.HasAnchor))
+            {
+                creature.Controller.CurrentAction = BehaviorActionFollow;
+                creature.Controller.ActionFollow.PathUpdateTime = 0;
+                creature.Controller.Path.Clear();
+                creature.Controller.PathIndex = 0;
+                return;
+            }
+
             SetActionWander(creature);
+        }
+
+        /// <summary>
+        /// Where a fight is leashed from: a creature's home, or for one with a master on the map
+        /// (a reanimated creature, a minion, a traitor), the master - it goes where they go, and
+        /// its spawn point is no longer its home.
+        /// </summary>
+        private static Vector3 LeashCentre(Creature creature)
+        {
+            if (creature.MasterEntityId != 0
+                && EntityManager.Instance.Players.TryGetValue(creature.MasterEntityId, out var master)
+                && master.MapContextId == creature.MapContextId)
+                return master.Position;
+
+            return creature.HomePos.Position;
         }
 
         private void SetActionWander(Creature creature)

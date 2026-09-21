@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -233,6 +233,10 @@ namespace Rasa.Managers
             var amount = packet.ActionId == ActionId.ToolCipher
                 ? classInfo.MinDamage
                 : classInfo.MaxDamage;
+
+            // The Tools skill: "Healing \ Repair \ Armor Recharge Bonus" +10% a pump from pump 2.
+            if (IsRestoringTool(packet.ActionId))
+                amount = WithToolBonus(amount, SkillLevel(client, SkillId.SpecialistTools));
 
             SpendShot(client, tool);
 
@@ -866,6 +870,35 @@ namespace Rasa.Managers
         }
 
         /// <summary>This player's level in a skill, or 0 if they have never trained it.</summary>
+        /// <summary>
+        /// The Tools skill's "Healing \ Repair \ Armor Recharge Bonus" by pump, from its pump
+        /// tooltips (uielement 2670-2674): None, +10%, +20%, +30%, +40%. The cipher level those
+        /// tooltips give alongside (1-5) is the pump itself, which CanCipher already reads. The
+        /// client names SKILL_EFFECT_HEALING_MOD_EFFECT (263) for this, but its effect class
+        /// (gameeffects.healmodeffect) is not in the client, so nothing is attached and the tool
+        /// tooltips keep printing the unmodified amount.
+        /// </summary>
+        private static readonly int[] ToolBonusByPump = { 0, 0, 10, 20, 30, 40 };
+
+        public static int ToolBonusPercent(int pump)
+        {
+            return ToolBonusByPump[Math.Max(0, Math.Min(ToolBonusByPump.Length - 1, pump))];
+        }
+
+        /// <summary>A healing, repair or armour amount with the Tools bonus of this pump on it.</summary>
+        public static int WithToolBonus(int amount, int pump)
+        {
+            var bonus = ToolBonusPercent(pump);
+
+            return bonus <= 0 || amount <= 0 ? amount : (int)Math.Round(amount * (100 + bonus) / 100.0);
+        }
+
+        /// <summary>The tools whose amount is health or armour put back: the healing disc, the field repair tool and the armour augmentation tool.</summary>
+        public static bool IsRestoringTool(ActionId actionId)
+        {
+            return actionId == ActionId.ToolHealingDisc || actionId == ActionId.ToolFieldRepair || actionId == ActionId.ToolArmorAugmentation;
+        }
+
         private static int SkillLevel(Client client, SkillId skillId)
         {
             return client.Player.Skills.TryGetValue(skillId, out var skill) ? skill.SkillLevel : 0;

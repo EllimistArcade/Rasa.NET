@@ -38,7 +38,7 @@ namespace Rasa.Managers
     /// - every TrapShotMs it fires its turret weapon at the nearest hostile creature within the
     ///   attack's range: the weapon's damage scaled to the owner's level as Polymorph scales a
     ///   creature weapon, less 75%, as CF_ABILITY_TURRET_EFFECT ticks. Its shots are its own, so
-    ///   the hate is on it - and so is a kill, which gives nobody loot;
+    ///   the hate is on it; a kill it makes is its owner's (CreatureManager.HandleCreatureKill);
     /// - HATE_TRANSFER_PERCENT: every second, 10% of what each creature that hates the trap hates
     ///   the owner for moves onto the trap;
     /// - destroyed, it ticks TRAP_DEATH_EFFECT with its killer and strikes every hostile creature

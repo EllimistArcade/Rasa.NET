@@ -105,6 +105,10 @@ namespace Rasa.Managers
         /// </summary>
         public void Attach(MapChannel mapChannel, Actor actor, GameEffect effect, params object[] attachArgs)
         {
+            // Cure P4 keeps debuffs off whoever it was cast on for its duration.
+            if (!effect.IsBuff && DebuffsBlocked(actor))
+                return;
+
             // A skill's standing effects are one per skill and share a type (two heat bonuses
             // are two SKILL_LIMITED_COOL_RATE_MODIFIER_EFFECTs); the rest replace their own kind.
             if (!effect.IsSkillPassive)
@@ -692,6 +696,16 @@ namespace Rasa.Managers
                     total += effect.ReflectPercent;
 
             return total;
+        }
+
+        /// <summary>Whether a debuff guard on the actor is keeping debuffs off them (Cure P4).</summary>
+        public static bool DebuffsBlocked(Actor actor)
+        {
+            foreach (var effect in actor.ActiveEffects.Values)
+                if (effect.BlocksDebuffs)
+                    return true;
+
+            return false;
         }
 
         /// <summary>Whether an EMP crit is suppressing the actor's armour.</summary>

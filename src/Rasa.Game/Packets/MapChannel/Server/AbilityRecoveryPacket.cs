@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace Rasa.Packets.MapChannel.Server
 {
@@ -26,7 +26,7 @@ namespace Rasa.Packets.MapChannel.Server
     /// </summary>
     public class AbilityRecoveryPacket : ServerPythonPacket
     {
-        public enum HitDataKind { None, Damage, Heal, EffectAttach }
+        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists }
 
         public override GameOpcode Opcode { get; } = GameOpcode.PerformRecovery;
 
@@ -38,6 +38,14 @@ namespace Rasa.Packets.MapChannel.Server
 
         /// <summary>For lightning: OnHitData is (arcData,), the arcs to draw. Empty for everything else.</summary>
         public bool ArcData { get; set; }
+
+        /// <summary>
+        /// For HitDataKind.CureLists: hitdata is not a list of per-hit entries at all but the pair
+        /// CureAction.DoAbility unpacks - (reviveList, effectList), who was brought back and who
+        /// the debuff guard goes on.
+        /// </summary>
+        public List<ulong> ReviveIds { get; } = new List<ulong>();
+        public List<ulong> EffectIds { get; } = new List<ulong>();
 
         public AbilityRecoveryPacket(ActionId actionId, uint actionArgId, HitDataKind kind)
         {
@@ -61,6 +69,22 @@ namespace Rasa.Packets.MapChannel.Server
                 pw.WriteULong(miss);
 
             pw.WriteList(0);                    // missdata
+
+            if (Kind == HitDataKind.CureLists)
+            {
+                pw.WriteTuple(2);               // hitdata = (reviveList, effectList)
+                pw.WriteList(ReviveIds.Count);
+
+                foreach (var entityId in ReviveIds)
+                    pw.WriteULong(entityId);
+
+                pw.WriteList(EffectIds.Count);
+
+                foreach (var entityId in EffectIds)
+                    pw.WriteULong(entityId);
+
+                return;
+            }
 
             pw.WriteList(Kind == HitDataKind.None ? 0 : Hits.Count);
 

@@ -245,6 +245,9 @@ namespace Rasa.Managers
 
                         // Scatterbombs: the spent bombs are taken away once their blasts have played.
                         AbilityManager.Instance.ScatterbombWorker(mapChannel);
+
+                        // Cadaver Immolation: the bodies whose delay is up.
+                        AbilityManager.Instance.CorpseWorker(mapChannel);
                     }
 
                     // a second's health, armour, power and chi for everyone here

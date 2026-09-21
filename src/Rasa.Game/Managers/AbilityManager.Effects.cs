@@ -98,6 +98,26 @@ namespace Rasa.Managers
                     break;
                 }
 
+                case "abilities.cure":
+                    recovery = Cure(mapChannel, player, action, info);
+                    break;
+
+                case "abilities.corpseexplode":
+                {
+                    // The one ability that wants a dead target: a biological body, which the
+                    // client has already checked before asking.
+                    var corpse = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
+
+                    if (IsBiologicalCorpse(corpse))
+                    {
+                        ImmolateCorpse(mapChannel, player, corpse, info);
+                        ManifestationManager.Instance.EnterCombat(client);
+                        Hit(recovery, corpse);
+                    }
+
+                    break;
+                }
+
                 case "abilities.reflection":
                     AttachReflection(mapChannel, player, info);
                     Hit(recovery, player);

@@ -755,10 +755,26 @@ namespace Rasa.Managers
             damage = GameEffectManager.ApplyDamageDealt(client.Player, damage, WeaponSkills.DamagePercent(skillId, pump));
             var action = new ActionData(client.Player, weaponClassInfo.WeaponAttackActionId, weaponClassInfo.WeaponAttackArgId, client.Player.Target, 0);
             // launch correct missile type depending on weapon type
-            // Firearms on a rifle adds to the crit chance ("Rifles: +3% Crit Hit" from pump 3).
-            var critBonus = skillId == WeaponSkills.Firearms && weapon.ItemTemplate.WeaponInfo.ToolType == ToolType.Rifle
-                ? CriticalHits.FirearmsRifleChance(pump)
+            // Where the bead was when the trigger was pulled, before this shot's recoil opens it.
+            var aimRate = weapon.ItemTemplate.WeaponInfo.AimRate;
+
+            if (client.Player.AccuracyUpdatedTick == 0)
+                Accuracy.Reset(client.Player, aimRate, now);
+
+            var fullBead = Accuracy.IsFullBead(client.Player, now);
+
+            Accuracy.Recoil(client.Player, weapon.ItemTemplate.WeaponInfo.RecoilAmount, aimRate, now);
+
+            // Firearms on a rifle adds to the crit chance: "Rifles: +3% Crit Hit (+5% with full
+            // bead)" from pump 3, the full-bead figure in place of the other.
+            var firearms = skillId == WeaponSkills.Firearms;
+            var toolType = weapon.ItemTemplate.WeaponInfo.ToolType;
+            var critBonus = firearms && toolType == ToolType.Rifle
+                ? (fullBead ? CriticalHits.FirearmsRifleFullBeadChance(pump) : CriticalHits.FirearmsRifleChance(pump))
                 : 0;
+
+            // Firearms on a shotgun: "Shotguns: +15% Knockback chance" from pump 3.
+            var knockbackChance = firearms && toolType == ToolType.Shotgun ? WeaponSkills.FirearmsShotgunKnockbackChance(pump) : 0;
 
             // Launchers on a grenade launcher: a chance to stun ("Grenades: +25% Stun Chance" from pump 3).
             var grenades = skillId == WeaponSkills.Launchers && weapon.ItemTemplate.WeaponInfo.ToolType == ToolType.GrenadeLauncher;
@@ -766,7 +782,8 @@ namespace Rasa.Managers
             MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage, WeaponSkills.ArmorBypassPercent(skillId, pump),
                 WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType), critBonus,
                 stunChance: grenades ? Stuns.GrenadeChance(pump) : 0, stunMs: grenades ? Stuns.GrenadeStunMs : 0,
-                rootMs: skillId == WeaponSkills.NetGuns ? CrowdControl.NetGunRootMs : 0);
+                rootMs: skillId == WeaponSkills.NetGuns ? CrowdControl.NetGunRootMs : 0,
+                knockbackChance: knockbackChance);
             
             return FireResult.Fired;
         }
@@ -1072,6 +1089,9 @@ namespace Rasa.Managers
             client.CallMethod(client.Player.EntityId, new WeaponDrawerSlotPacket(requestedWeaponDrawerSlot, true));
 
             var weapon = EntityManager.Instance.GetItem(client.Player.Inventory.WeaponDrawer[client.Player.ActiveWeapon]);
+
+            // A weapon taken in hand starts its bead from nothing, as the client's does.
+            Accuracy.Reset(client.Player, weapon?.ItemTemplate?.WeaponInfo?.AimRate ?? 0, Environment.TickCount64);
 
             // A drawer slot holding something that is not a weapon is armed as an empty one.
             // RequestEquipWeapon refuses to put anything else there now, but a drawer loaded
@@ -2635,12 +2655,24 @@ namespace Rasa.Managers
         {
             client.Player.IsCrouching = crouching;
 
+            // Crouching lifts the bead's ceiling to full and doubles its rate; standing drops it.
+            Accuracy.UpdateRates(client.Player, AimRateOf(client), Environment.TickCount64);
+
             client.CallMethod(client.Player.EntityId, new SetDesiredCrouchStatePacket(client.Player.IsCrouching ? CharacterState.Crouched : CharacterState.Standing));
         }
 
         public void SetTargetId(Client client, ulong entityId)
         {
             client.Player.Target = entityId;
+
+            // The client works its bead's rates out again on every target change, so this does.
+            Accuracy.UpdateRates(client.Player, AimRateOf(client), Environment.TickCount64);
+        }
+
+        /// <summary>The aim rate of the weapon in hand, as sent in WeaponInfo; 0 with none.</summary>
+        private static double AimRateOf(Client client)
+        {
+            return InventoryManager.Instance.CurrentWeapon(client)?.ItemTemplate?.WeaponInfo?.AimRate ?? 0;
         }
 
         public void SetTrackingTarget(Client client, ulong entityId)

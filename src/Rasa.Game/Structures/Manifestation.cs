@@ -149,6 +149,16 @@ namespace Rasa.Structures
         public long NextShotAt { get; set; }
 
         /// <summary>
+        /// The aiming bead as the client runs it (Managers.Accuracy): where it is, the ceiling it
+        /// is heading for, how fast (per ms, negative when falling), and when it was last brought
+        /// up to date.
+        /// </summary>
+        public double AccuracyValue { get; set; }
+        public double AccuracyMax { get; set; }
+        public double AccuracyRate { get; set; }
+        public long AccuracyUpdatedTick { get; set; }
+
+        /// <summary>
         /// Environment.TickCount64 at which this player's next melee (alternate) attack is due.
         /// Its own clock: a swing does not wait on the gun's refire, nor the gun on the swing, as
         /// the client times them separately - each from its own action's recovery and reuse.

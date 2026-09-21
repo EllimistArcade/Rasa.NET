@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 
 namespace Rasa.Managers
@@ -35,6 +35,9 @@ namespace Rasa.Managers
         /// <summary>Firearms on a rifle, by pump: "Rifles: +3% Crit Hit" at 3, +5% at 4, +7% at 5.</summary>
         private static readonly int[] FirearmsRifleByPump = { 0, 0, 0, 3, 5, 7 };
 
+        /// <summary>"Rifles: +3% Crit Hit (+5% with full bead)", +5% (+10%), +7% (+15%).</summary>
+        private static readonly int[] FirearmsRifleFullBeadByPump = { 0, 0, 0, 5, 10, 15 };
+
         private static readonly ThreadLocal<Random> Rng = new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
 
         /// <summary>The Spirit a character of this level has before anything is spent on it, as UpdateStatsValues reckons it.</summary>
@@ -45,6 +48,9 @@ namespace Rasa.Managers
 
         /// <summary>Firearms' rifle crit bonus at this pump, in percent.</summary>
         public static int FirearmsRifleChance(int pump) => FirearmsRifleByPump[Math.Max(0, Math.Min(5, pump))];
+
+        /// <summary>Firearms' rifle crit bonus at this pump for a shot fired at full bead, in percent - in place of the other, not on top.</summary>
+        public static int FirearmsRifleFullBeadChance(int pump) => FirearmsRifleFullBeadByPump[Math.Max(0, Math.Min(5, pump))];
 
         /// <summary>
         /// The attacker's own chance, in percent: base, Spirit, the effects on them (Crit Wave),

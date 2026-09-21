@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace Rasa.Data
@@ -26,18 +26,26 @@ namespace Rasa.Data
     /// modifiers). The numbers here are in those terms so the server's clock and the client's
     /// agree.
     ///
-    /// Firearms' rifle crit (+3/5/7%) is CriticalHits.FirearmsRifleChance; its larger figure
-    /// "with full bead" is not applied, since the attack request does not say how far the bead
-    /// had closed.
+    /// Firearms' rifle crit is CriticalHits.FirearmsRifleChance (+3/5/7%), and its larger figure
+    /// "with full bead" (+5/10/15%) CriticalHits.FirearmsRifleFullBeadChance - the server keeps
+    /// the bead itself (Managers.Accuracy), since the attack request does not say how far it had
+    /// closed. Firearms' shotguns knock back what they hit +15/20/25% of the time
+    /// (FirearmsShotgunKnockbackChance): the weapon's own KB_CHANCE is a weapon property that
+    /// survives in nothing we have, so the skill's figure is the whole chance.
     ///
-    /// Not here, because nothing on the server yet does what they modify: Firearms' shotgun
-    /// knockback, Hand to Hand's knockback and stun, Launchers' grenade stun, Staff deflect,
-    /// Blades backstab, Leech Guns' conversion to health.
+    /// Not here, because nothing on the server yet does what they modify: Staff deflect, Blades
+    /// backstab, Leech Guns' conversion to health.
     /// </summary>
     public static class WeaponSkills
     {
         // skilldata ids.
         public const int Firearms = 1;
+
+        /// <summary>"Shotguns: +15% Knockback chance", +20%, +25% - by pump.</summary>
+        private static readonly int[] FirearmsShotgunKnockbackByPump = { 0, 0, 0, 15, 20, 25 };
+
+        /// <summary>The chance, in percent, that a Firearms shotgun hit knocks its creature back at this pump.</summary>
+        public static int FirearmsShotgunKnockbackChance(int pump) => FirearmsShotgunKnockbackByPump[Math.Max(0, Math.Min(5, pump))];
         public const int HandToHand = 8;
         public const int MachineGuns = 22;
         public const int Staff = 23;

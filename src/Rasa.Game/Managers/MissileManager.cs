@@ -189,6 +189,11 @@ namespace Rasa.Managers
                 // Net guns hold what they hit where it stands.
                 if (creature.State != CharacterState.Dying && missile.RootMs > 0)
                     CrowdControl.Root(mapChannel, creature, missile.Source, CrowdControl.NetGunRootTypeId, missile.RootMs);
+
+                // Firearms' shotguns knock it back: the client's default distance, since the
+                // weapon's own knockback numbers are not in anything we have.
+                if (creature.State != CharacterState.Dying && missile.KnockbackChance > 0 && Stuns.Roll(missile.KnockbackChance))
+                    CrowdControl.Knockback(mapChannel, creature, missile.Source, CrowdControl.DefaultKnockbackDistance, CrowdControl.KnockbackTypeId, damageType);
             }
 
             if (creature.State == CharacterState.Dying)
@@ -443,7 +448,7 @@ namespace Rasa.Managers
         /// <param name="melee">A melee swing, for the crouching crit modifiers.</param>
         /// <param name="stunChance">Chance in percent the hit stuns a creature for stunMs (Hand to Hand, grenades).</param>
         /// <param name="rootMs">How long the hit holds a creature where it stands (net guns).</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0)
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0)
         {
             var missile = new Missile
             {
@@ -455,7 +460,8 @@ namespace Rasa.Managers
                 CritChance = CriticalHits.AttackerChance(action.Actor, melee, critBonus),
                 StunChance = stunChance,
                 StunMs = stunMs,
-                RootMs = rootMs
+                RootMs = rootMs,
+                KnockbackChance = Math.Max(0, knockbackChance)
             };
 
             // get distance between actors

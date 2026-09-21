@@ -132,7 +132,8 @@ namespace Rasa.Managers
                 return;
             }
 
-            // A trap destroyed: it strikes back at whoever did it, and is nobody's kill or loot.
+            // A trap destroyed strikes back at whoever did it; a turret is simply gone. Neither is
+            // anybody's kill or loot.
             if (creature.IsScripted && AbilityManager.IsTrap(creature))
             {
                 AbilityManager.Instance.TrapKilled(mapChannel, creature, killedBy);

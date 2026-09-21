@@ -45,6 +45,16 @@ namespace Rasa.Managers
     ///   within EFFECT_RADIUS of the killer, credited to the owner, the damage announced through
     ///   the death effect; it is gone a moment later. Run out, it goes quietly.
     ///
+    /// Turret (AA_ENGINEER_TURRET 197, abilities.turret) is the same machine without the decoy:
+    /// "Creates a turret at a location to assist the user in combat for a set time. Only 1 of each
+    /// type of turret can be active at a time. Can be targeted and destroyed." (uielement 1206).
+    /// It wears VISUAL_TURRET_EFFECT (439, FX ABILITY_DEPLOYABLE_TURRET_*_EFFECT by damage type)
+    /// instead of the Trap's two effects, has no threat modifier, each shot is the ability's
+    /// DAMAGE_AMOUNT (22-23, 70 at level 6) scaled to the owner's level by ATTR_SCALE_TYPE, its
+    /// HATE_TRANSFER_PERCENT is 30, it lasts DURATION (60 s, 120 at level 6), one of each pump
+    /// per player, and destroyed it is simply gone. The client's TURRET_OWNER_EFFECT and
+    /// TURRET_OWNEE_EFFECT name classes turret.py does not have, so they are not attached.
+    ///
     /// Not in the client, so chosen: TrapShotMs 1000, and the trap's health, TrapBaseHealth at
     /// level 1 scaled like its damage.
     /// </summary>
@@ -54,6 +64,8 @@ namespace Rasa.Managers
         public const int TrapSelfTypeId = 10000040;              // TRAP_SELF_EFFECT
         public const int TrapDeathTypeId = 10000041;             // TRAP_DEATH_EFFECT
         public const int TurretEffectTypeId = 174;               // CF_ABILITY_TURRET_EFFECT
+        public const int VisualTurretTypeId = 439;               // VISUAL_TURRET_EFFECT
+        public const string TurretModule = "abilities.turret";
         public const EntityClasses TrapClass = (EntityClasses)7280; // Ability_Turret_AFS
 
         public const int TrapShotMs = 1000;
@@ -83,6 +95,12 @@ namespace Rasa.Managers
 
         private sealed class Trap
         {
+            /// <summary>A Trap (decoy: threat, strike on death) rather than a Turret.</summary>
+            public bool IsDecoy = true;
+            public uint Pump;
+            public int ShotMin;
+            public int ShotMax;
+            public int ShotScale;
             public MapChannel MapChannel;
             public Creature Creature;
             public Manifestation Owner;
@@ -118,10 +136,20 @@ namespace Rasa.Managers
         /// <summary>Plants a trap turret at the spot, taking the player's last one away.</summary>
         private void PlantTrap(MapChannel mapChannel, Manifestation player, ActionLevelInfo info, ActionData action)
         {
+            PlaceTurret(mapChannel, player, info, action, true);
+        }
+
+        /// <summary>
+        /// A Trap (decoy) or a Turret at the spot. "Only 1 Trap turret can be active at a time";
+        /// "Only 1 of each type of turret can be active at a time" - a new one takes the old one's
+        /// place.
+        /// </summary>
+        private void PlaceTurret(MapChannel mapChannel, Manifestation player, ActionLevelInfo info, ActionData action, bool decoy)
+        {
             List<Trap> old;
 
             lock (TrapsLock)
-                old = Traps.Where(t => t.Owner == player && t.RemoveAt == 0).ToList();
+                old = Traps.Where(t => t.Owner == player && t.RemoveAt == 0 && t.IsDecoy == decoy && (decoy || t.Pump == info.Level)).ToList();
 
             foreach (var trap in old)
                 RemoveTrap(trap);
@@ -148,7 +176,7 @@ namespace Rasa.Managers
                 State = CharacterState.Idle,
                 IsScripted = true,
                 MasterEntityId = player.EntityId,
-                Name = "Trap"
+                Name = decoy ? "Trap" : "Turret"
             };
 
             turret.Attributes.Add(Attributes.Body, new ActorAttributes(Attributes.Body, 1, 1, 1, 0, 0));
@@ -169,14 +197,27 @@ namespace Rasa.Managers
             var now = Environment.TickCount64;
             var durationSeconds = info.Get(AbilityProperty.Duration, 60);
 
-            // Hated twenty times over for what it does.
-            var self = NewEffect(mapChannel, player, info, TrapSelfTypeId, durationSeconds);
-            self.ThreatModifierPercent = info.Get(AbilityProperty.ThreatModifierPercent, 2000);
-            self.AllowDetach = false;
-            GameEffectManager.Instance.Attach(mapChannel, turret, self);
+            GameEffect death;
 
-            // The trap's look, and what goes off when it is destroyed.
-            var death = NewEffect(mapChannel, player, info, TrapDeathTypeId, durationSeconds);
+            if (decoy)
+            {
+                // Hated twenty times over for what it does.
+                var self = NewEffect(mapChannel, player, info, TrapSelfTypeId, durationSeconds);
+                self.ThreatModifierPercent = info.Get(AbilityProperty.ThreatModifierPercent, 2000);
+                self.AllowDetach = false;
+                GameEffectManager.Instance.Attach(mapChannel, turret, self);
+
+                // The trap's look, and what goes off when it is destroyed.
+                death = NewEffect(mapChannel, player, info, TrapDeathTypeId, durationSeconds);
+            }
+            else
+            {
+                // The turret's look: VISUAL_TURRET_EFFECT, its FX by damage type
+                // (ABILITY_DEPLOYABLE_TURRET_*_EFFECT).
+                death = NewEffect(mapChannel, player, info, VisualTurretTypeId, durationSeconds);
+                death.EffectLevel = (uint)strikeType;
+            }
+
             death.AnnounceOnAttach = true;
             death.AllowDetach = false;
             GameEffectManager.Instance.Attach(mapChannel, turret, death);
@@ -186,6 +227,11 @@ namespace Rasa.Managers
             lock (TrapsLock)
                 Traps.Add(new Trap
                 {
+                    IsDecoy = decoy,
+                    Pump = info.Level,
+                    ShotMin = min,
+                    ShotMax = Math.Max(min, info.Get(AbilityProperty.DamageAmountMax, min)),
+                    ShotScale = info.Get(AbilityProperty.AttrScaleType, 2),
                     MapChannel = mapChannel,
                     Creature = turret,
                     Owner = player,
@@ -298,7 +344,12 @@ namespace Rasa.Managers
                 GameEffectManager.Instance.Attach(mapChannel, turret, trap.Firing, 0UL, (int)trap.AttackAction, (int)trap.AttackArg, 1, TrapShotMs, 0);
             }
 
-            var amount = GameEffectManager.ApplyResist(target, trap.ShotDamage, out var resisted, trap.ShotType);
+            // A Trap's shot is its weapon's, cut by DAMAGE_MODIFIER_PERCENT; a Turret's is the
+            // ability's own DAMAGE_AMOUNT, scaled to the owner's level by ATTR_SCALE_TYPE.
+            var shot = trap.IsDecoy
+                ? trap.ShotDamage
+                : Scale(trap.Owner.Level, BombRandom.Next(trap.ShotMin, trap.ShotMax + 1), trap.ShotScale);
+            var amount = GameEffectManager.ApplyResist(target, shot, out var resisted, trap.ShotType);
             var taken = ActorManager.Instance.Damage(mapChannel, target, amount, turret, trap.ShotType);
 
             var tick = new ConstantFireTickPacket(trap.Firing.EffectId, false);
@@ -355,7 +406,8 @@ namespace Rasa.Managers
             turret.State = CharacterState.Dead;
             turret.Attributes[Attributes.Health].Current = 0;
 
-            if (killedBy == null || killedBy.MapContextId != turret.MapContextId)
+            // A Turret is simply gone; only a Trap strikes back.
+            if (!trap.IsDecoy || killedBy == null || killedBy.MapContextId != turret.MapContextId)
                 return;
 
             // TrapDeathEffect.OnTick(target, killerId).

@@ -16,14 +16,30 @@ namespace Rasa.Managers
     /// client stops charging the weapon. Nothing is fired as a missile, and there is no windup
     /// and recovery per shot - the effect's ticks are the shots.
     ///
-    /// Only the leech gun (WEAPON_DENSITYGUN, CF_DENSITY_GUN_EFFECT 94) is fired this way so far.
-    /// Its ticks also carry the leech: "Damage Conversion: 25% of damage done / Conversion Radius:
+    /// The leech gun (WEAPON_DENSITYGUN, CF_DENSITY_GUN_EFFECT 94) and the polarity gun
+    /// (WEAPON_POLARITYGUN, CF_POLARITYGUN_EFFECT 239) are fired this way; both are charged
+    /// actions in the client's actionModules. The effect's level is the weapon's damage type: the
+    /// client picks the beam's FX by (typeId, level), and the data has FX for the leech gun at
+    /// levels 1-4 (physical, fire, ice, virulent) and the polarity gun at 2, 3 and 13 (fire, ice,
+    /// electrical - the three kinds of polarity gun in the item names).
+    ///
+    /// The leech gun's ticks also carry the leech: "Damage Conversion: 25% of damage done / Conversion Radius:
     /// 10m" at every pump of Leech Guns, which the skill describes as converting "a percentage of
     /// the damage done to a target into health or armor that is applied to the user and nearby
     /// squad members". The client's DensityGunEffect announces each as (entityId, healAmount,
     /// repairAmount); health is healed first and what a full health bar cannot take repairs
-    /// armour. Machine guns, flamethrowers and polarity guns have constant-fire effects of their
-    /// own (CF_MACHINEGUN_EFFECT and the rest) and are still fired as single shots.
+    /// armour.
+    ///
+    /// The polarity gun is "a sustained beam and a large release of damage when the weapon stops
+    /// firing" (Polarity Guns, uielement 1232). The beam is the ticks. Each beam hit charges the
+    /// target it lands on, and letting go discharges it: the recovery that ends the fire carries
+    /// one hit on that target for ReleasePercent of the beam damage built up, which the client's
+    /// BaseWeaponAttack.DoHits floats when the server resolves the charged action. How much the
+    /// release is and how long a charge can build are not in anything we have, so they are a
+    /// choice: half of what the beam did before resistance, over at most MaxChargePulses pulses.
+    /// Moving the beam to another target starts the charge again, and a target that died or left
+    /// takes the charge with it. Machine guns and flamethrowers have constant-fire effects of
+    /// their own (CF_MACHINEGUN_EFFECT and the rest) and are still fired as single shots.
     ///
     /// The server's auto-fire timer is what drives it: each refire the timer's shot comes here
     /// instead of MissileManager, the first one attaching the effect; StopAutoFire, a shot that
@@ -35,6 +51,13 @@ namespace Rasa.Managers
     public static class ConstantFire
     {
         public const int DensityGunTypeId = 94;             // CF_DENSITY_GUN_EFFECT
+        public const int PolarityGunTypeId = 239;           // CF_POLARITYGUN_EFFECT
+
+        /// <summary>The polarity gun's release: this percent of the beam damage the target was charged with.</summary>
+        public const int ReleasePercent = 50;
+
+        /// <summary>The most beam pulses a polarity charge builds over; the ones after it keep the beam going but add nothing.</summary>
+        public const int MaxChargePulses = 10;
 
         /// <summary>"Damage Conversion: 25% of damage done".</summary>
         public const int LeechPercent = 25;
@@ -48,13 +71,42 @@ namespace Rasa.Managers
             public GameEffect Effect;
             public ActionId ActionId;
             public uint ActionArgId;
+            public DamageType DamageType;
+            public double CritBonus;
+            /// <summary>Polarity gun: who the beam is charging, with how much, over how many pulses.</summary>
+            public ulong ChargeTargetId;
+            public int Charge;
+            public int ChargePulses;
         }
 
         private static readonly Dictionary<Client, Session> Sessions = new Dictionary<Client, Session>();
         private static readonly object SessionsLock = new object();
 
         /// <summary>Whether this weapon fires constantly rather than shot by shot.</summary>
-        public static bool Handles(WeaponClassInfo weapon) => weapon != null && weapon.WeaponAttackActionId == ActionId.WeaponDensitygun;
+        public static bool Handles(WeaponClassInfo weapon) => weapon != null && IsConstantFire(weapon.WeaponAttackActionId);
+
+        public static bool IsConstantFire(ActionId actionId) => actionId == ActionId.WeaponDensitygun || actionId == ActionId.WeaponPolaritygun;
+
+        /// <summary>The constant-fire effect an attack action plays.</summary>
+        public static int EffectTypeOf(ActionId actionId) => actionId == ActionId.WeaponPolaritygun ? PolarityGunTypeId : DensityGunTypeId;
+
+        /// <summary>
+        /// A polarity charge after one more beam hit of amount on targetId: the same target adds
+        /// to it up to MaxChargePulses pulses, another target starts it again.
+        /// </summary>
+        public static (ulong TargetId, int Charge, int Pulses) AddCharge(ulong chargeTargetId, int charge, int pulses, ulong targetId, int amount)
+        {
+            if (targetId != chargeTargetId)
+                return (targetId, Math.Max(0, amount), 1);
+
+            if (pulses >= MaxChargePulses)
+                return (chargeTargetId, charge, pulses);
+
+            return (chargeTargetId, charge + Math.Max(0, amount), pulses + 1);
+        }
+
+        /// <summary>What a polarity charge discharges for.</summary>
+        public static int ReleaseOf(int charge) => charge <= 0 ? 0 : charge * ReleasePercent / 100;
 
         public static bool IsFiring(Client client)
         {
@@ -81,13 +133,17 @@ namespace Rasa.Managers
         public static void Pulse(MapChannel mapChannel, Client client, Item weapon, ActionData action, int damage, DamageType damageType, double critBonus)
         {
             var player = client.Player;
-            var session = Begin(mapChannel, client, weapon, action);
+            var session = Begin(mapChannel, client, weapon, action, damageType);
+            var leech = session.ActionId == ActionId.WeaponDensitygun;
+
+            session.CritBonus = critBonus;
 
             // Firing is firing: it is a fight, and it gives a cloaked shooter away.
             ManifestationManager.Instance.EnterCombat(client);
             Stealth.Break(mapChannel, player);
 
-            var tick = new ConstantFireTickPacket(session.Effect.EffectId, true);
+            // The leech gun's tick is (healData, damageData); every other constant fire's is the pulses alone.
+            var tick = new ConstantFireTickPacket(session.Effect.EffectId, leech);
             var pulse = new List<TickEntry>();
 
             tick.Pulses.Add(pulse);
@@ -112,7 +168,11 @@ namespace Rasa.Managers
                 if (crit && target.State != CharacterState.Dead && target.State != CharacterState.Dying && target.Attributes[Attributes.Health].Current > 0)
                     CritEffects.OnCritical(mapChannel, target, player, damageType, amount);
 
-                Leech(mapChannel, player, landed, tick);
+                if (leech)
+                    Leech(mapChannel, player, landed, tick);
+                else
+                    (session.ChargeTargetId, session.Charge, session.ChargePulses) =
+                        AddCharge(session.ChargeTargetId, session.Charge, session.ChargePulses, target.EntityId, rolled);
             }
 
             CellManager.Instance.CellCallMethod(mapChannel, player, tick);
@@ -120,9 +180,10 @@ namespace Rasa.Managers
 
         /// <summary>
         /// The trigger is let go, the weapon cannot fire, or the shooter is gone: the effect comes
-        /// off, and the action it was part of is ended on the clients.
+        /// off, and the action it was part of is ended on the clients - with a polarity gun's
+        /// release in it, unless the shooter is leaving the map (release false).
         /// </summary>
-        public static void Stop(Client client)
+        public static void Stop(Client client, bool release = true)
         {
             Session session;
 
@@ -141,11 +202,50 @@ namespace Rasa.Managers
 
             GameEffectManager.Instance.DettachEffect(mapChannel, client.Player, session.Effect);
 
+            var args = new MissileArgs();
+
+            if (release && session.ActionId == ActionId.WeaponPolaritygun)
+                Release(mapChannel, client.Player, session, args);
+
             CellManager.Instance.CellCallMethod(mapChannel, client.Player,
-                new PerformRecoveryPacket(PerformType.ListOfArgs, session.ActionId, session.ActionArgId, new MissileArgs()));
+                new PerformRecoveryPacket(PerformType.ListOfArgs, session.ActionId, session.ActionArgId, args));
         }
 
-        private static Session Begin(MapChannel mapChannel, Client client, Item weapon, ActionData action)
+        /// <summary>
+        /// The polarity gun let go: the charge the beam built on its target discharges into it
+        /// as one hit - a weapon hit, so it can crit - listed in args for the recovery.
+        /// </summary>
+        private static void Release(MapChannel mapChannel, Manifestation player, Session session, MissileArgs args)
+        {
+            var amount = ReleaseOf(session.Charge);
+
+            if (amount <= 0 || session.ChargeTargetId == 0)
+                return;
+
+            if (!(EntityManager.Instance.GetActor(session.ChargeTargetId) is Creature target) || target.MapContextId != mapChannel.MapInfo.MapContextId
+                || target.State == CharacterState.Dead || target.State == CharacterState.Dying)
+                return;
+
+            var crit = CriticalHits.Resolve(player, target, false, CriticalHits.AttackerChance(player, false, session.CritBonus), ref amount);
+            var dealt = GameEffectManager.ApplyResist(target, amount, out var resisted, session.DamageType);
+            var landed = ActorManager.Instance.Damage(mapChannel, target, dealt, player, session.DamageType);
+
+            args.HitEntities.Add(target.EntityId);
+            args.HitData.Add(new HitData
+            {
+                EntityId = target.EntityId,
+                DamageType = session.DamageType,
+                Resisted = (uint)resisted,
+                FinalAmt = dealt,
+                IsCritical = crit ? 1 : 0,
+                DeathBlow = landed > 0 && target.Attributes[Attributes.Health].Current <= 0 ? 1 : 0
+            });
+
+            if (crit && target.State != CharacterState.Dead && target.State != CharacterState.Dying && target.Attributes[Attributes.Health].Current > 0)
+                CritEffects.OnCritical(mapChannel, target, player, session.DamageType, dealt);
+        }
+
+        private static Session Begin(MapChannel mapChannel, Client client, Item weapon, ActionData action, DamageType damageType)
         {
             lock (SessionsLock)
                 if (Sessions.TryGetValue(client, out var running) && client.Player.ActiveEffects.ContainsKey(running.Effect.EffectId))
@@ -157,9 +257,10 @@ namespace Rasa.Managers
 
             var effect = new GameEffect
             {
-                TypeId = DensityGunTypeId,
+                TypeId = EffectTypeOf(action.ActionId),
                 EffectId = GameEffectManager.Instance.NextEffectId(mapChannel),
-                EffectLevel = 1,
+                // The beam's FX: specialFX is keyed (typeId, level), the level a damage type.
+                EffectLevel = (uint)(damageType == 0 ? DamageType.Physical : damageType),
                 SourceId = player.EntityId,
                 Source = player,
                 SourceLevel = player.Level,
@@ -175,7 +276,14 @@ namespace Rasa.Managers
             GameEffectManager.Instance.Attach(mapChannel, player, effect,
                 weapon.EntityId, (int)action.ActionId, (int)action.ActionArgId, 1, interval, (int)info.RecoilAmount);
 
-            var session = new Session { Client = client, Effect = effect, ActionId = action.ActionId, ActionArgId = action.ActionArgId };
+            var session = new Session
+            {
+                Client = client,
+                Effect = effect,
+                ActionId = action.ActionId,
+                ActionArgId = action.ActionArgId,
+                DamageType = damageType == 0 ? DamageType.Physical : damageType
+            };
 
             lock (SessionsLock)
                 Sessions[client] = session;

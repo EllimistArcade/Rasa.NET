@@ -2046,7 +2046,7 @@ namespace Rasa.Managers
             // fire stayed in the auto-fire list; once its items were destroyed CurrentWeapon
             // was null, and the next tick dereferenced it on the main loop.
             RemoveAutoFire(client);
-            ConstantFire.Stop(client);
+            ConstantFire.Stop(client, release: false);
         }
 
         public void RemoveAppearanceItem(Client client, EquipmentData equipmentSlotId)

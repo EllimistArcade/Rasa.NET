@@ -60,6 +60,9 @@ namespace Rasa.Managers
         /// </summary>
         private const float RangeSlack = 2.5f;
 
+        /// <summary>Vortex's client module: its targets are pulled in (CrowdControl.Pull) as well as hurt.</summary>
+        public const string VortexModule = "abilities.vortex";
+
         /// <summary>
         /// The client modules whose DoAbility reads hit data as (rawInfo, onHitData) - the
         /// DamageBase subclasses in client/actions/abilities. These are the damage abilities
@@ -783,6 +786,11 @@ namespace Rasa.Managers
                     // KNOCKBACK_DISTANCE: Tectonic Strike, Concussive Wave, Rushing Blow, Force Blast P6/P7.
                     if (target.State != CharacterState.Dying && knockback > 0)
                         CrowdControl.Knockback(mapChannel, target, player, knockback, CrowdControl.KnockbackTypeId, damageType);
+
+                    // Vortex drags them in, over the flail the client plays on them for the
+                    // action's recovery time.
+                    if (target.State != CharacterState.Dying && actionInfo.Module == VortexModule)
+                        CrowdControl.Pull(mapChannel, target, player, (int)info.RecoveryMs);
                 }
 
                 // Lightning's arc, extra sonic damage and storm (AbilityManager.Lightning.cs).

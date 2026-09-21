@@ -39,6 +39,14 @@ namespace Rasa.Structures
         public System.Numerics.Vector3? KnockbackTo { get; set; }
         public System.Numerics.Vector3 KnockbackDirection { get; set; }
 
+        /// <summary>
+        /// How fast the carry goes, in metres a second; 0 for CrowdControl.KnockbackSpeed. And
+        /// whether it is a pull (Vortex) rather than a knockback: a pulled creature faces the way
+        /// it is dragged - at whoever pulled it - where a knocked-back one faces back the way it came.
+        /// </summary>
+        public float KnockbackSpeed { get; set; }
+        public bool KnockbackIsPull { get; set; }
+
         /// <summary>The way the creature last faced, as sent in its movement; what a stop is sent with.</summary>
         public float LastYaw { get; set; }
         //sint32 movestate;

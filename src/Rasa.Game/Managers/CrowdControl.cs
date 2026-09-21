@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 
 namespace Rasa.Managers
@@ -152,6 +152,65 @@ namespace Rasa.Managers
             CritDeathManager.Instance.TryEnterPreDeath(mapChannel, target, source, damageType);
 
             return true;
+        }
+
+        /// <summary>
+        /// Vortex: "Draws nearby unfriendlies forcefully towards the user with a vortex of kinetic
+        /// force" (uielement 472). The creature is dragged to PullStopShort metres from the puller,
+        /// along the ground where the map has a navmesh, over the flail the client plays on it -
+        /// VortexAction.OnAbility puts the target into the flailing posture and stands it up again
+        /// after the action's recovery time - so it arrives as it gets up. It goes where it is
+        /// dragged and nothing else meanwhile (BehaviorManager.StepKnockback), facing the puller.
+        /// No client effect: the flail is the client's own. Returns whether it was moved.
+        /// </summary>
+        public static bool Pull(MapChannel mapChannel, Creature target, Actor puller, int flailMs)
+        {
+            if (target == null || puller == null || target.State == CharacterState.Dead || target.State == CharacterState.Dying)
+                return false;
+
+            if (!target.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
+                return false;
+
+            var (destination, speed) = PullPath(mapChannel, target.Position, puller.Position, flailMs);
+
+            if (Vector3.Distance(target.Position, destination) <= 0.1f)
+                return false;
+
+            target.KnockbackTo = destination;
+            target.KnockbackDirection = AwayFrom(target.Position, puller.Position);
+            target.KnockbackSpeed = speed;
+            target.KnockbackIsPull = true;
+
+            BehaviorManager.Instance.StopMoving(target);
+
+            return true;
+        }
+
+        /// <summary>How far short of the puller a pulled creature stops, in metres. Not in the client.</summary>
+        public const float PullStopShort = 2f;
+
+        /// <summary>The slowest a pull goes, so a short flail over a long way does not become a slow crawl.</summary>
+        public const float PullMinSpeed = KnockbackSpeed;
+
+        /// <summary>
+        /// Where a pull from `from` towards `puller` ends and how fast it goes to arrive in flailMs:
+        /// PullStopShort short of the puller along the line (or where the navmesh ends on the way),
+        /// at no less than PullMinSpeed.
+        /// </summary>
+        public static (Vector3 Destination, float Speed) PullPath(MapChannel mapChannel, Vector3 from, Vector3 puller, int flailMs)
+        {
+            var dir = AwayFrom(from, puller);
+            var flat = new Vector2(puller.X - from.X, puller.Z - from.Z).Length();
+            var distance = Math.Max(0f, flat - PullStopShort);
+
+            if (distance <= 0.1f)
+                return (from, PullMinSpeed);
+
+            var destination = KnockbackDestination(mapChannel, from, dir, distance);
+            var travelled = Vector3.Distance(from, destination);
+            var speed = flailMs > 0 ? Math.Max(PullMinSpeed, travelled / (flailMs / 1000f)) : PullMinSpeed;
+
+            return (destination, speed);
         }
 
         /// <summary>Slows a creature to (100 - slowPercent)% of its speed for durationMs, shown as the given effect type.</summary>

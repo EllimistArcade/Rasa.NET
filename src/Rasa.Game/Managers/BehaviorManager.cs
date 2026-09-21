@@ -784,13 +784,16 @@ namespace Rasa.Managers
 
             if (remaining > 0.05)
             {
-                var moved = UpdateEntityMovement(difX, difY, difZ, creature, mapChannel, CrowdControl.KnockbackSpeed, true, delta, knockback: true);
+                var speed = creature.KnockbackSpeed > 0 ? creature.KnockbackSpeed : CrowdControl.KnockbackSpeed;
+                var moved = UpdateEntityMovement(difX, difY, difZ, creature, mapChannel, speed, true, delta, knockback: true, faceAlong: creature.KnockbackIsPull);
 
                 if (moved < remaining - 0.05)
                     return true;
             }
 
             creature.KnockbackTo = null;
+            creature.KnockbackSpeed = 0;
+            creature.KnockbackIsPull = false;
             StopMoving(creature);
 
             return true;
@@ -1047,7 +1050,8 @@ namespace Rasa.Managers
         /// slows), and a frozen creature only turns.
         /// </param>
         /// <returns>The distance actually moved.</returns>
-        float UpdateEntityMovement(double difX, double difY, double difZ, Creature creature, MapChannel mapChannel, float speed, bool isMoved, long elapsedMs, bool knockback = false)
+        /// <param name="faceAlong">A carry that faces the way it goes (a Vortex pull) rather than back the way it came.</param>
+        float UpdateEntityMovement(double difX, double difY, double difZ, Creature creature, MapChannel mapChannel, float speed, bool isMoved, long elapsedMs, bool knockback = false, bool faceAlong = false)
         {
             if (!knockback)
             {
@@ -1062,7 +1066,7 @@ namespace Rasa.Managers
             difX *= length;
             difY *= length;
             difZ *= length;
-            var vX = knockback ? (float)Math.Atan2(difX, difZ) : (float)Math.Atan2(-difX, -difZ);
+            var vX = knockback && !faceAlong ? (float)Math.Atan2(difX, difZ) : (float)Math.Atan2(-difX, -difZ);
             creature.LastYaw = vX;
 
             var velocity = isMoved ? speed : 0.0f;

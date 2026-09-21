@@ -1345,6 +1345,65 @@ namespace Rasa.Managers
                 : null;
         }
 
+        /// <summary>How far from a corpse a squad member may be and still share in its loot.</summary>
+        public const float LootShareRange = 100f;
+
+        /// <summary>
+        /// Who may loot a corpse the killer earned, by the squad's loot method:
+        /// - no squad, or Individual: the killer;
+        /// - Free For All: every member in the world on the killer's map within LootShareRange of
+        ///   the corpse, the killer first - anyone of them may take anything;
+        /// - Rotation: the whole corpse goes to the next of those members in join order, the
+        ///   rotation moving on one member a corpse.
+        /// Random and Dice Roll cannot be chosen in the client and are treated as Free For All.
+        /// The flag is whether the corpse is shared (partyId on its items).
+        /// </summary>
+        internal (List<Client> Looters, uint PartyId) LootersFor(Client killer, System.Numerics.Vector3 corpse)
+        {
+            var party = PartyOf(killer);
+
+            if (party == null || party.LootMethod == PartyLootMethod.Individual)
+                return (new List<Client> { killer }, 0);
+
+            var mapChannel = killer.Player.MapChannel;
+            var eligible = new List<Client>();
+
+            foreach (var member in party.Members)
+            {
+                if (!member.IsOnline)
+                    continue;
+
+                var client = FindMember(member.UserId);
+
+                if (client == null || client.State != ClientState.Ingame || client.Player.MapChannel != mapChannel
+                    || client.Player.MapContextId != killer.Player.MapContextId)
+                    continue;
+
+                if (client != killer && System.Numerics.Vector3.Distance(client.Player.Position, corpse) > LootShareRange)
+                    continue;
+
+                eligible.Add(client);
+            }
+
+            if (!eligible.Contains(killer))
+                eligible.Insert(0, killer);
+
+            if (party.LootMethod == PartyLootMethod.Rotation)
+            {
+                var next = eligible[party.LootRotation % eligible.Count];
+
+                party.LootRotation++;
+
+                return (new List<Client> { next }, 0);
+            }
+
+            // Free For All (and the two the client never sends): the killer first, then the rest.
+            eligible.Remove(killer);
+            eligible.Insert(0, killer);
+
+            return (eligible, party.Id);
+        }
+
         private Party FindPartyOfAccount(uint accountId) => Parties.Values.FirstOrDefault(p => p.Find(accountId) != null);
 
         /// <summary>The caller's party if they lead it; otherwise tells them why not and returns null.</summary>

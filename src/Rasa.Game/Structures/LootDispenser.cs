@@ -17,6 +17,12 @@ namespace Rasa.Structures
         public List<LootItem> LootItems = new List<LootItem>();
         public int Credits { get; set; }
         public ulong Owner { get; set; }
+
+        /// <summary>
+        /// Who may loot it: the owner alone, or - a squad on Free For All - every member it was
+        /// shared with (PartyManager.LootersFor). Owner is always among them.
+        /// </summary>
+        public HashSet<ulong> Looters = new HashSet<ulong>();
         public ulong AttachedTo { get; set; }
         public bool FullyLooted { get; set; }
         public bool IsLootable { get; set; }

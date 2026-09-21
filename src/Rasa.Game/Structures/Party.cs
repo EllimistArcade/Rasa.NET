@@ -17,6 +17,9 @@ namespace Rasa.Structures
         internal PartyLootMethod LootMethod { get; set; }
         internal PartyLootThreshold LootThreshold { get; set; }
 
+        /// <summary>Rotation: how many corpses have been handed out, which picks the next member in join order.</summary>
+        internal int LootRotation { get; set; }
+
         public Party(uint partyId, uint partyLeaderId, List<PartyMember> partyMembers)
         {
             Id = partyId;

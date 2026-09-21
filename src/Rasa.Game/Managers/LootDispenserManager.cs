@@ -119,13 +119,29 @@ namespace Rasa.Managers
 
         internal LootDispenser Create(Client killer, Creature creature)
         {
+            return Create(killer, creature, new List<Client> { killer }, 0);
+        }
+
+        /// <summary>
+        /// The dispenser for a corpse, owned by the first of the looters - the killer, or the squad
+        /// member whose turn it is - and open to all of them. partyId marks its items as the
+        /// squad's (Free For All).
+        /// </summary>
+        internal LootDispenser Create(Client killer, Creature creature, List<Client> looters, uint partyId)
+        {
             var mapChannel = killer.Player.MapChannel;
+            var owner = looters.Count > 0 ? looters[0] : killer;
             var loot = new LootDispenser();
             loot.IsLootable = true;
             loot.AttachedTo = creature.EntityId;
-            loot.Owner = killer.Player.EntityId;
+            loot.Owner = owner.Player.EntityId;
 
-            CreateLoot(killer, loot);
+            foreach (var looter in looters)
+                loot.Looters.Add(looter.Player.EntityId);
+
+            loot.Looters.Add(loot.Owner);
+
+            CreateLoot(owner, loot, partyId);
 
             mapChannel.LootDispensers.Add(loot.EntityId, loot);
 
@@ -142,7 +158,7 @@ namespace Rasa.Managers
         /// </summary>
         private static readonly Random Roll = new Random();
 
-        private LootDispenser CreateLoot(Client killer, LootDispenser loot)
+        private LootDispenser CreateLoot(Client killer, LootDispenser loot, uint partyId = 0)
         {
             int giveLoot;
 
@@ -163,22 +179,36 @@ namespace Rasa.Managers
                 var item = ItemManager.Instance.CreateFromTemplateId(28, (uint)giveLoot * 3);
 
                 if (item != null)
-                    loot.LootItems.Add(new LootItem(item, killer.Player.EntityId, 0));
+                    loot.LootItems.Add(new LootItem(item, killer.Player.EntityId, partyId));
             }
 
             return loot;
         }
 
+        /// <summary>
+        /// The corpse's loot, for whoever the killer's squad loot method gives it to
+        /// (PartyManager.LootersFor): each of them is shown the dispenser.
+        /// </summary>
         internal void Loot(Client client, Creature creature)
         {
-            var loot = Create(client, creature);
+            var (looters, partyId) = PartyManager.Instance.LootersFor(client, creature.Position);
+            var loot = Create(client, creature, looters, partyId);
 
-            client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(loot.EntityId, loot.EntityClassId));
+            foreach (var looter in looters)
+            {
+                looter.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(loot.EntityId, loot.EntityClassId));
 
-            AttachInfo(client, loot);
-            LootInfo(client, loot);
-            OverallQuality(client, loot);
-            CanLootItems(client, loot);
+                AttachInfo(looter, loot);
+                LootInfo(looter, loot);
+                OverallQuality(looter, loot);
+                CanLootItems(looter, loot);
+            }
+        }
+
+        /// <summary>The looters of a dispenser who are on this map now.</summary>
+        private static List<Client> LootersHere(MapChannel mapChannel, LootDispenser loot)
+        {
+            return mapChannel?.ClientList.FindAll(c => c?.Player != null && loot.Looters.Contains(c.Player.EntityId)) ?? new List<Client>();
         }
 
         /// <summary>
@@ -202,9 +232,11 @@ namespace Rasa.Managers
 
                 mapChannel.LootDispensers.Remove(lootEntityId);
 
-                var owner = mapChannel.ClientList.Find(c => c.Player != null && c.Player.EntityId == loot.Owner);
+                // Everyone it was shown to: the owner, and a Free For All squad.
+                var shownTo = LootersHere(mapChannel, loot);
 
-                owner?.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(lootEntityId));
+                foreach (var looter in shownTo)
+                    looter.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(lootEntityId));
 
                 // The rolled items are real entities now, made when the loot was rolled rather
                 // than when it is taken, so a corpse that goes unlooted takes them with it.
@@ -215,7 +247,8 @@ namespace Rasa.Managers
                     if (lootItem.Taken || lootItem.Item == null)
                         continue;
 
-                    owner?.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(lootItem.EntityId));
+                    foreach (var looter in shownTo)
+                        looter.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(lootItem.EntityId));
 
                     // The row's id is the item's, and CreateItem registered it in
                     // RegisteredEntities as well as Items. Freeing it while it was still
@@ -244,9 +277,10 @@ namespace Rasa.Managers
             if (dispensers == null || !dispensers.TryGetValue(entityId, out var loot))
                 return null;
 
-            // Loot belongs to whoever earned it. The client only offers a corpse it was told
-            // about, but the packet can name any id.
-            if (loot.Owner != client.Player.EntityId)
+            // Loot belongs to whoever earned it - the killer, the squad member whose turn it was,
+            // or a Free For All squad. The client only offers a corpse it was told about, but the
+            // packet can name any id.
+            if (!loot.Looters.Contains(client.Player.EntityId))
                 return null;
 
             return loot;
@@ -420,7 +454,10 @@ namespace Rasa.Managers
             lootItem.Taken = true;
 
             client.CallMethod(loot.EntityId, new ActorGotLootPacket(loot));
-            client.CallMethod(loot.EntityId, new TakenInfoPacket(client.Player.EntityId, Taken(loot)));
+
+            // Everyone sharing the corpse sees the row go, not only the one who took it.
+            foreach (var looter in LootersHere(client.Player.MapChannel, loot))
+                looter.CallMethod(loot.EntityId, new TakenInfoPacket(client.Player.EntityId, Taken(loot)));
 
             return true;
         }
@@ -447,6 +484,11 @@ namespace Rasa.Managers
             loot.FullyLooted = true;
             loot.IsLootable = false;
             loot.CurrentLooter = 0;
+
+            // Emptied: nobody sharing it has anything left to open.
+            foreach (var looter in LootersHere(client.Player.MapChannel, loot))
+                if (looter != client)
+                    CanLootItems(looter, loot);
 
             CanLootItems(client, loot);
             GotLoot(client, loot);

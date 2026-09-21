@@ -87,7 +87,10 @@ namespace Rasa.Managers
             Threat.Forget(mapChannel, player);
 
             foreach (var viewer in Onlookers(mapChannel, player))
+            {
                 viewer.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(player.EntityId));
+                AbilityManager.HideMorphFrom(viewer, player);
+            }
         }
 
         /// <summary>A player is in sight again: the clients that lost them are given them back.</summary>
@@ -99,8 +102,11 @@ namespace Rasa.Managers
                 return;
 
             foreach (var viewer in Onlookers(mapChannel, player))
+            {
                 viewer.CallMethod(SysEntity.ClientMethodId,
                     new CreatePhysicalEntityPacket(player.EntityId, player.EntityClass, ManifestationManager.Instance.CreatePlayerEntityData(client)));
+                AbilityManager.ShowMorphTo(viewer, player);
+            }
         }
 
         /// <summary>The players around this one who are not in their squad - who lose sight of them.</summary>

@@ -302,6 +302,9 @@ namespace Rasa.Structures
         /// </summary>
         public Action<MapChannel, Actor, GameEffect> OnDetached { get; set; }
 
+        /// <summary>The arguments it was attached with (the client effect's OnAttach), for a client that meets its holder later.</summary>
+        public List<object> AttachArgs { get; set; } = new List<object>();
+
         /// <summary>The player whose finisher is winding up on this CRIT_PREDEATH_EFFECT; 0 while nobody has claimed it.</summary>
         public ulong FinisherId { get; set; }
 

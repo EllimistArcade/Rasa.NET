@@ -187,6 +187,44 @@ namespace Rasa.Managers
             return new MorphWeaponItem { ItemTemplate = template, ItemTemplateId = 0, StackSize = 1, WeaponClassId = variant.WeaponClassId };
         }
 
+        /// <summary>
+        /// A client meets a polymorphed player after the morph began - they walked into range,
+        /// arrived on the map, or the player came out of a cloak. The player's entity data says
+        /// nothing of effects, and the recovery that announced the morph to everyone else has
+        /// come and gone, so this client would see the player as themselves. Sent straight after
+        /// the player's entity: the weapon entity first, since BaseMorphEffect.OnAnnounceAttach
+        /// looks it up, then the morph effect - and level 5's Hominis Machina effect - attached
+        /// announced, with the time that is left, which swaps the mesh as the recovery would have.
+        /// </summary>
+        public static void ShowMorphTo(Client viewer, Manifestation player)
+        {
+            if (viewer == null || !(player?.MorphWeapon is MorphWeaponItem weapon))
+                return;
+
+            var morph = player.ActiveEffects.Values.FirstOrDefault(e => e.TypeId == PolymorphTypeId);
+
+            if (morph == null)
+                return;
+
+            viewer.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(weapon.EntityId, (EntityClasses)weapon.WeaponClassId));
+            viewer.CallMethod(player.EntityId, GameEffectManager.AttachedPacket(morph, true));
+
+            foreach (var child in morph.Children.Where(c => c.Holder == player))
+                viewer.CallMethod(player.EntityId, GameEffectManager.AttachedPacket(child, true));
+        }
+
+        /// <summary>
+        /// A client loses sight of a polymorphed player: the weapon entity goes with them, so that
+        /// meeting them again creates it afresh rather than a second time.
+        /// </summary>
+        public static void HideMorphFrom(Client viewer, Manifestation player)
+        {
+            if (viewer == null || player?.MorphWeapon == null)
+                return;
+
+            viewer.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(player.MorphWeapon.EntityId));
+        }
+
         /// <summary>Calls a method on an entity other than the player (the client, for entity creation) on every client around the player.</summary>
         private static void SendAround(MapChannel mapChannel, Manifestation player, ulong entityId, Packets.PythonPacket packet)
         {

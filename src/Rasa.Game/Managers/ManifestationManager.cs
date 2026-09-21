@@ -1441,6 +1441,7 @@ namespace Rasa.Managers
                     continue;
 
                 tempClient.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(client.Player.EntityId));
+                AbilityManager.HideMorphFrom(tempClient, client.Player);
             }
         }
 
@@ -1455,6 +1456,7 @@ namespace Rasa.Managers
                     continue;
 
                 client.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(tempClient.Player.EntityId));
+                AbilityManager.HideMorphFrom(client, tempClient.Player);
             }
 
         }
@@ -1475,6 +1477,9 @@ namespace Rasa.Managers
                     continue;
 
                 tempClient.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(player.EntityId, player.EntityClass, CreatePlayerEntityData(client)));
+
+                // Polymorphed: shown as the creature, not as themselves.
+                AbilityManager.ShowMorphTo(tempClient, player);
 
             }
         }
@@ -1500,6 +1505,9 @@ namespace Rasa.Managers
                     continue;
 
                 client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(tempClient.Player.EntityId, tempClient.Player.EntityClass, CreatePlayerEntityData(tempClient)));
+
+                // Polymorphed: shown as the creature, not as themselves.
+                AbilityManager.ShowMorphTo(client, tempClient.Player);
             }
         }
 		

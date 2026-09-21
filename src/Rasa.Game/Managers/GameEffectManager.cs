@@ -133,23 +133,9 @@ namespace Rasa.Managers
                     ApplyAttribute(mapChannel, actor, effect);
             }
 
-            var attached = new GameEffectAttachedPacket
-            {
-                EffectTypeId = effect.TypeId,
-                EffectId = effect.EffectId,
-                EffectLevel = effect.EffectLevel,
-                SourceId = effect.SourceId,
-                Announced = effect.AnnounceOnAttach,
-                Duration = effect.HasDuration ? effect.RemainingSeconds : (int?)null,
-                DamageType = effect.TickDamageMax > 0 ? (int)effect.TickDamageType : 0,
-                AttrId = effect.TooltipAttrId,
-                IsActive = true,
-                IsBuff = effect.IsBuff,
-                IsDebuff = !effect.IsBuff,
-                IsNegativeEffect = !effect.IsBuff,
-                Extras = effect.Tooltip,
-                Args = attachArgs.ToList()
-            };
+            effect.AttachArgs = attachArgs.ToList();
+
+            var attached = AttachedPacket(effect, effect.AnnounceOnAttach);
 
             if (effect.IsSkillPassive)
                 ClientOf(mapChannel, actor)?.CallMethod(actor.EntityId, attached);
@@ -172,6 +158,32 @@ namespace Rasa.Managers
             // until this wears off.
             if (effect.Blinds && actor is Creature blinded)
                 BehaviorManager.Instance.StopFighting(blinded);
+        }
+
+        /// <summary>
+        /// The Recv_GameEffectAttached for an effect already on its holder: what Attach sent,
+        /// with the time that is left - and announced or not, for a client meeting the holder
+        /// after the effect went on.
+        /// </summary>
+        public static GameEffectAttachedPacket AttachedPacket(GameEffect effect, bool announced)
+        {
+            return new GameEffectAttachedPacket
+            {
+                EffectTypeId = effect.TypeId,
+                EffectId = effect.EffectId,
+                EffectLevel = effect.EffectLevel,
+                SourceId = effect.SourceId,
+                Announced = announced,
+                Duration = effect.HasDuration ? effect.RemainingSeconds : (int?)null,
+                DamageType = effect.TickDamageMax > 0 ? (int)effect.TickDamageType : 0,
+                AttrId = effect.TooltipAttrId,
+                IsActive = true,
+                IsBuff = effect.IsBuff,
+                IsDebuff = !effect.IsBuff,
+                IsNegativeEffect = !effect.IsBuff,
+                Extras = effect.Tooltip,
+                Args = effect.AttachArgs.ToList()
+            };
         }
 
         /// <summary>

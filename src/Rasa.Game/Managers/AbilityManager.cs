@@ -284,6 +284,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // "The user may have up to 3 Crab Mines active at once."
+            if (action.Module == CrabMinesModule && CrabMinesOf(player) >= MaxCrabMines)
+            {
+                Fail(client, actionId, level, PlayerMessage.PmCannotPerformActionNow);
+                return;
+            }
+
             if (player.ActionReuseUntil.TryGetValue(actionId, out var readyAt) && readyAt > Environment.TickCount64)
             {
                 Fail(client, actionId, level, PlayerMessage.PmCannotPerformActionNow);
@@ -435,7 +442,8 @@ namespace Rasa.Managers
         /// <summary>Whether this server knows how to apply the ability; see the class remarks.</summary>
         private static bool CanResolve(ActionInfo action, ActionLevelInfo info)
         {
-            return action.Module == "abilities.sprint" || action.Module == PolymorphModule || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
+            return action.Module == "abilities.sprint" || action.Module == PolymorphModule || action.Module == CrabMinesModule
+                || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
         }
 
         /// <summary>
@@ -563,6 +571,13 @@ namespace Rasa.Managers
             // The charge has arrived: the blow lands from where it ends.
             if (actionInfo.Module == RushingBlowModule)
                 FinishCharge(player);
+
+            if (actionInfo.Module == CrabMinesModule)
+            {
+                DeployCrabMine(mapChannel, player, info, action);
+                CellManager.Instance.CellCallMethod(mapChannel, player, new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
+                return;
+            }
 
             if (actionInfo.Module == PolymorphModule)
             {

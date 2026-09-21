@@ -47,6 +47,12 @@ namespace Rasa.Structures
         public float KnockbackSpeed { get; set; }
         public bool KnockbackIsPull { get; set; }
 
+        /// <summary>
+        /// Run by something other than its own behaviour - a crab mine (AbilityManager.CrabMineWorker):
+        /// BehaviorManager only carries it where it is being carried, and never scans, fights or wanders for it.
+        /// </summary>
+        public bool IsScripted { get; set; }
+
         /// <summary>The way the creature last faced, as sent in its movement; what a stop is sent with.</summary>
         public float LastYaw { get; set; }
         //sint32 movestate;

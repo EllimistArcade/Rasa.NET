@@ -197,6 +197,17 @@ namespace Rasa.Managers
             // update all creature timers befor continue
             UpdateCreatureTimers(creature, delta);
 
+            // A crab mine: AbilityManager steers it, clears it away when it is spent, and all it
+            // does here is go where it is sent - it is never a corpse to despawn.
+            if (creature.IsScripted)
+            {
+                if (creature.State != CharacterState.Dead)
+                    StepKnockback(mapChannel, creature, delta);
+
+                needCellUpdate = CellChanged(creature, delta);
+                return;
+            }
+
             if (creature.Attributes[Attributes.Health].Current <= 0)
             {
                 creature.Controller.DeadTime += delta;

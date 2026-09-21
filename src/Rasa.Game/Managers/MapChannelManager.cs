@@ -205,6 +205,9 @@ namespace Rasa.Managers
                     // the blows whose windup is up are resolved.
                     AbilityManager.Instance.ChargeWorker(mapChannel);
 
+                    // Crab Mines: seeking, running, going off.
+                    AbilityManager.Instance.CrabMineWorker(mapChannel);
+
                     ActorActionManager.Instance.DoWork(mapChannel, delta);
                     MissileManager.Instance.DoWork(mapChannel, delta);
                     BehaviorManager.Instance.MapChannelThink(mapChannel, delta);

@@ -125,6 +125,13 @@ namespace Rasa.Managers
             if (creature.State == CharacterState.Dead)
                 return; // creature already dead
 
+            // A crab mine killed: it goes off where it fell, and is nobody's kill or loot.
+            if (creature.IsScripted && AbilityManager.IsCrabMine(creature))
+            {
+                AbilityManager.Instance.CrabMineKilled(mapChannel, creature);
+                return;
+            }
+
             // kill creature
             var stateIds = new List<CharacterState> { CharacterState.Dead };
 

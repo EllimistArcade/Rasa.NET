@@ -18,10 +18,12 @@ namespace Rasa.Managers
     ///
     /// From the client:
     /// - the mine is a creature of class Ability_Crab_Mine (10521, creature augmentation only);
-    /// - CRAB_MINE_EXPLOSION (10000088) is a BombEffect with removeTarget: DoExplosion on the mine
-    ///   plays the blast, announces its damage and takes the mine away on the client;
     /// - CR_CRAB_MINE_SELF_DESTRUCT (413) has a 3000 ms windup on animation 1154 - the timer
-    ///   running out - and CR_CRAB_MINE_DEATH (409) is the explosion "on death";
+    ///   running out - and CR_CRAB_MINE_DEATH (409) is the explosion: a recovery performed by the
+    ///   mine, its argument the pump, playing animation 1154 over 3000 ms with the pump's
+    ///   ABILITY_CREATURE_CRAB_MINE_SELF_DESTRUCT_*_RESOLVE FX (physical, fire, EMP, sonic,
+    ///   light), and CrabMineDeathAbility.DoAbility announcing each hit from a hitdata that is the
+    ///   bare rawInfo;
     /// - each pump's damage (150-213, exponentially scaled), type (physical, incendiary,
     ///   electric, sonic, photonic) and EFFECT_RADIUS (12 m); PER_PUMP_MOD 10 is the proficiency
     ///   bonus, "a damage bonus for each pump level the user has, regardless of what pump level is
@@ -37,26 +39,29 @@ namespace Rasa.Managers
     /// - after Lifetime, it plays the self-destruct windup where it stands and explodes after it;
     /// - its owner leaving the map takes it away unexploded.
     /// The explosion damages every hostile creature within EFFECT_RADIUS of the mine, credited to
-    /// the owner, and the mine is taken out of the world once the blast has played.
+    /// the owner, and the mine is taken out of the world once 409's recovery has played. The mine
+    /// is stepped every CrabMineStepMs by the worker rather than on BehaviorManager's slower think.
     ///
     /// Not in the client, so chosen: SeekRange 20 m, DetonateRange 3 m, MineSpeed 6 m/s,
-    /// Lifetime 60 s, and the mine's health, MineBaseHealth at level 1 scaled like its damage.
+    /// Lifetime 20 s, and the mine's health, MineBaseHealth at level 1 scaled like its damage.
     /// </summary>
     public partial class AbilityManager
     {
         public const string CrabMinesModule = "abilities.crabmines";
         public const int CrabMinesSkillId = 111;
-        public const int CrabMineExplosionTypeId = 10000088;       // CRAB_MINE_EXPLOSION
-        public const EntityClasses CrabMineClass = (EntityClasses)10521; // Ability_Crab_Mine
+                public const EntityClasses CrabMineClass = (EntityClasses)10521; // Ability_Crab_Mine
 
         public const int MaxCrabMines = 3;
         public const float CrabMineSeekRange = 20f;
         public const float CrabMineDetonateRange = 3f;
         public const float CrabMineSpeed = 6f;
-        public const int CrabMineLifetimeMs = 60000;
+        public const int CrabMineLifetimeMs = 20000;
         public const int CrabMineSelfDestructMs = 3000;            // CR_CRAB_MINE_SELF_DESTRUCT's windup
         public const int CrabMineBaseHealth = 100;
-        private const int CrabMineLingerMs = 2000;
+        public const int CrabMineDeathRecoveryMs = 3000;           // CR_CRAB_MINE_DEATH's recovery, animation 1154
+
+        /// <summary>How often a running mine is moved and its movement sent.</summary>
+        public const int CrabMineStepMs = 100;
 
         private sealed class CrabMine
         {
@@ -73,6 +78,7 @@ namespace Rasa.Managers
             public long ExpiresAt;
             public long DetonateAt;       // the self-destruct windup's end; 0 when not arming
             public long RemoveAt;         // after the blast has played; 0 until it has gone off
+            public long LastStepAt;       // when it was last moved
         }
 
         private static readonly List<CrabMine> CrabMines = new List<CrabMine>();
@@ -150,7 +156,8 @@ namespace Rasa.Managers
                     Radius = info.Get(AbilityProperty.EffectRadius, 12),
                     BonusPercent = CrabMineBonusPercent(info.Get(AbilityProperty.PerPumpMod, 10), ManifestationManager.SkillPump(player, CrabMinesSkillId), info.Level),
                     Level = Math.Max(1u, info.Level),
-                    ExpiresAt = Environment.TickCount64 + CrabMineLifetimeMs
+                    ExpiresAt = Environment.TickCount64 + CrabMineLifetimeMs,
+                    LastStepAt = Environment.TickCount64
                 });
         }
 
@@ -227,10 +234,18 @@ namespace Rasa.Managers
                     continue;
                 }
 
-                // Run at it: carried by BehaviorManager.StepKnockback, facing the way it runs.
+                // Run at it, facing the way it runs, a step every CrabMineStepMs.
                 creature.KnockbackTo = prey.Position;
                 creature.KnockbackSpeed = CrabMineSpeed;
                 creature.KnockbackIsPull = true;
+
+                var sinceStep = now - mine.LastStepAt;
+
+                if (sinceStep >= CrabMineStepMs)
+                {
+                    mine.LastStepAt = now;
+                    BehaviorManager.Instance.StepCarry(mapChannel, creature, sinceStep);
+                }
             }
         }
 
@@ -247,41 +262,23 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// The blast: CRAB_MINE_EXPLOSION on the mine and its DoExplosion with the damage to every
-        /// hostile creature within the radius, credited to the owner. The mine is dead from here,
-        /// and taken away once the blast has played.
+        /// The blast: CR_CRAB_MINE_DEATH performed by the mine, its recovery listing every hostile
+        /// creature within the radius with its damage - credited to the owner - as the bare
+        /// rawInfo CrabMineDeathAbility reads. The mine is dead from here, and taken away once the
+        /// recovery has played.
         /// </summary>
         private void Detonate(CrabMine mine)
         {
             var mapChannel = mine.MapChannel;
             var creature = mine.Creature;
             var owner = mine.Owner;
-            var effectId = GameEffectManager.Instance.NextEffectId(mapChannel);
 
-            mine.RemoveAt = Environment.TickCount64 + CrabMineLingerMs;
+            mine.RemoveAt = Environment.TickCount64 + CrabMineDeathRecoveryMs;
             creature.KnockbackTo = null;
             creature.State = CharacterState.Dead;
             creature.Attributes[Attributes.Health].Current = 0;     // off every scan and every fight
 
-            CellManager.Instance.CellCallMethod(creature, new GameEffectAttachedPacket
-            {
-                EffectTypeId = CrabMineExplosionTypeId,
-                EffectId = effectId,
-                EffectLevel = mine.Level,
-                SourceId = owner.EntityId,
-                Announced = true,
-                Duration = null,
-                DamageType = (int)mine.DamageType,
-                AttrId = 1,
-                IsActive = true,
-                IsBuff = false,
-                IsDebuff = true,
-                IsNegativeEffect = true,
-                Extras = new Dictionary<string, object>(),
-                Args = new List<object>()
-            });
-
-            var blast = new GameEffectAnnounceDamagePacket(effectId, "DoExplosion");
+            var blast = new AbilityRecoveryPacket(ActionId.CrCrabMineDeath, mine.Level, AbilityRecoveryPacket.HitDataKind.RawInfo);
             var critChance = CriticalHits.AttackerChance(owner, false);
             var hitAny = false;
 
@@ -295,7 +292,7 @@ namespace Rasa.Managers
                 var amount = GameEffectManager.ApplyResist(victim, rolled, out var resisted, mine.DamageType);
                 var taken = ActorManager.Instance.Damage(mapChannel, victim, amount, owner, mine.DamageType);
 
-                blast.Hits.Add(new TickEntry
+                blast.Hits.Add(new AbilityHit
                 {
                     EntityId = victim.EntityId,
                     Amount = amount,

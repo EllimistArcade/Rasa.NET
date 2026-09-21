@@ -26,7 +26,7 @@ namespace Rasa.Packets.MapChannel.Server
     /// </summary>
     public class AbilityRecoveryPacket : ServerPythonPacket
     {
-        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists, TypeIds }
+        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists, TypeIds, RawInfo }
 
         public override GameOpcode Opcode { get; } = GameOpcode.PerformRecovery;
 
@@ -108,6 +108,10 @@ namespace Rasa.Packets.MapChannel.Server
             {
                 switch (Kind)
                 {
+                    case HitDataKind.RawInfo:
+                        // hitdata[i] is the rawInfo itself (CrabMineDeathAbility.DoAbility).
+                        DamageInfoWriter.WriteRawInfo(pw, hit.DamageType, hit.Amount, hit.Resisted, hit.IsCritical, hit.DeathBlow);
+                        break;
                     case HitDataKind.Heal:
                         pw.WriteInt(hit.Amount);
                         break;

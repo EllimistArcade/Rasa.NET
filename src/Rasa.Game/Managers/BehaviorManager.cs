@@ -201,9 +201,6 @@ namespace Rasa.Managers
             // does here is go where it is sent - it is never a corpse to despawn.
             if (creature.IsScripted)
             {
-                if (creature.State != CharacterState.Dead)
-                    StepKnockback(mapChannel, creature, delta);
-
                 needCellUpdate = CellChanged(creature, delta);
                 return;
             }
@@ -775,6 +772,18 @@ namespace Rasa.Managers
             creature.UpdatePositionCounter = CreatureManager.CreatureLocationUpdateTime;
 
             return CellManager.Instance.GetCellSeed(creature.Position) != creature.Cells[2, 2];
+        }
+
+        /// <summary>
+        /// A step of a scripted creature's carry, on its own clock (a crab mine, every 100 ms):
+        /// the same as a knockback's, for whoever runs it.
+        /// </summary>
+        public bool StepCarry(MapChannel mapChannel, Creature creature, long delta)
+        {
+            if (creature.State == CharacterState.Dead)
+                return false;
+
+            return StepKnockback(mapChannel, creature, delta);
         }
 
         /// <summary>

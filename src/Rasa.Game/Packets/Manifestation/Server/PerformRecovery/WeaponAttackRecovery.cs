@@ -35,12 +35,12 @@
                 pw.WriteTuple(3);
                 pw.WriteULong(hit.EntityId);         // target entityid
                 pw.WriteTuple(12);              // rawinfo start
-                    pw.WriteUInt((uint)(Missile.DamageType == 0 ? DamageType.Physical : Missile.DamageType)); // self.damagetype
+                    pw.WriteUInt((uint)TypeOf(hit));    // self.damagetype
                     pw.WriteUInt(hit.Reflected);        // self.reflected
                     pw.WriteUInt(hit.Filtered);         // self.filtered
                     pw.WriteUInt(hit.Absorbed);         // self.absorbed
                     pw.WriteUInt(hit.Resisted);         // self.resisted
-                    pw.WriteLong(Missile.DamageA);      // self.finalamt
+                    pw.WriteLong(hit.FinalAmt);         // self.finalamt: each hit its own (a launcher's splash)
                     pw.WriteInt(hit.IsCritical);        // self.iscrit
                     pw.WriteInt(hit.DeathBlow);         // self.deathblow
                     pw.WriteUInt(hit.CoverModifier);    // self.covermodifier
@@ -50,6 +50,13 @@
                 pw.WriteTuple(1);                   // OnHitData
                 pw.WriteList(0);
             }
+        }
+
+        private DamageType TypeOf(HitData hit)
+        {
+            var type = hit.DamageType != 0 ? hit.DamageType : Missile.DamageType;
+
+            return type == 0 ? DamageType.Physical : type;
         }
     }
 }

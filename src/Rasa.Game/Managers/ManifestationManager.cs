@@ -817,7 +817,8 @@ namespace Rasa.Managers
                 WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType), critBonus,
                 stunChance: grenades ? Stuns.GrenadeChance(pump) : 0, stunMs: grenades ? Stuns.GrenadeStunMs : 0,
                 rootMs: skillId == WeaponSkills.NetGuns ? CrowdControl.NetGunRootMs : 0,
-                knockbackChance: knockbackChance);
+                knockbackChance: knockbackChance,
+                splashRadius: Splash.RadiusOf(weapon.ItemTemplate.WeaponInfo));
             
             return FireResult.Fired;
         }

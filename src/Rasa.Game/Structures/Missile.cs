@@ -29,6 +29,10 @@
         public int RootMs { get; set; }
         /// <summary>Chance in percent that the hit knocks a creature back (Firearms' shotguns).</summary>
         public int KnockbackChance { get; set; }
+        /// <summary>Metres around the target that a launcher's splash reaches (Splash); 0 for none.</summary>
+        public float SplashRadius { get; set; }
+        /// <summary>What each splashed creature takes, worked out from the damage before the crit roll.</summary>
+        public int SplashDamage { get; set; }
         public long TriggerTime { get; set; }       // amount of milliseconds left before the missile is triggered, is decreased on every tick
         public MissileArgs Args = new MissileArgs();
     }

@@ -454,7 +454,8 @@ namespace Rasa.Managers
         /// <param name="melee">A melee swing, for the crouching crit modifiers.</param>
         /// <param name="stunChance">Chance in percent the hit stuns a creature for stunMs (Hand to Hand, grenades).</param>
         /// <param name="rootMs">How long the hit holds a creature where it stands (net guns).</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0)
+        /// <param name="splashRadius">Metres around the target a launcher's splash reaches (Splash); 0 for none.</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0)
         {
             var missile = new Missile
             {
@@ -467,7 +468,11 @@ namespace Rasa.Managers
                 StunChance = stunChance,
                 StunMs = stunMs,
                 RootMs = rootMs,
-                KnockbackChance = Math.Max(0, knockbackChance)
+                KnockbackChance = Math.Max(0, knockbackChance),
+                // Launchers: the share each splashed creature takes is of the damage before the
+                // crit roll, which only the target hit makes.
+                SplashRadius = Math.Max(0, splashRadius),
+                SplashDamage = splashRadius > 0 ? Splash.DamageOf(damage) : 0
             };
 
             // get distance between actors
@@ -548,9 +553,53 @@ namespace Rasa.Managers
             mapChannel.QueuedMissiles.Add(missile);
         }
 
+        /// <summary>
+        /// A launcher's splash (Splash): every other hostile creature within the missile's
+        /// SplashRadius of where it landed takes SplashDamage as a hit of its own, and is added
+        /// to the missile's hits so the one recovery shows them all.
+        /// </summary>
+        private void SplashAround(MapChannel mapChannel, Missile missile)
+        {
+            if (missile.SplashRadius <= 0 || missile.SplashDamage <= 0 || !(missile.Source is Manifestation shooter)
+                || missile.TargetActor == null || !IsOnMap(mapChannel, missile.TargetActor))
+                return;
+
+            foreach (var creature in AbilityManager.HostilesWithin(mapChannel, shooter, missile.TargetActor.Position, missile.SplashRadius))
+            {
+                if (creature == missile.TargetActor || creature.State == CharacterState.Dead || creature.State == CharacterState.Dying)
+                    continue;
+
+                var splash = new Missile
+                {
+                    DamageA = missile.SplashDamage,
+                    DamageType = missile.DamageType,
+                    ArmorBypassPercent = missile.ArmorBypassPercent,
+                    Source = shooter,
+                    TargetActor = creature,
+                    TargetEntityId = creature.EntityId,
+                    ActionId = missile.ActionId,
+                    ActionArgId = missile.ActionArgId,
+                    StunChance = missile.StunChance,
+                    StunMs = missile.StunMs
+                };
+
+                var hit = new HitData { EntityId = creature.EntityId, FinalAmt = splash.DamageA };
+
+                splash.Args.HitEntities.Add(creature.EntityId);
+                splash.Args.HitData.Add(hit);
+
+                DoDamageToCreature(mapChannel, splash);
+
+                hit.FinalAmt = splash.DamageA;
+                hit.DeathBlow = creature.Attributes[Attributes.Health].Current <= 0 ? 1 : 0;
+
+                missile.Args.HitEntities.Add(creature.EntityId);
+                missile.Args.HitData.Add(hit);
+            }
+        }
+
         public void MissileTrigger(MapChannel mapChannel, Missile missile)
         {
-            // ToDo: Some weapons can hit multiple targets
             var targetType = EntityManager.Instance.GetEntityType(missile.TargetEntityId);
 
             // Checked again here: the missile was queued a tick ago, and the target can have
@@ -559,12 +608,15 @@ namespace Rasa.Managers
                 targetType = 0;
 
             // A staff drawn may deflect it (Staff, from pump 3): no damage at all, and the clients
-            // are told it as a miss of misstype 4 - the staff parry animation and "Deflect".
+            // are told it as a miss of misstype 4 - the staff parry animation and "Deflect". A
+            // launcher's round still goes off where it was turned aside.
             if (targetType == EntityType.Character && missile.TargetActor is Manifestation defender
                 && ManifestationManager.DeflectsWithStaff(defender))
             {
                 missile.Args.MisstEntities.Add(missile.TargetEntityId);
                 missile.Args.Missdata.Add(MissTypeDeflect);
+
+                SplashAround(mapChannel, missile);
 
                 CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
                 return;
@@ -586,7 +638,7 @@ namespace Rasa.Managers
             };
 
             missile.Args.HitEntities.Add(missile.TargetEntityId);
-            missile.Args.HitData.Add(hitData);     // ToDo: add suport for multiple targets
+            missile.Args.HitData.Add(hitData);
 
             switch (targetType)
             {
@@ -603,6 +655,15 @@ namespace Rasa.Managers
                     Logger.WriteLog(LogType.Error, $"WeaponAttackRecovery: Unsuported targetType {targetType}.");
                     break;
             }
+
+            // What landed, after a smoke screen, resistance and a shield had their share: each
+            // hit in the recovery carries its own amount now that a launcher lists several.
+            hitData.FinalAmt = missile.DamageA;
+
+            if (targetType == EntityType.Creature && missile.TargetActor.Attributes[Attributes.Health].Current <= 0)
+                hitData.DeathBlow = 1;
+
+            SplashAround(mapChannel, missile);
 
             switch (missile.ActionId)
             {

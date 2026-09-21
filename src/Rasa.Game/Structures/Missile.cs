@@ -33,6 +33,10 @@
         public float SplashRadius { get; set; }
         /// <summary>What each splashed creature takes, worked out from the damage before the crit roll.</summary>
         public int SplashDamage { get; set; }
+        /// <summary>A cone weapon's other victims, found when it was fired (ConeWeapons); each takes ConeDamage as a hit of its own.</summary>
+        public System.Collections.Generic.List<Creature> ConeTargets { get; set; }
+        /// <summary>What each creature in the cone takes before its own crit roll: the shot's damage as fired.</summary>
+        public int ConeDamage { get; set; }
         public long TriggerTime { get; set; }       // amount of milliseconds left before the missile is triggered, is decreased on every tick
         public MissileArgs Args = new MissileArgs();
     }

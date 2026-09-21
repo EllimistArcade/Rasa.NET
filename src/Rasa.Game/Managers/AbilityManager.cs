@@ -456,7 +456,7 @@ namespace Rasa.Managers
         /// Who a player's damage may land on: creatures that are not AFS. Other players are not
         /// targets - there is no PvP to speak of yet - and AFS creatures are the friendly NPCs.
         /// </summary>
-        private static bool IsHostile(Manifestation player, Actor target)
+        internal static bool IsHostile(Manifestation player, Actor target)
         {
             return target is Creature creature && creature.Faction != Factions.AFS && creature.State != CharacterState.Dying && creature.Attributes[Attributes.Health].Current > 0;
         }

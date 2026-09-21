@@ -41,12 +41,15 @@
                         pw.WriteUInt(ItemTemplate.WeaponInfo.Refire);
                         pw.WriteUInt(ItemTemplate.WeaponInfo.ReloadTime);
                         pw.WriteUInt(ItemTemplate.WeaponInfo.Range);
-                        pw.WriteUInt(ItemTemplate.WeaponInfo.AeRadius);
+                        // Shotguns and propellant guns as cones, as WeaponInfo sends them (Managers.ConeWeapons).
+                        var (aeType, aeRadius) = Managers.ConeWeapons.AeOf(ItemTemplate.WeaponInfo, EntityClass.WeaponClassInfo);
 
-                        if (ItemTemplate.WeaponInfo.AeType == 0)
+                        pw.WriteUInt(aeRadius);
+
+                        if (aeType == 0)
                             pw.WriteNoneStruct();
                         else
-                            pw.WriteUInt(ItemTemplate.WeaponInfo.AeType);
+                            pw.WriteUInt(aeType);
 
                         if (ItemTemplate.WeaponInfo.WeaponAltInfo != null)
                         {

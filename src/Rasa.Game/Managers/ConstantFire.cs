@@ -46,10 +46,8 @@ namespace Rasa.Managers
     /// FlamethrowerAttack has no splat, and the client aims it with the shooter's yaw. So a
     /// pulse hits every hostile creature within PropellantRange of the shooter and ConeHalfAngleOf
     /// degrees either side of the way they face, each with its own crit roll and resistance, all
-    /// listed as shots of the one pulse. The range is the action's own (maxRange 10 on every
-    /// (140, arg) row); the angle is the weapon's ae_radius when its ae_type is CONE and it is
-    /// more than the placeholder 1, and otherwise 45 - the most common CONE_RADIUS in the
-    /// abilities' data, which the client draws the same way it draws a weapon's aeRadius. The
+    /// listed as shots of the one pulse. The reach and the angle are ConeWeapons': the action's
+    /// own range (maxRange 10 on every (140, arg) row) and 45 degrees either side. The
     /// pool the propellant leaves (PROPELLANT_POOL_EFFECT 10000047, with FX for each damage type)
     /// and PROPELLANT_PUMP_EFFECT 10000046 have no numbers or behaviour in the client and are
     /// not done. Machine guns have constant-fire effects of their own (CF_MACHINEGUN_EFFECT and
@@ -67,18 +65,6 @@ namespace Rasa.Managers
         public const int DensityGunTypeId = 94;             // CF_DENSITY_GUN_EFFECT
         public const int PolarityGunTypeId = 239;           // CF_POLARITYGUN_EFFECT
         public const int PropellantTypeId = 109;            // CF_PROPELLANT_EFFECT
-
-        /// <summary>The propellant gun's reach: maxRange 10 on every WEAPON_FLAMETHROWER row of actionArguments.</summary>
-        public const float PropellantRange = 10f;
-
-        /// <summary>Allowance on the range for positions a tick old, as the abilities allow.</summary>
-        public const float RangeSlack = 2.5f;
-
-        /// <summary>Degrees either side of the aim, when the weapon has no cone of its own.</summary>
-        public const float DefaultConeHalfAngle = 45f;
-
-        /// <summary>aetypes.CONE.</summary>
-        public const uint AeCone = 3;
 
         /// <summary>The polarity gun's release: this percent of the beam damage the target was charged with.</summary>
         public const int ReleasePercent = 50;
@@ -129,11 +115,6 @@ namespace Rasa.Managers
             }
         }
 
-        /// <summary>Degrees either side of the aim a cone weapon reaches: its own CONE radius when it has a real one, DefaultConeHalfAngle otherwise.</summary>
-        public static float ConeHalfAngleOf(WeaponInfo weaponInfo)
-        {
-            return weaponInfo != null && weaponInfo.AeType == AeCone && weaponInfo.AeRadius > 1 ? weaponInfo.AeRadius : DefaultConeHalfAngle;
-        }
 
         /// <summary>
         /// A polarity charge after one more beam hit of amount on targetId: the same target adds
@@ -195,8 +176,9 @@ namespace Rasa.Managers
 
             // A propellant gun sprays the cone in front of the shooter; the others hit what they aim at.
             var targets = session.ActionId == ActionId.WeaponFlamethrower
-                ? AbilityManager.HostilesInCone(mapChannel, player, AbilityManager.FacingOf(player), PropellantRange + RangeSlack,
-                    ConeHalfAngleOf(weapon.ItemTemplate.WeaponInfo))
+                ? AbilityManager.HostilesInCone(mapChannel, player, AbilityManager.FacingOf(player),
+                    ConeWeapons.RangeOf(session.ActionId, session.ActionArgId) + ConeWeapons.RangeSlack,
+                    ConeWeapons.HalfAngleOf(weapon.ItemTemplate.WeaponInfo))
                 : ResolveTarget(mapChannel, player) is Creature aimed ? new List<Creature> { aimed } : new List<Creature>();
 
             foreach (var target in targets)

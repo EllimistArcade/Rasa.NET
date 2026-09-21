@@ -455,7 +455,8 @@ namespace Rasa.Managers
         /// <param name="stunChance">Chance in percent the hit stuns a creature for stunMs (Hand to Hand, grenades).</param>
         /// <param name="rootMs">How long the hit holds a creature where it stands (net guns).</param>
         /// <param name="splashRadius">Metres around the target a launcher's splash reaches (Splash); 0 for none.</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0)
+        /// <param name="coneHalfAngle">Degrees either side of the shooter's facing a cone weapon hits (ConeWeapons); 0 for a single target.</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0)
         {
             var missile = new Missile
             {
@@ -474,6 +475,10 @@ namespace Rasa.Managers
                 SplashRadius = Math.Max(0, splashRadius),
                 SplashDamage = splashRadius > 0 ? Splash.DamageOf(damage) : 0
             };
+
+            // A cone weapon picks what it hits from where the shooter faces, not from a lock.
+            if (coneHalfAngle > 0 && action.Actor is Manifestation coneShooter)
+                AimCone(mapChannel, coneShooter, action, missile, coneHalfAngle, damage);
 
             // get distance between actors
             Actor targetActor = null;
@@ -565,37 +570,111 @@ namespace Rasa.Managers
                 return;
 
             foreach (var creature in AbilityManager.HostilesWithin(mapChannel, shooter, missile.TargetActor.Position, missile.SplashRadius))
+                if (creature != missile.TargetActor)
+                    ExtraHit(mapChannel, missile, shooter, creature, missile.SplashDamage, false);
+        }
+
+        /// <summary>
+        /// A cone weapon's other victims (ConeWeapons): each creature that was in the cone when the
+        /// shot was fired and is still there to be hit takes the shot's damage with its own crit
+        /// roll, and the hit carries what the shot carries - a shotgun's knockback chance.
+        /// </summary>
+        private void ConeHits(MapChannel mapChannel, Missile missile)
+        {
+            if (missile.ConeTargets == null || missile.ConeDamage <= 0 || !(missile.Source is Manifestation shooter))
+                return;
+
+            foreach (var creature in missile.ConeTargets)
+                if (creature != missile.TargetActor && IsOnMap(mapChannel, creature))
+                    ExtraHit(mapChannel, missile, shooter, creature, missile.ConeDamage, true);
+        }
+
+        /// <summary>
+        /// One more creature hit by a missile - a splash or a cone - resolved as a missile of its
+        /// own (resistance, armour, threat, what the hit carries) and added to the missile's hits.
+        /// </summary>
+        private void ExtraHit(MapChannel mapChannel, Missile missile, Manifestation shooter, Creature creature, int damage, bool canCrit)
+        {
+            if (creature.State == CharacterState.Dead || creature.State == CharacterState.Dying || damage <= 0)
+                return;
+
+            var extra = new Missile
             {
-                if (creature == missile.TargetActor || creature.State == CharacterState.Dead || creature.State == CharacterState.Dying)
-                    continue;
+                DamageA = damage,
+                DamageType = missile.DamageType,
+                ArmorBypassPercent = missile.ArmorBypassPercent,
+                Source = shooter,
+                TargetActor = creature,
+                TargetEntityId = creature.EntityId,
+                ActionId = missile.ActionId,
+                ActionArgId = missile.ActionArgId,
+                StunChance = missile.StunChance,
+                StunMs = missile.StunMs,
+                RootMs = canCrit ? missile.RootMs : 0,
+                KnockbackChance = canCrit ? missile.KnockbackChance : 0
+            };
 
-                var splash = new Missile
-                {
-                    DamageA = missile.SplashDamage,
-                    DamageType = missile.DamageType,
-                    ArmorBypassPercent = missile.ArmorBypassPercent,
-                    Source = shooter,
-                    TargetActor = creature,
-                    TargetEntityId = creature.EntityId,
-                    ActionId = missile.ActionId,
-                    ActionArgId = missile.ActionArgId,
-                    StunChance = missile.StunChance,
-                    StunMs = missile.StunMs
-                };
-
-                var hit = new HitData { EntityId = creature.EntityId, FinalAmt = splash.DamageA };
-
-                splash.Args.HitEntities.Add(creature.EntityId);
-                splash.Args.HitData.Add(hit);
-
-                DoDamageToCreature(mapChannel, splash);
-
-                hit.FinalAmt = splash.DamageA;
-                hit.DeathBlow = creature.Attributes[Attributes.Health].Current <= 0 ? 1 : 0;
-
-                missile.Args.HitEntities.Add(creature.EntityId);
-                missile.Args.HitData.Add(hit);
+            if (canCrit)
+            {
+                var amount = extra.DamageA;
+                extra.IsCritical = CriticalHits.Resolve(shooter, creature, missile.IsMelee, missile.CritChance, ref amount);
+                extra.DamageA = amount;
             }
+
+            var hit = new HitData { EntityId = creature.EntityId, FinalAmt = extra.DamageA, IsCritical = extra.IsCritical ? 1 : 0 };
+
+            extra.Args.HitEntities.Add(creature.EntityId);
+            extra.Args.HitData.Add(hit);
+
+            DoDamageToCreature(mapChannel, extra);
+
+            hit.FinalAmt = extra.DamageA;
+            hit.DeathBlow = creature.Attributes[Attributes.Health].Current <= 0 ? 1 : 0;
+
+            missile.Args.HitEntities.Add(creature.EntityId);
+            missile.Args.HitData.Add(hit);
+        }
+
+        /// <summary>
+        /// Aims a cone weapon (ConeWeapons) as it is fired: every hostile creature within its reach
+        /// and half-angle of the way the shooter faces. The one the missile flies at is the locked
+        /// target if it is a hostile creature within reach - a client that still locks one keeps
+        /// hitting it whichever way the server last saw the shooter face - and otherwise the
+        /// nearest in the cone; the rest are its other victims.
+        /// </summary>
+        private static void AimCone(MapChannel mapChannel, Manifestation shooter, ActionData action, Missile missile, float halfAngle, int damage)
+        {
+            var range = ConeWeapons.RangeOf(action.ActionId, action.ActionArgId) + ConeWeapons.RangeSlack;
+            var inCone = AbilityManager.HostilesInCone(mapChannel, shooter, AbilityManager.FacingOf(shooter), range, halfAngle)
+                .Where(c => c.State != CharacterState.Dead && c.State != CharacterState.Dying)
+                .OrderBy(c => Vector3.DistanceSquared(c.Position, shooter.Position))
+                .ToList();
+
+            missile.ConeDamage = damage;
+
+            // A player the shooter has locked (there is no PvP to speak of, but a staff can
+            // deflect) stays what the shot flies at; the cone's creatures are hit besides.
+            if (action.TargetId != 0 && EntityManager.Instance.GetEntityType(action.TargetId) == EntityType.Character)
+            {
+                missile.ConeTargets = inCone;
+                return;
+            }
+
+            Creature primary = null;
+
+            if (action.TargetId != 0 && EntityManager.Instance.GetEntityType(action.TargetId) == EntityType.Creature)
+            {
+                var locked = EntityManager.Instance.GetCreature(action.TargetId);
+
+                if (locked != null && IsOnMap(mapChannel, locked) && AbilityManager.IsHostile(shooter, locked)
+                    && Vector3.Distance(locked.Position, shooter.Position) <= range)
+                    primary = locked;
+            }
+
+            primary ??= inCone.FirstOrDefault();
+
+            action.TargetId = primary?.EntityId ?? 0;
+            missile.ConeTargets = inCone.Where(c => c != primary).ToList();
         }
 
         public void MissileTrigger(MapChannel mapChannel, Missile missile)
@@ -617,6 +696,7 @@ namespace Rasa.Managers
                 missile.Args.Missdata.Add(MissTypeDeflect);
 
                 SplashAround(mapChannel, missile);
+                ConeHits(mapChannel, missile);
 
                 CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
                 return;
@@ -637,8 +717,12 @@ namespace Rasa.Managers
                 IsCritical = missile.IsCritical ? 1 : 0
             };
 
-            missile.Args.HitEntities.Add(missile.TargetEntityId);
-            missile.Args.HitData.Add(hitData);
+            // A shot at nothing lists no hit: it used to list entity 0.
+            if (missile.TargetEntityId != 0)
+            {
+                missile.Args.HitEntities.Add(missile.TargetEntityId);
+                missile.Args.HitData.Add(hitData);
+            }
 
             switch (targetType)
             {
@@ -664,6 +748,7 @@ namespace Rasa.Managers
                 hitData.DeathBlow = 1;
 
             SplashAround(mapChannel, missile);
+            ConeHits(mapChannel, missile);
 
             switch (missile.ActionId)
             {

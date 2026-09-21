@@ -201,6 +201,10 @@ namespace Rasa.Managers
 
                 if (mapChannel.ClientList.Count > 0)
                 {
+                    // Rushing Blow: the charging players carried a step on, every tick, before
+                    // the blows whose windup is up are resolved.
+                    AbilityManager.Instance.ChargeWorker(mapChannel);
+
                     ActorActionManager.Instance.DoWork(mapChannel, delta);
                     MissileManager.Instance.DoWork(mapChannel, delta);
                     BehaviorManager.Instance.MapChannelThink(mapChannel, delta);

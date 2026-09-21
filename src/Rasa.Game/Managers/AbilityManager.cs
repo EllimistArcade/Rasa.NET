@@ -383,7 +383,17 @@ namespace Rasa.Managers
             // action queue does.
             mapChannel.PerformRecovery.RemoveAll(a => a.Actor == player && a.ActionId == actionId);
 
-            mapChannel.PerformRecovery.Add(new ActionData(player, actionId, level, target?.EntityId ?? 0, info.WindupMs)
+            // Rushing Blow's windup is the charge: timed as the client times it, the distance at
+            // 70 m/s, with the performer carried to the target through it.
+            var windupMs = (long)info.WindupMs;
+
+            if (action.Module == RushingBlowModule && target != null)
+            {
+                windupMs = ChargeWindupMs(Vector3.Distance(player.Position, target.Position));
+                StartCharge(mapChannel, client, player, target, actionId, windupMs);
+            }
+
+            mapChannel.PerformRecovery.Add(new ActionData(player, actionId, level, target?.EntityId ?? 0, windupMs)
             {
                 TargetLocation = packet.Target.Kind == ActionTargetKind.Location ? packet.Target.Location : null,
                 ItemId = packet.ItemId
@@ -538,6 +548,10 @@ namespace Rasa.Managers
             }
 
             StartCooldown(client, player, info);
+
+            // The charge has arrived: the blow lands from where it ends.
+            if (actionInfo.Module == RushingBlowModule)
+                FinishCharge(player);
 
             if (actionInfo.Module == "abilities.sprint")
             {

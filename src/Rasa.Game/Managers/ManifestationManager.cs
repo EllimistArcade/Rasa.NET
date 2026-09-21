@@ -2157,6 +2157,12 @@ namespace Rasa.Managers
             var player = client.Player;
             var now = Environment.TickCount64;
 
+            // Being carried by Rushing Blow's charge: the server says where the player is until
+            // it ends, and a Move the client sent before it saw the charge is set aside, neither
+            // applied nor corrected.
+            if (AbilityManager.IsCharging(player))
+                return false;
+
             var verdict = JudgeMove(player.Position, movement.Position, player.MovementSpeed,
                 now - player.MoveBudgetTick, player.MoveBudget);
 

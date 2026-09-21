@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace Rasa.Managers
@@ -97,6 +97,16 @@ namespace Rasa.Managers
 
                     break;
                 }
+
+                case "abilities.reflection":
+                    AttachReflection(mapChannel, player, info);
+                    Hit(recovery, player);
+                    break;
+
+                case "abilities.conversion":
+                    AttachConversion(mapChannel, player, info);
+                    Hit(recovery, player);
+                    break;
 
                 case "abilities.calledshot":
                 case "abilities.feedback":

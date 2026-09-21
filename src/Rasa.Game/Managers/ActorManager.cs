@@ -248,8 +248,9 @@ namespace Rasa.Managers
             }
             else if (target is Manifestation victim && armorTaken + healthTaken > 0)
             {
-                // Self Destruct goes off on the next damage its holder takes.
-                AbilityManager.OnPlayerDamaged(mapChannel, victim);
+                // Self Destruct goes off on the next damage its holder takes, and Conversion
+                // turns what landed into healing for the squad.
+                AbilityManager.OnPlayerDamaged(mapChannel, victim, armorTaken + healthTaken);
             }
 
             if (!(target is Creature) && health.Current <= 0)

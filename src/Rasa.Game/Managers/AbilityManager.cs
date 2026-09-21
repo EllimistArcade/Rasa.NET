@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -84,7 +84,8 @@ namespace Rasa.Managers
             "abilities.shieldextender", "abilities.shieldwave", "abilities.bioaugmentation", "abilities.weaponenhancement",
             "abilities.damageconversion", "abilities.critwave", "abilities.painttarget", "abilities.polarityfield",
             "abilities.controlledfission", "abilities.explodingnanites", "abilities.disease", "abilities.firesupport",
-            "abilities.selfdestruct", "abilities.scatterbombs", "abilities.calledshot", "abilities.feedback"
+            "abilities.selfdestruct", "abilities.scatterbombs", "abilities.calledshot", "abilities.feedback",
+            "abilities.reflection", "abilities.conversion"
         };
 
         /// <summary>

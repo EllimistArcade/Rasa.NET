@@ -682,12 +682,14 @@ namespace Rasa.Managers
         }
 
         /// <summary>Percent of damage taken that the effects on an actor reflect back at the attacker (Reflective Armor).</summary>
-        public static int ReflectPercentOf(Actor actor)
+        /// <param name="damageType">The hit's type; an effect that reflects only some types (Reflection) answers its own alone.</param>
+        public static int ReflectPercentOf(Actor actor, DamageType damageType = 0)
         {
             var total = 0;
 
             foreach (var effect in actor.ActiveEffects.Values)
-                total += effect.ReflectPercent;
+                if (effect.ReflectTypes.Count == 0 || effect.ReflectTypes.Contains(damageType))
+                    total += effect.ReflectPercent;
 
             return total;
         }

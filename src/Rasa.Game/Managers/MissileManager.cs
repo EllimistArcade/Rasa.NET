@@ -291,13 +291,15 @@ namespace Rasa.Managers
 
             Reflect(mapChannel, actor, missile);
 
-            // Self Destruct goes off on the next damage its holder takes.
-            if (actor is Manifestation victim && missile.DamageA > 0)
-                AbilityManager.OnPlayerDamaged(mapChannel, victim);
+            // Self Destruct goes off on the next damage its holder takes, and Conversion turns
+            // what landed into healing for the squad.
+            if (actor is Manifestation victim && armorDecrease + healthDecrease > 0)
+                AbilityManager.OnPlayerDamaged(mapChannel, victim, armorDecrease + healthDecrease);
         }
 
         /// <summary>
-        /// Reflective Armor: ReflectPercent of what the attack did comes back at a creature that
+        /// Reflective Armor and the Guardian's Reflection: ReflectPercent of what the attack did
+        /// comes back at a creature that
         /// made it. The wearer has already taken all of it ("User still takes full damage"). The
         /// creature takes it through ActorManager.Damage, so a reflection can kill and the kill
         /// is the wearer's; the wearer's client is told through the hidden MEDIUM_ARMOR_SKILL
@@ -308,7 +310,9 @@ namespace Rasa.Managers
             if (!(missile.Source is Creature attacker) || attacker.State == CharacterState.Dead)
                 return;
 
-            var percent = GameEffectManager.ReflectPercentOf(victim);
+            // Reflection answers only the types it lists, so the attack's own type decides both
+            // how much comes back and which effect is shown as having sent it.
+            var percent = GameEffectManager.ReflectPercentOf(victim, missile.DamageType);
 
             if (percent <= 0 || missile.DamageA <= 0)
                 return;
@@ -318,15 +322,16 @@ namespace Rasa.Managers
             if (amount <= 0)
                 return;
 
-            var carrier = victim.ActiveEffects.Values.FirstOrDefault(e => e.ReflectPercent > 0);
-            var taken = ActorManager.Instance.Damage(mapChannel, attacker, amount, victim);
+            var carrier = victim.ActiveEffects.Values.FirstOrDefault(e => e.ReflectPercent > 0
+                && (e.ReflectTypes.Count == 0 || e.ReflectTypes.Contains(missile.DamageType)));
+            var taken = ActorManager.Instance.Damage(mapChannel, attacker, amount, victim, missile.DamageType);
 
             if (carrier == null || !(victim is Manifestation player))
                 return;
 
             var client = mapChannel.ClientList.Find(c => c?.Player == player);
 
-            client?.CallMethod(player.EntityId, new GameEffectAnnounceReflectPacket(carrier.EffectId, attacker.EntityId, DamageType.Physical, amount,
+            client?.CallMethod(player.EntityId, new GameEffectAnnounceReflectPacket(carrier.EffectId, attacker.EntityId, missile.DamageType, amount,
                 taken > 0 && attacker.Attributes[Attributes.Health].Current <= 0));
         }
 

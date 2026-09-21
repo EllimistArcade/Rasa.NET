@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace Rasa.Structures
@@ -118,8 +118,21 @@ namespace Rasa.Structures
         /// <summary>Percent added to the holder's power regeneration alone (Mech Armor).</summary>
         public int PowerRegenPercent { get; set; }
 
-        /// <summary>Percent of the damage the holder takes from an attacker that is reflected back at it (Reflective Armor).</summary>
+        /// <summary>Percent of the damage the holder takes from an attacker that is reflected back at it (Reflective Armor, Reflection).</summary>
         public int ReflectPercent { get; set; }
+
+        /// <summary>
+        /// The damage types ReflectPercent answers (Reflection, which reflects one more type per
+        /// pump); empty for an effect that reflects everything, as Reflective Armor does.
+        /// </summary>
+        public List<DamageType> ReflectTypes { get; } = new List<DamageType>();
+
+        /// <summary>
+        /// Percent of the damage the holder takes that is healed onto their squad around them
+        /// (Conversion); 0 for none. HealRadius is how far that reaches.
+        /// </summary>
+        public int HealPercentOfDamage { get; set; }
+        public float HealRadius { get; set; }
 
         /// <summary>An attribute raised (or lowered) by AttributePercent while on - Bio Augmentation's Health, Power, Body, Mind or Spirit.</summary>
         public Attributes? AttributeId { get; set; }

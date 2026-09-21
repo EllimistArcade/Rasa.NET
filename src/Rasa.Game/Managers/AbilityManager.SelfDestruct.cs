@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -83,13 +83,17 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Called when a player has taken damage: an armed Self Destruct goes off. Its marked spot
+        /// Called when a player has taken damage, with what the hit took off armour and health: an
+        /// armed Self Destruct goes off, and Conversion heals the squad. Its marked spot
         /// is cleared before its blast is dealt, so nothing the blast sets off can set it off again.
         /// </summary>
-        internal static void OnPlayerDamaged(MapChannel mapChannel, Manifestation player)
+        internal static void OnPlayerDamaged(MapChannel mapChannel, Manifestation player, int damage = 0)
         {
             if (player == null || player.State == CharacterState.Dead)
                 return;
+
+            // Conversion turns what the hit took into healing for the squad.
+            ConvertDamage(mapChannel, player, damage);
 
             var bomb = player.ActiveEffects.Values.FirstOrDefault(e => e.TypeId == SelfDestructBombTypeId && e.ReturnTo.HasValue && !e.IsExpired);
 

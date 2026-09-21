@@ -132,6 +132,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A trap destroyed: it strikes back at whoever did it, and is nobody's kill or loot.
+            if (creature.IsScripted && AbilityManager.IsTrap(creature))
+            {
+                AbilityManager.Instance.TrapKilled(mapChannel, creature, killedBy);
+                return;
+            }
+
             // A reality ripper destroyed: it closes and lets everything go.
             if (creature.IsScripted && AbilityManager.IsRealityRipper(creature))
             {

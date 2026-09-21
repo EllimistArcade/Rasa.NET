@@ -211,6 +211,9 @@ namespace Rasa.Managers
                     // Reality Ripper: taking creatures in, and closing.
                     AbilityManager.Instance.RealityRipperWorker(mapChannel);
 
+                    // Trap: shooting, drawing the hate, running out.
+                    AbilityManager.Instance.TrapWorker(mapChannel);
+
                     ActorActionManager.Instance.DoWork(mapChannel, delta);
                     MissileManager.Instance.DoWork(mapChannel, delta);
                     BehaviorManager.Instance.MapChannelThink(mapChannel, delta);

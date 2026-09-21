@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace Rasa.Packets.MapChannel.Server
 {
@@ -18,13 +18,14 @@ namespace Rasa.Packets.MapChannel.Server
     ///    reached, announced as attaches of the RAGE effect on them.
     ///  - StormEffect.OnTick(target, dotData, arcData): lightning P5's storm - dotData announced
     ///    as damage on the holder, arcData ([(targetId, rawInfo)]) floated and drawn as arcs from it.
+    ///  - TrapDeathEffect.OnTick(target, killerId): the one who destroyed the trap.
     ///  - BaseGameEffect.OnTick(target): nothing but the tick marker on the effect's FX.
     ///
     /// Kind picks the shape. Entries is empty for the bare tick.
     /// </summary>
     public class GameEffectTickPacket : ServerPythonPacket
     {
-        public enum TickKind { Bare, Damage, Heal, EntityIds, Storm }
+        public enum TickKind { Bare, Damage, Heal, EntityIds, Storm, EntityId }
 
         public override GameOpcode Opcode { get; } = GameOpcode.GameEffectTick;
 
@@ -48,6 +49,13 @@ namespace Rasa.Packets.MapChannel.Server
 
             if (Kind == TickKind.Bare)
                 return;
+
+            // TrapDeathEffect.OnTick(target, killerId): one bare entity id.
+            if (Kind == TickKind.EntityId)
+            {
+                pw.WriteULong(Entries.Count > 0 ? Entries[0].EntityId : 0);
+                return;
+            }
 
             if (Kind == TickKind.Storm)
             {

@@ -1346,12 +1346,12 @@ namespace Rasa.Managers
         }
 
         /// <summary>How far from a corpse a squad member may be and still share in its loot.</summary>
-        public const float LootShareRange = 100f;
+        public const float LootShareRange = 200f;
 
         /// <summary>
         /// Who may loot a corpse the killer earned, by the squad's loot method:
         /// - no squad, or Individual: the killer;
-        /// - Free For All: every member in the world on the killer's map within LootShareRange of
+        /// - Free For All: every member in the world on the killer's map within LootShareRange (200 m) of
         ///   the corpse, the killer first - anyone of them may take anything;
         /// - Rotation: the whole corpse goes to the next of those members in join order, the
         ///   rotation moving on one member a corpse.

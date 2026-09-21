@@ -462,20 +462,35 @@ namespace Rasa.Managers
             }
             else if (creature.Controller.CurrentAction == BehaviorActionFighting)
             {
+                // Who it hates most and can still fight is who it fights (Threat). Nobody left:
+                // the fight is over and the table goes with it.
+                var chosen = Threat.ChooseTarget(creature);
+
+                if (chosen == 0)
+                {
+                    GiveUp(creature);
+                    return;
+                }
+
+                if (chosen != creature.Controller.ActionFighting.TargetEntityId)
+                    SetActionFighting(creature, chosen);
+
                 // get target
                 var target = EntityManager.Instance.GetEntityType(creature.Controller.ActionFighting.TargetEntityId);
 
                 if (target == 0)
                 {
                     // target disappeared (player logout or deleted for some reason) - leave combat mode
-                    SetActionWander(creature);
+                    if (!Threat.Retarget(creature))
+                        GiveUp(creature);
+
                     return;
                 }
 
                 // leave combat after 
                 if (creature.LastAgression > creature.AggressionTime)
                 {
-                    SetActionWander(creature);
+                    GiveUp(creature);
                     return;
                 }
 
@@ -486,15 +501,26 @@ namespace Rasa.Managers
                 {
                     var player = EntityManager.Instance.GetPlayer(creature.Controller.ActionFighting.TargetEntityId);
 
-                    // if target dead, set wander state
+                    // if target dead, on to the next it hates, or back to wandering
                     if (player.Attributes[Attributes.Health].Current <= 0 || player.State == CharacterState.Dead)
                     {
-                        SetActionWander(creature);
+                        if (!Threat.Retarget(creature))
+                            GiveUp(creature);
+
                         return;
                     }
 
-                    // Out of sight, cloaked or because this creature has been blinded: lost.
-                    if (!Detection.CanSee(creature, player))
+                    // Cloaked: off the table, and on to whoever it hates next.
+                    if (Detection.IsHidden(player))
+                    {
+                        if (!Threat.Retarget(creature))
+                            StopFighting(creature);
+
+                        return;
+                    }
+
+                    // Blinded: it cannot fight what it cannot see, but it remembers who it hated.
+                    if (Detection.IsBlind(creature))
                     {
                         StopFighting(creature);
                         return;
@@ -509,10 +535,13 @@ namespace Rasa.Managers
 
                     if (targetCreature.Attributes[Attributes.Health].Current <= 0 || targetCreature.State == CharacterState.Dead || targetCreature.State == CharacterState.Dying)
                     {
+                        if (Threat.Retarget(creature))
+                            return;
+
                         // exit visual combat mode
                         CellManager.Instance.CellCallMethod(mapChannel, creature, new RequestVisualCombatModePacket(false));
 
-                        SetActionWander(creature);
+                        GiveUp(creature);
                         return;
                     }
 
@@ -533,8 +562,9 @@ namespace Rasa.Managers
 
                 if (homeLocDist >= 60.0f * 60.0f)
                 {
+                    // Leashed: dragged too far from home, it goes back and forgets the fight.
                     creature.LastRestTime = 0; // forces AI to immediately calculate new wander position
-                    SetActionWander(creature);
+                    GiveUp(creature);
                     return;
                 }
                 creature.LastAgression = 0; // update aggression time if we found our target
@@ -912,6 +942,16 @@ namespace Rasa.Managers
             creature.Controller.TimerPathUpdateLock = 0;
             creature.Controller.ActionFighting.TargetEntityId = targetEntityId;
             creature.LastAgression = 0;
+
+            // Whatever brought it here - the scan, a hit, an assist - the target is on its table.
+            Threat.Noticed(creature, targetEntityId);
+        }
+
+        /// <summary>The fight is over for this creature: it forgets everyone it hated and wanders again.</summary>
+        public void GiveUp(Creature creature)
+        {
+            creature.Hate.Clear();
+            StopFighting(creature);
         }
         
         private void SetActionPathFollowing(Creature creature)

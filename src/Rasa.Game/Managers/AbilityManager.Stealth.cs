@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -28,8 +28,9 @@ namespace Rasa.Managers
     ///
     ///  - P1 / P3, the mag flash (TACTICAL_EVASION_MAG_FLASH_EFFECT 10000075, a BlindEffect):
     ///    everything hostile within EFFECT_RADIUS (10 / 20 m) is blinded for EFFECT_DURATION_MS
-    ///    (5 s). "Blinded NPCs lose their target and are unable to re-target for a short time" -
-    ///    which is Detection's blind, and is the PvE "clear enemy hate" the pump promises.
+    ///    (5 s): "Clear Enemy Hate" wipes each one's aggro table (Threat.Clear), and "blinded NPCs
+    ///    lose their target and are unable to re-target for a short time" is Detection's blind,
+    ///    which keeps the scan from picking anyone out until it wears off.
     ///  - P2 / P4, the smoke screen: TACTICAL_EVASION_SMOKE_SCREEN_AURA_EFFECT 10000077 on a
     ///    marker where it was thrown, and TACTICAL_EVASION_SMOKE_SCREEN_EFFECT 10000076 on the
     ///    performer and the squad standing inside it, taking EFFECT_MODIFIER (30 / 60) percent
@@ -125,6 +126,10 @@ namespace Rasa.Managers
 
             foreach (var creature in HostilesWithin(mapChannel, player, player.Position, radius))
             {
+                // "Clear Enemy Hate": it forgets everyone it was fighting...
+                Threat.Clear(creature);
+
+                // ...and the flash keeps it from picking anyone out again for a few seconds.
                 var flash = NewEffect(mapChannel, player, info, MagFlashTypeId, null);
 
                 flash.IsBuff = false;

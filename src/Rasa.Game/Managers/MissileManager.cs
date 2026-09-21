@@ -126,7 +126,11 @@ namespace Rasa.Managers
             // who opens fire and wins never enters combat at all.
             EnterCombat(missile.Source);
 
+            var beforeResist = missile.DamageA;
+
             Resist(creature, missile);
+
+            var resisted = Math.Max(0, beforeResist - missile.DamageA);
 
             // decrease armor first - all of it but what bypasses armour
             // all of it to health while an EMP crit suppresses its armour
@@ -155,9 +159,9 @@ namespace Rasa.Managers
             }
             else if (!StunAndCheckCritDeath(mapChannel, creature, missile))
             {
-                // shooting at wandering creatures makes them ANGRY
-                if (creature.Controller.CurrentAction == BehaviorManager.BehaviorActionWander || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath)
-                    BehaviorManager.Instance.SetActionFighting(creature, missile.Source.EntityId);
+                // The shooter is hated for what landed and what was resisted, and a wandering
+                // creature turns on them (Threat).
+                Threat.FromDamage(creature, missile.Source, armorDecrease + healthDecrease, 0, resisted);
 
                 WeaponBonus(mapChannel, creature, missile);
 

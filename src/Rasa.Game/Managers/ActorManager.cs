@@ -170,6 +170,10 @@ namespace Rasa.Managers
 
             var mapChannel = MapChannelManager.Instance.FindByContextId(target.MapContextId);
 
+            // Healing someone creatures hate draws their hate to the healer.
+            if (sourceEntityId != 0 && sourceEntityId != target.EntityId && target is Manifestation)
+                Threat.FromHealing(mapChannel, EntityManager.Instance.GetActor(sourceEntityId), target, applied);
+
             // No map means nobody can see them, which is not a reason to refuse the heal - the
             // health is still theirs. It is a reason not to try to broadcast it.
             if (mapChannel != null)
@@ -237,9 +241,11 @@ namespace Rasa.Managers
                 {
                     // Held near death for a finisher; it does not turn on anyone.
                 }
-                else if (source != null && (creature.Controller.CurrentAction == BehaviorManager.BehaviorActionWander || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath))
+                else if (source != null)
                 {
-                    BehaviorManager.Instance.SetActionFighting(creature, source.EntityId);
+                    // The source is hated for what landed - the resistance came off before this
+                    // was called and is not known here - and a wandering creature turns on them.
+                    Threat.FromDamage(creature, source, armorTaken + healthTaken);
                 }
 
                 // Explosive Nanites go off on damage taken.

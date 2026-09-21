@@ -27,6 +27,9 @@ namespace Rasa.Structures
         //sint32 agression; // hunting timer for enemys
         // aggro info
         public float AggroRange = 18.0f; // how far away the creature can detect enemies, usually 24.0f but can be increased by having high-range attacks
+
+        /// <summary>Who it hates and how much; what it fights is read off this (Managers.Threat).</summary>
+        public HateTable Hate { get; } = new HateTable();
         public long AggressionTime = 5000; // ToDo
 
         public float WalkSpeed { get; set; }

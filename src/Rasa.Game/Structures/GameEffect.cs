@@ -103,6 +103,12 @@ namespace Rasa.Structures
         /// <summary>The holder cannot be healed while it is on (Disease P5, "All Healing: Disabled").</summary>
         public bool BlocksHealing { get; set; }
 
+        /// <summary>
+        /// Percent added to the threat the holder generates - "Perceived Threat: X%"
+        /// (Sacrifice's THREAT_MODIFIER_PERCENT: +30 / +75 / +300); negative draws less.
+        /// </summary>
+        public int ThreatModifierPercent { get; set; }
+
         /// <summary>No debuff may be attached to the holder while it is on (Cure P4, "Protect from Debuffs").</summary>
         public bool BlocksDebuffs { get; set; }
 

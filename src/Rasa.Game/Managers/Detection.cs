@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
 namespace Rasa.Managers
@@ -15,9 +15,9 @@ namespace Rasa.Managers
     /// can now stop it outright:
     ///
     ///  - the player is hidden (Cloak Wave's STEALTH_EFFECT, a GameEffect with Hides): creatures
-    ///    do not notice them at all, a creature already fighting them loses them - the client's
-    ///    own description of a blinded NPC, "loses their target and is unable to re-target" -
-    ///    and players outside their squad are not told they are there;
+    ///    do not notice them at all, they come off every creature's aggro table (Threat.Forget)
+    ///    so one fighting them turns to whoever it hates next, and players outside their squad
+    ///    are not told they are there;
     ///  - the creature is blinded (Tactical Evasion's mag flash, a GameEffect with Blinds): it
     ///    drops what it was fighting and notices nobody until it wears off.
     ///
@@ -83,7 +83,8 @@ namespace Rasa.Managers
         /// </summary>
         public static void Hide(MapChannel mapChannel, Manifestation player)
         {
-            LoseSightOf(mapChannel, player);
+            // Off every creature's table: they turn to whoever they hate next, or give up.
+            Threat.Forget(mapChannel, player);
 
             foreach (var viewer in Onlookers(mapChannel, player))
                 viewer.CallMethod(SysEntity.ClientMethodId, new DestroyPhysicalEntityPacket(player.EntityId));
@@ -100,16 +101,6 @@ namespace Rasa.Managers
             foreach (var viewer in Onlookers(mapChannel, player))
                 viewer.CallMethod(SysEntity.ClientMethodId,
                     new CreatePhysicalEntityPacket(player.EntityId, player.EntityClass, ManifestationManager.Instance.CreatePlayerEntityData(client)));
-        }
-
-        /// <summary>Every creature fighting this actor forgets it and goes back to wandering.</summary>
-        public static void LoseSightOf(MapChannel mapChannel, Actor actor)
-        {
-            foreach (var cell in CellManager.CellsIn(mapChannel, actor.Cells))
-                foreach (var creature in cell.CreatureList.ToList())
-                    if (creature.Controller?.CurrentAction == BehaviorManager.BehaviorActionFighting
-                        && creature.Controller.ActionFighting.TargetEntityId == actor.EntityId)
-                        BehaviorManager.Instance.StopFighting(creature);
         }
 
         /// <summary>The players around this one who are not in their squad - who lose sight of them.</summary>

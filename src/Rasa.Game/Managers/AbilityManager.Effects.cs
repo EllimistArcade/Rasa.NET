@@ -524,8 +524,8 @@ namespace Rasa.Managers
         /// Sacrifice: OFFENSIVE_DAMAGE_MODIFIER to the damage the performer deals and
         /// RESIST_MODIFIER to what they take, one bought with the other - the odd pumps give up
         /// damage for resistance, the even pumps the reverse - until turned off. No duration in
-        /// the data, so none here. THREAT_MODIFIER_PERCENT is shown but not applied: creatures
-        /// have no threat table yet. The client's SacrificeAbility is a toggle that names no
+        /// the data, so none here. THREAT_MODIFIER_PERCENT raises the threat the Grenadier draws
+        /// from every creature they hurt (Managers.Threat). The client's SacrificeAbility is a toggle that names no
         /// effect, so the attach announces itself and a second press is what turns it off.
         /// </summary>
         private static void AttachSacrifice(MapChannel mapChannel, Manifestation player, ActionLevelInfo info)
@@ -538,7 +538,8 @@ namespace Rasa.Managers
             effect.AnnounceOnAttach = true;
             effect.Tooltip["dmgMod"] = effect.DamageDealtPercent;
             effect.Tooltip["resistMod"] = effect.ResistModifier;
-            effect.Tooltip["threatMod"] = info.Get(AbilityProperty.ThreatModifierPercent);
+            effect.ThreatModifierPercent = info.Get(AbilityProperty.ThreatModifierPercent);
+            effect.Tooltip["threatMod"] = effect.ThreatModifierPercent;
 
             GameEffectManager.Instance.Attach(mapChannel, player, effect);
         }

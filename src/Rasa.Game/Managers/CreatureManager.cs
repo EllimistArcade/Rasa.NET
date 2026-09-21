@@ -136,6 +136,9 @@ namespace Rasa.Managers
             // try to damage it every second until it expired.
             GameEffectManager.Instance.ClearEffects(mapChannel, creature);
 
+            // Nor does a grudge.
+            creature.Hate.Clear();
+
             // tell spawnpool if set
             if (creature.SpawnPool != null)
             {

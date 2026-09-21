@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace Rasa.Packets.MapChannel.Server
 {
@@ -43,6 +43,16 @@ namespace Rasa.Packets.MapChannel.Server
                 case ulong ul: pw.WriteULong(ul); break;
                 case bool b: pw.WriteBool(b); break;
                 case string s: pw.WriteString(s); break;
+                case IList<(int, int)> pairs:
+                    // a list of 2-tuples - Polymorph's abilityInfo, [(abilityId, level), ...]
+                    pw.WriteList(pairs.Count);
+                    foreach (var (first, second) in pairs)
+                    {
+                        pw.WriteTuple(2);
+                        pw.WriteInt(first);
+                        pw.WriteInt(second);
+                    }
+                    break;
                 case IList<int> list:
                     pw.WriteList(list.Count);
                     foreach (var item in list)

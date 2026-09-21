@@ -665,7 +665,8 @@ namespace Rasa.Managers
             if (client.Player == null || client.State != ClientState.Ingame)
                 return FireResult.NotFired;
 
-            var weapon = InventoryManager.Instance.CurrentWeapon(client);
+            // Polymorphed: the creature's weapon, whatever is in the player's own hands.
+            var weapon = client.Player.MorphWeapon ?? InventoryManager.Instance.CurrentWeapon(client);
 
             // Nothing in hand fires nothing. Tested before the draw below, because an empty
             // hand and a stowed weapon look the same from WeaponReady: arming an empty drawer
@@ -759,7 +760,9 @@ namespace Rasa.Managers
             // The barrel gets hotter. Done after the shot has been paid for in ammo, so a shot
             // that did not happen does not heat anything, and before the missile, so a shot that
             // reaches capacity is still fired - the jam stops the next one, not this one.
-            AddWeaponHeat(client, weapon);
+            // A polymorphed player's creature weapon does not heat: creatures' weapons never jam.
+            if (weapon != client.Player.MorphWeapon)
+                AddWeaponHeat(client, weapon);
 
             // let's calculate damage
             var damageRange = weaponClassInfo.MaxDamage - weaponClassInfo.MinDamage;
@@ -775,6 +778,11 @@ namespace Rasa.Managers
                 && Facing.CanBackstab(client.Player, EntityManager.Instance.GetActor(client.Player.Target))
                 ? WeaponSkills.BladesBackstabPercent(pump)
                 : 0;
+
+            // A creature weapon's damage is its level-50 figure: a polymorphed player fires it as
+            // an enemy of their own level would.
+            if (weapon == client.Player.MorphWeapon)
+                damage = AbilityManager.ScaleToLevel(damage, client.Player.Level);
 
             damage = GameEffectManager.ApplyDamageDealt(client.Player, damage, WeaponSkills.DamagePercent(skillId, pump) + backstab);
             var action = new ActionData(client.Player, weaponClassInfo.WeaponAttackActionId, weaponClassInfo.WeaponAttackArgId, client.Player.Target, 0);

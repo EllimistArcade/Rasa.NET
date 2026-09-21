@@ -106,7 +106,7 @@ namespace Rasa.Managers
         /// (Sacrifice), or whose toggle the player may also press again while it runs (Rage): a
         /// second request while the effect is on means "off", as it does for sprint.
         /// </summary>
-        private static readonly HashSet<string> ToggleModules = new HashSet<string> { "abilities.sprint", "abilities.rage", "abilities.sacrifice", "abilities.selfdestruct" };
+        private static readonly HashSet<string> ToggleModules = new HashSet<string> { "abilities.sprint", "abilities.rage", "abilities.sacrifice", "abilities.selfdestruct", PolymorphModule };
 
         public static AbilityManager Instance
         {
@@ -273,6 +273,14 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Polymorphed: "unable to access their inventory, abilities or consumables". The client
+            // locks its own UI; this is the server holding to it. Polymorph itself still ends it.
+            if (IsMorphed(player) && action.Module != PolymorphModule)
+            {
+                Fail(client, actionId, level, PlayerMessage.PmCannotPerformActionNow);
+                return;
+            }
+
             if (player.ActionReuseUntil.TryGetValue(actionId, out var readyAt) && readyAt > Environment.TickCount64)
             {
                 Fail(client, actionId, level, PlayerMessage.PmCannotPerformActionNow);
@@ -424,7 +432,7 @@ namespace Rasa.Managers
         /// <summary>Whether this server knows how to apply the ability; see the class remarks.</summary>
         private static bool CanResolve(ActionInfo action, ActionLevelInfo info)
         {
-            return action.Module == "abilities.sprint" || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
+            return action.Module == "abilities.sprint" || action.Module == PolymorphModule || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
         }
 
         /// <summary>
@@ -552,6 +560,12 @@ namespace Rasa.Managers
             // The charge has arrived: the blow lands from where it ends.
             if (actionInfo.Module == RushingBlowModule)
                 FinishCharge(player);
+
+            if (actionInfo.Module == PolymorphModule)
+            {
+                ResolvePolymorph(mapChannel, client, player, info, action);
+                return;
+            }
 
             if (actionInfo.Module == "abilities.sprint")
             {

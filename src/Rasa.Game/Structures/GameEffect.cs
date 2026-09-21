@@ -290,6 +290,12 @@ namespace Rasa.Structures
         /// </summary>
         public Action<MapChannel, Actor, GameEffect> OnExpired { get; set; }
 
+        /// <summary>
+        /// Called once it has come off, however it ended - expired, detached on request, replaced,
+        /// or cleared as its holder left the map (mapChannel null then if there was none).
+        /// </summary>
+        public Action<MapChannel, Actor, GameEffect> OnDetached { get; set; }
+
         /// <summary>The player whose finisher is winding up on this CRIT_PREDEATH_EFFECT; 0 while nobody has claimed it.</summary>
         public ulong FinisherId { get; set; }
 

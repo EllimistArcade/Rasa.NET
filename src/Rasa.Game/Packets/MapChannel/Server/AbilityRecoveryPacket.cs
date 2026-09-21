@@ -26,7 +26,7 @@ namespace Rasa.Packets.MapChannel.Server
     /// </summary>
     public class AbilityRecoveryPacket : ServerPythonPacket
     {
-        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists }
+        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists, TypeIds }
 
         public override GameOpcode Opcode { get; } = GameOpcode.PerformRecovery;
 
@@ -46,6 +46,12 @@ namespace Rasa.Packets.MapChannel.Server
         /// </summary>
         public List<ulong> ReviveIds { get; } = new List<ulong>();
         public List<ulong> EffectIds { get; } = new List<ulong>();
+
+        /// <summary>
+        /// For HitDataKind.TypeIds: hitdata is a plain list of gameeffectdata ids, which
+        /// PolymorphAction.DoAbility announces on the performer one by one.
+        /// </summary>
+        public List<int> TypeIds { get; } = new List<int>();
 
         public AbilityRecoveryPacket(ActionId actionId, uint actionArgId, HitDataKind kind)
         {
@@ -82,6 +88,16 @@ namespace Rasa.Packets.MapChannel.Server
 
                 foreach (var entityId in EffectIds)
                     pw.WriteULong(entityId);
+
+                return;
+            }
+
+            if (Kind == HitDataKind.TypeIds)
+            {
+                pw.WriteList(TypeIds.Count);
+
+                foreach (var typeId in TypeIds)
+                    pw.WriteInt(typeId);
 
                 return;
             }

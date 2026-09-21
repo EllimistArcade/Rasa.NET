@@ -262,6 +262,8 @@ namespace Rasa.Managers
             // Back in sight, unless something else is still hiding them.
             if (gameEffect.Hides && actor is Manifestation seen && !Detection.IsHidden(seen))
                 Detection.Reveal(mapChannel, seen);
+
+            gameEffect.OnDetached?.Invoke(mapChannel, actor, gameEffect);
         }
 
         /// <summary>
@@ -280,7 +282,9 @@ namespace Rasa.Managers
         /// </summary>
         public void ClearEffects(MapChannel mapChannel, Actor actor)
         {
-            foreach (var effect in actor.ActiveEffects.Values.ToList())
+            var cleared = actor.ActiveEffects.Values.ToList();
+
+            foreach (var effect in cleared)
             {
                 foreach (var child in effect.Children.ToList())
                     if (child.Holder != null && mapChannel != null)
@@ -299,6 +303,9 @@ namespace Rasa.Managers
             actor.ActiveEffects.Clear();
             actor.MovementSpeed = 1.0d;
             mapChannel?.ActorsWithEffects.Remove(actor);
+
+            foreach (var effect in cleared)
+                effect.OnDetached?.Invoke(mapChannel, actor, effect);
         }
 
         #endregion

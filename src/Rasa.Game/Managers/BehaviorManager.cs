@@ -116,11 +116,16 @@ namespace Rasa.Managers
             {
                 foreach (var client in cell.ClientList)
                 {
-                    // Cell lists can hold a client whose character is already gone.
-                    if (!attacksPlayers || client.Player == null)
+                    // Cell lists can hold a client whose character is already gone. AFS creatures
+                    // leave players alone - unless Polymorph has made the player one of the Bane.
+                    if (client.Player == null || (!attacksPlayers && client.Player.MorphFaction != Factions.Bane))
                         continue;
 
                     if (client.Player.GmFlagAlwaysFriendly)
+                        continue;
+
+                    // Polymorphed into one of its own faction: not an enemy to it.
+                    if (client.Player.MorphFaction == creature.Faction)
                         continue;
 
                     if (client.Player.Attributes[Attributes.Health].Current <= 0)

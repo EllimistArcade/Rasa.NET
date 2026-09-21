@@ -43,7 +43,7 @@ namespace Rasa.Structures
         {
             ClassId = classId;
             ClassName = className;
-            MeshId = MeshId;
+            MeshId = (int)meshId;
             ClassCollisionRole = classCollisionRole;
             Augmentations = augList;
             TargetFlag = targetFlag;

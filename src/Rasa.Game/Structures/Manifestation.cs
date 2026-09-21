@@ -92,6 +92,12 @@ namespace Rasa.Structures
         /// measuring the client's next Move from wherever the player used to be, which reads as
         /// one enormous step and refuses a move nobody made.
         /// </summary>
+        /// <summary>Polymorph: the creature weapon the player fires while morphed; null when they are themselves.</summary>
+        public Item MorphWeapon { get; set; }
+
+        /// <summary>Polymorph: the faction the player counts as while morphed ("including their faction"); null for their own.</summary>
+        public Data.Factions? MorphFaction { get; set; }
+
         public void PlaceAt(Vector3 position)
         {
             Position = position;

@@ -38,8 +38,22 @@ namespace Rasa.Managers
     /// release is and how long a charge can build are not in anything we have, so they are a
     /// choice: half of what the beam did before resistance, over at most MaxChargePulses pulses.
     /// Moving the beam to another target starts the charge again, and a target that died or left
-    /// takes the charge with it. Machine guns and flamethrowers have constant-fire effects of
-    /// their own (CF_MACHINEGUN_EFFECT and the rest) and are still fired as single shots.
+    /// takes the charge with it.
+    ///
+    /// The propellant gun (WEAPON_FLAMETHROWER 140, CF_PROPELLANT_EFFECT 109, FX at levels 2, 3,
+    /// 4, 5 and 7) does "damage to targets in a cone in front of the user" (Propellant Guns,
+    /// uielement 1214), and a cone weapon cannot lock onto a target (uielement 5374): its
+    /// FlamethrowerAttack has no splat, and the client aims it with the shooter's yaw. So a
+    /// pulse hits every hostile creature within PropellantRange of the shooter and ConeHalfAngleOf
+    /// degrees either side of the way they face, each with its own crit roll and resistance, all
+    /// listed as shots of the one pulse. The range is the action's own (maxRange 10 on every
+    /// (140, arg) row); the angle is the weapon's ae_radius when its ae_type is CONE and it is
+    /// more than the placeholder 1, and otherwise 45 - the most common CONE_RADIUS in the
+    /// abilities' data, which the client draws the same way it draws a weapon's aeRadius. The
+    /// pool the propellant leaves (PROPELLANT_POOL_EFFECT 10000047, with FX for each damage type)
+    /// and PROPELLANT_PUMP_EFFECT 10000046 have no numbers or behaviour in the client and are
+    /// not done. Machine guns have constant-fire effects of their own (CF_MACHINEGUN_EFFECT and
+    /// the rest) and are still fired as single shots.
     ///
     /// The server's auto-fire timer is what drives it: each refire the timer's shot comes here
     /// instead of MissileManager, the first one attaching the effect; StopAutoFire, a shot that
@@ -52,6 +66,19 @@ namespace Rasa.Managers
     {
         public const int DensityGunTypeId = 94;             // CF_DENSITY_GUN_EFFECT
         public const int PolarityGunTypeId = 239;           // CF_POLARITYGUN_EFFECT
+        public const int PropellantTypeId = 109;            // CF_PROPELLANT_EFFECT
+
+        /// <summary>The propellant gun's reach: maxRange 10 on every WEAPON_FLAMETHROWER row of actionArguments.</summary>
+        public const float PropellantRange = 10f;
+
+        /// <summary>Allowance on the range for positions a tick old, as the abilities allow.</summary>
+        public const float RangeSlack = 2.5f;
+
+        /// <summary>Degrees either side of the aim, when the weapon has no cone of its own.</summary>
+        public const float DefaultConeHalfAngle = 45f;
+
+        /// <summary>aetypes.CONE.</summary>
+        public const uint AeCone = 3;
 
         /// <summary>The polarity gun's release: this percent of the beam damage the target was charged with.</summary>
         public const int ReleasePercent = 50;
@@ -85,10 +112,28 @@ namespace Rasa.Managers
         /// <summary>Whether this weapon fires constantly rather than shot by shot.</summary>
         public static bool Handles(WeaponClassInfo weapon) => weapon != null && IsConstantFire(weapon.WeaponAttackActionId);
 
-        public static bool IsConstantFire(ActionId actionId) => actionId == ActionId.WeaponDensitygun || actionId == ActionId.WeaponPolaritygun;
+        public static bool IsConstantFire(ActionId actionId) =>
+            actionId == ActionId.WeaponDensitygun || actionId == ActionId.WeaponPolaritygun || actionId == ActionId.WeaponFlamethrower;
 
         /// <summary>The constant-fire effect an attack action plays.</summary>
-        public static int EffectTypeOf(ActionId actionId) => actionId == ActionId.WeaponPolaritygun ? PolarityGunTypeId : DensityGunTypeId;
+        public static int EffectTypeOf(ActionId actionId)
+        {
+            switch (actionId)
+            {
+                case ActionId.WeaponPolaritygun:
+                    return PolarityGunTypeId;
+                case ActionId.WeaponFlamethrower:
+                    return PropellantTypeId;
+                default:
+                    return DensityGunTypeId;
+            }
+        }
+
+        /// <summary>Degrees either side of the aim a cone weapon reaches: its own CONE radius when it has a real one, DefaultConeHalfAngle otherwise.</summary>
+        public static float ConeHalfAngleOf(WeaponInfo weaponInfo)
+        {
+            return weaponInfo != null && weaponInfo.AeType == AeCone && weaponInfo.AeRadius > 1 ? weaponInfo.AeRadius : DefaultConeHalfAngle;
+        }
 
         /// <summary>
         /// A polarity charge after one more beam hit of amount on targetId: the same target adds
@@ -148,8 +193,17 @@ namespace Rasa.Managers
 
             tick.Pulses.Add(pulse);
 
-            if (ResolveTarget(mapChannel, player) is Creature target)
+            // A propellant gun sprays the cone in front of the shooter; the others hit what they aim at.
+            var targets = session.ActionId == ActionId.WeaponFlamethrower
+                ? AbilityManager.HostilesInCone(mapChannel, player, AbilityManager.FacingOf(player), PropellantRange + RangeSlack,
+                    ConeHalfAngleOf(weapon.ItemTemplate.WeaponInfo))
+                : ResolveTarget(mapChannel, player) is Creature aimed ? new List<Creature> { aimed } : new List<Creature>();
+
+            foreach (var target in targets)
             {
+                if (target.State == CharacterState.Dead || target.State == CharacterState.Dying)
+                    continue;
+
                 var rolled = damage;
                 var crit = CriticalHits.Resolve(player, target, false, CriticalHits.AttackerChance(player, false, critBonus), ref rolled);
                 var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted, damageType);
@@ -170,7 +224,7 @@ namespace Rasa.Managers
 
                 if (leech)
                     Leech(mapChannel, player, landed, tick);
-                else
+                else if (session.ActionId == ActionId.WeaponPolaritygun)
                     (session.ChargeTargetId, session.Charge, session.ChargePulses) =
                         AddCharge(session.ChargeTargetId, session.Charge, session.ChargePulses, target.EntityId, rolled);
             }

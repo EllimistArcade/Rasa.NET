@@ -779,6 +779,16 @@ namespace Rasa.Managers
             // Launchers on a grenade launcher: a chance to stun ("Grenades: +25% Stun Chance" from pump 3).
             var grenades = skillId == WeaponSkills.Launchers && weapon.ItemTemplate.WeaponInfo.ToolType == ToolType.GrenadeLauncher;
 
+            // A constant-fire weapon (the leech gun) is not fired as a missile: this interval of
+            // the fire is a tick of the effect on the shooter (ConstantFire).
+            if (ConstantFire.Handles(weaponClassInfo))
+            {
+                ConstantFire.Pulse(client.Player.MapChannel, client, weapon, action, damage,
+                    WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType), critBonus);
+
+                return FireResult.Fired;
+            }
+
             MissileManager.Instance.MissileLaunch(client.Player.MapChannel, action, damage, WeaponSkills.ArmorBypassPercent(skillId, pump),
                 WeaponDamageType(client.Player, (DamageType)weaponClassInfo.DamageType), critBonus,
                 stunChance: grenades ? Stuns.GrenadeChance(pump) : 0, stunMs: grenades ? Stuns.GrenadeStunMs : 0,
@@ -1227,6 +1237,9 @@ namespace Rasa.Managers
             ActorManager.Instance.RequestVisualCombatMode(client, false);
 
             RemoveAutoFire(client);
+
+            // The trigger let go: a constant fire stops with it.
+            ConstantFire.Stop(client);
         }
 
         #endregion
@@ -1349,6 +1362,7 @@ namespace Rasa.Managers
                     || InventoryManager.Instance.CurrentWeapon(timer.Client) == null)
                 {
                     AutoFire.RemoveAt(i);
+                    ConstantFire.Stop(timer.Client);
                     continue;
                 }
 
@@ -1364,11 +1378,16 @@ namespace Rasa.Managers
                     // that could not be fired is dropped instead, and costs only itself.
                     try
                     {
-                        PlayerTryFireWeapon(timer.Client);
+                        // A constant fire that cannot go on - out of ammo, jammed, too hot -
+                        // comes off, so the client stops charging and can reload; a shot merely
+                        // early leaves it running.
+                        if (TryFireWeapon(timer.Client) == FireResult.NotFired)
+                            ConstantFire.Stop(timer.Client);
                     }
                     catch (Exception e)
                     {
                         AutoFire.RemoveAt(i);
+                        ConstantFire.Stop(timer.Client);
 
                         Logger.WriteLog(LogType.Error, $"Auto-fire for entity {timer.Client.Player?.EntityId} threw and was stopped: {e}");
 
@@ -2002,6 +2021,7 @@ namespace Rasa.Managers
             // fire stayed in the auto-fire list; once its items were destroyed CurrentWeapon
             // was null, and the next tick dereferenced it on the main loop.
             RemoveAutoFire(client);
+            ConstantFire.Stop(client);
         }
 
         public void RemoveAppearanceItem(Client client, EquipmentData equipmentSlotId)

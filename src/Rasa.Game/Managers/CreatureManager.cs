@@ -132,6 +132,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A reality ripper destroyed: it closes and lets everything go.
+            if (creature.IsScripted && AbilityManager.IsRealityRipper(creature))
+            {
+                AbilityManager.Instance.RealityRipperKilled(mapChannel, creature);
+                return;
+            }
+
             // kill creature
             var stateIds = new List<CharacterState> { CharacterState.Dead };
 

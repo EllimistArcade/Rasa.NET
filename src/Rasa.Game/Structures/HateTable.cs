@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -23,6 +23,27 @@ namespace Rasa.Structures
 
             lock (_lock)
                 _hate[entityId] = (_hate.TryGetValue(entityId, out var hate) ? hate : 0) + amount;
+        }
+
+        /// <summary>
+        /// Moves up to amount of the hate held for one actor onto another (Reality Ripper's hate
+        /// transfer). The first keeps what is left and stays on the table.
+        /// </summary>
+        public void Move(ulong from, ulong to, double amount)
+        {
+            if (from == 0 || to == 0 || from == to || amount <= 0 || double.IsNaN(amount))
+                return;
+
+            lock (_lock)
+            {
+                if (!_hate.TryGetValue(from, out var held) || held <= 0)
+                    return;
+
+                var moved = Math.Min(held, amount);
+
+                _hate[from] = held - moved;
+                _hate[to] = (_hate.TryGetValue(to, out var hate) ? hate : 0) + moved;
+            }
         }
 
         /// <summary>Makes sure an actor is on the table at all, with at least this much.</summary>

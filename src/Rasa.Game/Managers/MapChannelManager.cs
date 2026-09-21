@@ -208,6 +208,9 @@ namespace Rasa.Managers
                     // Crab Mines: seeking, running, going off.
                     AbilityManager.Instance.CrabMineWorker(mapChannel);
 
+                    // Reality Ripper: taking creatures in, and closing.
+                    AbilityManager.Instance.RealityRipperWorker(mapChannel);
+
                     ActorActionManager.Instance.DoWork(mapChannel, delta);
                     MissileManager.Instance.DoWork(mapChannel, delta);
                     BehaviorManager.Instance.MapChannelThink(mapChannel, delta);

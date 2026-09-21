@@ -23,8 +23,12 @@
             pw.WriteList(Missile.Args.HitEntities.Count);    // Hits
             foreach (var entity in Missile.Args.HitEntities)
                 pw.WriteULong(entity);
-            pw.WriteList(0);                // misses
-            pw.WriteList(0);                // misses data
+            pw.WriteList(Missile.Args.MisstEntities.Count);  // misses
+            foreach (var entity in Missile.Args.MisstEntities)
+                pw.WriteULong(entity);
+            pw.WriteList(Missile.Args.Missdata.Count);       // missdata: a misstype for each miss
+            foreach (var missType in Missile.Args.Missdata)
+                pw.WriteUInt(missType);
             pw.WriteList(Missile.Args.HitData.Count);
             foreach (var hit in Missile.Args.HitData)
             {

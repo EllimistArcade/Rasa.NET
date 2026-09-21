@@ -170,6 +170,12 @@ namespace Rasa.Managers
         private readonly Random _random = new Random();
 
         /// <summary>
+        /// misstype 4: WEAPON_STAFF_PARRY on the one missed and PM_COMBAT_DEFLECT - a staff
+        /// deflecting the hit (3 is the same parry with "Parry", 2 a dodge, 1 a plain miss).
+        /// </summary>
+        public const uint MissTypeDeflect = 4;
+
+        /// <summary>
         /// A hit that left its creature alive: the stuns, knockback, slow and freeze it carries (an
         /// Ice, Sonic or Virulent crit, Hand to Hand, a grenade, a net gun), then whether the creature is now stunned and near death, which opens
         /// its Critical Death window. Returns whether the window opened.
@@ -551,6 +557,18 @@ namespace Rasa.Managers
             // left the map (or the world) since.
             if (missile.TargetEntityId != 0 && !IsOnMap(mapChannel, missile.TargetActor))
                 targetType = 0;
+
+            // A staff drawn may deflect it (Staff, from pump 3): no damage at all, and the clients
+            // are told it as a miss of misstype 4 - the staff parry animation and "Deflect".
+            if (targetType == EntityType.Character && missile.TargetActor is Manifestation defender
+                && ManifestationManager.DeflectsWithStaff(defender))
+            {
+                missile.Args.MisstEntities.Add(missile.TargetEntityId);
+                missile.Args.Missdata.Add(MissTypeDeflect);
+
+                CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
+                return;
+            }
 
             // The crit comes first, before resistance, shields or armour take their share of it.
             if (targetType == EntityType.Creature || targetType == EntityType.Character)

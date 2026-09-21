@@ -249,6 +249,24 @@ namespace Rasa.Managers
         private const float MeleeRangeSlack = 2.5f;
 
         /// <summary>The weapon skill an item is used under: its template's skill requirement, 0 for none.</summary>
+        /// <summary>
+        /// Whether a weapon hit on this player is deflected by the staff they hold drawn: "Deflect
+        /// Chance: +5%" at Staff pump 3, +10% at 4, +15% at 5. Nothing in the client says a staff
+        /// has to be drawn to deflect; one slung on the back parrying is what would need saying.
+        /// </summary>
+        public static bool DeflectsWithStaff(Manifestation player)
+        {
+            if (player == null || !player.WeaponReady)
+                return false;
+
+            var weapon = EntityManager.Instance.GetItem(player.Inventory.EquippedInventory[13]);
+
+            if (WeaponSkillOf(weapon) != WeaponSkills.Staff)
+                return false;
+
+            return Stuns.Roll(WeaponSkills.StaffDeflectChance(SkillPump(player, WeaponSkills.Staff)));
+        }
+
         public static int WeaponSkillOf(Item weapon)
         {
             return weapon?.ItemTemplate?.EquipableInfo?.SkillId ?? 0;
@@ -752,7 +770,13 @@ namespace Rasa.Managers
             var skillId = WeaponSkillOf(weapon);
             var pump = SkillPump(client.Player, skillId);
 
-            damage = GameEffectManager.ApplyDamageDealt(client.Player, damage, WeaponSkills.DamagePercent(skillId, pump));
+            // A blade from behind: "Backstab Damage: +100%" from pump 3, added to the rest.
+            var backstab = skillId == WeaponSkills.Blades && WeaponSkills.BladesBackstabPercent(pump) > 0
+                && Facing.CanBackstab(client.Player, EntityManager.Instance.GetActor(client.Player.Target))
+                ? WeaponSkills.BladesBackstabPercent(pump)
+                : 0;
+
+            damage = GameEffectManager.ApplyDamageDealt(client.Player, damage, WeaponSkills.DamagePercent(skillId, pump) + backstab);
             var action = new ActionData(client.Player, weaponClassInfo.WeaponAttackActionId, weaponClassInfo.WeaponAttackArgId, client.Player.Target, 0);
             // launch correct missile type depending on weapon type
             // Where the bead was when the trigger was pulled, before this shot's recoil opens it.

@@ -33,13 +33,27 @@ namespace Rasa.Data
     /// (FirearmsShotgunKnockbackChance): the weapon's own KB_CHANCE is a weapon property that
     /// survives in nothing we have, so the skill's figure is the whole chance.
     ///
-    /// Not here, because nothing on the server yet does what they modify: Staff deflect, Blades
-    /// backstab, Leech Guns' conversion to health.
+    /// Staff deflects +5/10/15% of the weapon hits on whoever holds one drawn
+    /// (StaffDeflectChance), and Blades hit +100/150/200% harder from behind
+    /// (BladesBackstabPercent, Managers.Facing). The leech guns' conversion to health is
+    /// Managers.ConstantFire.
     /// </summary>
     public static class WeaponSkills
     {
         // skilldata ids.
         public const int Firearms = 1;
+
+        /// <summary>"Deflect Chance: +5%", +10%, +15% - by Staff pump.</summary>
+        private static readonly int[] StaffDeflectByPump = { 0, 0, 0, 5, 10, 15 };
+
+        /// <summary>"Backstab Damage: +100%", +150%, +200% - by Blades pump.</summary>
+        private static readonly int[] BladesBackstabByPump = { 0, 0, 0, 100, 150, 200 };
+
+        /// <summary>The chance, in percent, that a weapon hit on someone holding a staff drawn is deflected, at their Staff pump.</summary>
+        public static int StaffDeflectChance(int pump) => StaffDeflectByPump[Math.Max(0, Math.Min(5, pump))];
+
+        /// <summary>The percent a blade hit from behind adds to its damage, at the attacker's Blades pump.</summary>
+        public static int BladesBackstabPercent(int pump) => BladesBackstabByPump[Math.Max(0, Math.Min(5, pump))];
 
         /// <summary>"Shotguns: +15% Knockback chance", +20%, +25% - by pump.</summary>
         private static readonly int[] FirearmsShotgunKnockbackByPump = { 0, 0, 0, 15, 20, 25 };

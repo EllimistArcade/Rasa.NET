@@ -146,10 +146,10 @@ namespace Rasa.Managers
                 return;
             }
 
-            // Killed by something a player put down - a trap's shot: the kill is that player's,
-            // experience, adrenaline, loot and harvest rights alike. The shot stays the trap's for
-            // threat, which is the point of it.
-            if (killedBy is Creature planted && planted.IsScripted && planted.MasterEntityId != 0
+            // Killed by something fighting for a player - a trap's shot, a creature turned by
+            // Traitor, a minion: the kill is that player's, experience, adrenaline, loot and
+            // harvest rights alike. The blow stays the creature's for threat.
+            if (killedBy is Creature planted && planted.MasterEntityId != 0
                 && EntityManager.Instance.Players.TryGetValue(planted.MasterEntityId, out var master)
                 && master.MapContextId == creature.MapContextId)
                 killedBy = master;

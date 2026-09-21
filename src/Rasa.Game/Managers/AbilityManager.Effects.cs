@@ -98,6 +98,19 @@ namespace Rasa.Managers
                     break;
                 }
 
+                case TraitorModule:
+                {
+                    var target = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
+
+                    if (target != null && AttachTraitor(mapChannel, player, target, info))
+                    {
+                        ManifestationManager.Instance.EnterCombat(client);
+                        Hit(recovery, target);
+                    }
+
+                    break;
+                }
+
                 case "abilities.cloakwave":
                     CloakWave(mapChannel, player, info, recovery);
                     break;

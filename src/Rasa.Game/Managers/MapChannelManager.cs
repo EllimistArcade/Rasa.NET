@@ -248,6 +248,9 @@ namespace Rasa.Managers
 
                         // Cadaver Immolation: the bodies whose delay is up.
                         AbilityManager.Instance.CorpseWorker(mapChannel);
+
+                        // Tactical Evasion: the smoke screens, and the marks a retreat goes back to.
+                        AbilityManager.Instance.SmokeWorker(mapChannel);
                     }
 
                     // a second's health, armour, power and chi for everyone here

@@ -161,6 +161,17 @@ namespace Rasa.Managers
 
             if (effect.ChangesRegen)
                 SyncRegen(mapChannel, actor);
+
+            // Out of sight: after the attach has gone out, so that the clients about to lose the
+            // entity have been told what is on it first, and their own copy of the player goes
+            // with the cloak's own visuals rather than before them.
+            if (effect.Hides && actor is Manifestation hidden)
+                Detection.Hide(mapChannel, hidden);
+
+            // Blinded: it drops what it was fighting, and the scan will pass over everything
+            // until this wears off.
+            if (effect.Blinds && actor is Creature blinded)
+                BehaviorManager.Instance.StopFighting(blinded);
         }
 
         /// <summary>
@@ -247,6 +258,10 @@ namespace Rasa.Managers
 
             if (gameEffect.ChangesRegen)
                 SyncRegen(mapChannel, actor);
+
+            // Back in sight, unless something else is still hiding them.
+            if (gameEffect.Hides && actor is Manifestation seen && !Detection.IsHidden(seen))
+                Detection.Reveal(mapChannel, seen);
         }
 
         /// <summary>
@@ -742,6 +757,20 @@ namespace Rasa.Managers
                     modifier *= effect.AttackRateModifier;
 
             return modifier;
+        }
+
+        /// <summary>Ranged damage landing on the actor after the smoke screens on it: amount x (100 - the sum) / 100, never below 0.</summary>
+        public static int ApplyIncomingRanged(Actor actor, int amount)
+        {
+            var percent = 0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                percent += effect.IncomingRangedPercent;
+
+            if (percent <= 0 || amount <= 0)
+                return amount;
+
+            return Math.Max(0, amount * Math.Max(0, 100 - percent) / 100);
         }
 
         /// <summary>Percent added to the actor's chance of a critical hit by the effects on them (Crit Wave).</summary>

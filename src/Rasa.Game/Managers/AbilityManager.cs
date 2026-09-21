@@ -85,7 +85,8 @@ namespace Rasa.Managers
             "abilities.damageconversion", "abilities.critwave", "abilities.painttarget", "abilities.polarityfield",
             "abilities.controlledfission", "abilities.explodingnanites", "abilities.disease", "abilities.firesupport",
             "abilities.selfdestruct", "abilities.scatterbombs", "abilities.calledshot", "abilities.feedback",
-            "abilities.reflection", "abilities.conversion", "abilities.corpseexplode", "abilities.cure"
+            "abilities.reflection", "abilities.conversion", "abilities.corpseexplode", "abilities.cure",
+            "abilities.cloakwave", "abilities.tacticalevasion"
         };
 
         /// <summary>

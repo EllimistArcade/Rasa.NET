@@ -98,6 +98,14 @@ namespace Rasa.Managers
                     break;
                 }
 
+                case "abilities.cloakwave":
+                    CloakWave(mapChannel, player, info, recovery);
+                    break;
+
+                case "abilities.tacticalevasion":
+                    TacticalEvasion(mapChannel, client, player, info, recovery);
+                    break;
+
                 case "abilities.cure":
                     recovery = Cure(mapChannel, player, action, info);
                     break;

@@ -105,6 +105,10 @@ namespace Rasa.Managers
             var foundEntity_distance = range + 100.0f; // value that is guaranteed to be higher than the found creature
             var foundEntity_entityId = 0ul;
 
+            // Blinded (Tactical Evasion's mag flash): it notices nobody at all.
+            if (Detection.IsBlind(creature))
+                return false;
+
             // AFS do not attack AFS
             var attacksPlayers = creature.Faction != Factions.AFS;
 
@@ -120,6 +124,10 @@ namespace Rasa.Managers
                         continue;
 
                     if (client.Player.Attributes[Attributes.Health].Current <= 0)
+                        continue;
+
+                    // Cloaked (Cloak Wave): it cannot be noticed however close it stands.
+                    if (Detection.IsHidden(client.Player))
                         continue;
 
                     // check distance so creature attack closes target
@@ -477,6 +485,13 @@ namespace Rasa.Managers
                     if (player.Attributes[Attributes.Health].Current <= 0 || player.State == CharacterState.Dead)
                     {
                         SetActionWander(creature);
+                        return;
+                    }
+
+                    // Out of sight, cloaked or because this creature has been blinded: lost.
+                    if (!Detection.CanSee(creature, player))
+                    {
+                        StopFighting(creature);
                         return;
                     }
 
@@ -905,6 +920,18 @@ namespace Rasa.Managers
 
             Logger.WriteLog(LogType.AI, $"path 0{creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[0]}");
             Logger.WriteLog(LogType.AI, $"path 1{creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[1]}");
+        }
+
+        /// <summary>
+        /// The creature gives up whatever it was fighting - it died, left, or went out of sight
+        /// (Detection) - and goes back to wandering.
+        /// </summary>
+        public void StopFighting(Creature creature)
+        {
+            if (creature.Controller == null)
+                return;
+
+            SetActionWander(creature);
         }
 
         private void SetActionWander(Creature creature)

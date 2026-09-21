@@ -1396,6 +1396,11 @@ namespace Rasa.Managers
                 if (tempClient == client)
                     continue;
 
+                // Cloaked, and this one is not in their squad: they are not there as far as this
+                // client is concerned, and will be created when the cloak ends.
+                if (Detection.IsHiddenFrom(player, tempClient))
+                    continue;
+
                 tempClient.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(player.EntityId, player.EntityClass, CreatePlayerEntityData(client)));
 
             }
@@ -1414,6 +1419,11 @@ namespace Rasa.Managers
                     continue;
 
                 if (tempClient == client)
+                    continue;
+
+                // As above, the other way round: a cloaked player is not introduced to one who is
+                // not in their squad.
+                if (Detection.IsHiddenFrom(tempClient.Player, client))
                     continue;
 
                 client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(tempClient.Player.EntityId, tempClient.Player.EntityClass, CreatePlayerEntityData(tempClient)));

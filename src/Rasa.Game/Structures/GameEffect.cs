@@ -106,6 +106,29 @@ namespace Rasa.Structures
         /// <summary>No debuff may be attached to the holder while it is on (Cure P4, "Protect from Debuffs").</summary>
         public bool BlocksDebuffs { get; set; }
 
+        #region Seeing and being seen
+
+        /// <summary>
+        /// The holder cannot be seen while it is on (Cloak Wave): creatures do not notice them,
+        /// lose them if they were fighting them, and players outside their squad are not told
+        /// they are there. Managers.Detection keeps it.
+        /// </summary>
+        public bool Hides { get; set; }
+
+        /// <summary>
+        /// The holder cannot see while it is on (Tactical Evasion's mag flash): a creature drops
+        /// whatever it was fighting and notices nobody until it wears off.
+        /// </summary>
+        public bool Blinds { get; set; }
+
+        /// <summary>
+        /// Percent taken off ranged damage landing on the holder (Tactical Evasion's smoke
+        /// screen, "Incoming ranged damage reduced by X%"); melee is unaffected.
+        /// </summary>
+        public int IncomingRangedPercent { get; set; }
+
+        #endregion
+
         /// <summary>Percent of every hit on the holder that goes past its armour straight to health (Target Painting).</summary>
         public int ArmorPiercePercent { get; set; }
 

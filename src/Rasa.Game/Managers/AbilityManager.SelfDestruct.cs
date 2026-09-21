@@ -95,6 +95,10 @@ namespace Rasa.Managers
             // Conversion turns what the hit took into healing for the squad.
             ConvertDamage(mapChannel, player, damage);
 
+            // Being hit gives a cloaked player away.
+            if (damage > 0)
+                Stealth.Break(mapChannel, player);
+
             var bomb = player.ActiveEffects.Values.FirstOrDefault(e => e.TypeId == SelfDestructBombTypeId && e.ReturnTo.HasValue && !e.IsExpired);
 
             if (bomb == null)

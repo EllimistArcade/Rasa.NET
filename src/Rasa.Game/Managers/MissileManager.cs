@@ -249,6 +249,11 @@ namespace Rasa.Managers
             EnterCombat(actor);
             EnterCombat(missile.Source);
 
+            // A smoke screen takes its share off a shot before anything else: "Incoming ranged
+            // damage reduced by X%", and melee walks through it.
+            if (!missile.IsMelee)
+                missile.DamageA = GameEffectManager.ApplyIncomingRanged(actor, missile.DamageA);
+
             // What the effects on the victim resist comes off first (Rage, Resistance, Sacrifice,
             // Base Wave), and off the missile too, since the recovery packet reports its DamageA
             // as the amount that landed.
@@ -523,6 +528,10 @@ namespace Rasa.Managers
             missile.IsAbility = false;
 
             CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformWindupPacket(PerformType.ThreeArgs, missile.ActionId, missile.ActionArgId, missile.TargetEntityId));
+
+            // Firing gives a cloaked shooter away, whoever they were shooting at.
+            if (action.Actor is Manifestation shooter)
+                Stealth.Break(mapChannel, shooter);
 
             mapChannel.QueuedMissiles.Add(missile);
         }

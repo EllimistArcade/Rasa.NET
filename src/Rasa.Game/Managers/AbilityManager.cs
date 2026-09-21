@@ -330,7 +330,16 @@ namespace Rasa.Managers
                     return;
                 }
 
-                if (target.State == CharacterState.Dead)
+                // A corpse ability (canTargetDead) wants the body; everything else, the living.
+                if (CorpseModules.Contains(action.Module))
+                {
+                    if (!IsUsableCorpse(target))
+                    {
+                        Fail(client, actionId, level, PlayerMessage.PmTargetInvalid);
+                        return;
+                    }
+                }
+                else if (target.State == CharacterState.Dead)
                 {
                     Fail(client, actionId, level, PlayerMessage.PmActionFailedTargetDead);
                     return;
@@ -443,6 +452,7 @@ namespace Rasa.Managers
         private static bool CanResolve(ActionInfo action, ActionLevelInfo info)
         {
             return action.Module == "abilities.sprint" || action.Module == PolymorphModule || action.Module == CrabMinesModule || action.Module == RealityRipperModule || action.Module == TrapModule || action.Module == TurretModule
+                || action.Module == HortimonculusModule
                 || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
         }
 
@@ -583,6 +593,12 @@ namespace Rasa.Managers
             {
                 PlantTrap(mapChannel, player, info, action);
                 CellManager.Instance.CellCallMethod(mapChannel, player, new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
+                return;
+            }
+
+            if (actionInfo.Module == HortimonculusModule)
+            {
+                GrowHortimonculus(mapChannel, player, info, action);
                 return;
             }
 

@@ -199,6 +199,9 @@ namespace Rasa.Managers
                 case DynamicObjectType.Kraftwerks:
                     KraftwerksManager.Instance.Use(client, obj, packet.ActionArgId);
                     break;
+                case DynamicObjectType.Hortimonculus:
+                    AbilityManager.Instance.RequestUseHortimonculus(client, obj, packet);
+                    break;
                 case DynamicObjectType.DropshipPad:
                     // The hovering ship is a two-state switch to the client, so it offers a use;
                     // there is nothing to do with one - the pad works by walking into the beam.
@@ -372,6 +375,10 @@ namespace Rasa.Managers
                 entityData.Add(new LockInfoPacket(dynamicObject.Lock));
 
             client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(dynamicObject.EntityId, dynamicObject.EntityClassId, entityData));
+
+            // A Hortimonculus plant: its owner and its hit points.
+            if (dynamicObject.DynamicObjectType == DynamicObjectType.Hortimonculus)
+                AbilityManager.ShowPlantTo(client, dynamicObject);
         }
 
         internal void CellDiscardDynamicObjectToClients(ulong entityId, List<Client> clients)

@@ -19,13 +19,16 @@ namespace Rasa.Packets.MapChannel.Server
     ///  - StormEffect.OnTick(target, dotData, arcData): lightning P5's storm - dotData announced
     ///    as damage on the holder, arcData ([(targetId, rawInfo)]) floated and drawn as arcs from it.
     ///  - TrapDeathEffect.OnTick(target, killerId): the one who destroyed the trap.
+    ///  - HortimonculusSourceEffect.OnTick(target, buffIds, healData): the squad members newly
+    ///    given HORTIMONCULUS_BUFF (announced as its attach on each), then [(targetId, amount)]
+    ///    healed by the plant, announced as healing from it.
     ///  - BaseGameEffect.OnTick(target): nothing but the tick marker on the effect's FX.
     ///
     /// Kind picks the shape. Entries is empty for the bare tick.
     /// </summary>
     public class GameEffectTickPacket : ServerPythonPacket
     {
-        public enum TickKind { Bare, Damage, Heal, EntityIds, Storm, EntityId }
+        public enum TickKind { Bare, Damage, Heal, EntityIds, Storm, EntityId, Hortimonculus }
 
         public override GameOpcode Opcode { get; } = GameOpcode.GameEffectTick;
 
@@ -36,6 +39,9 @@ namespace Rasa.Packets.MapChannel.Server
         /// <summary>For TickKind.Storm: the arcs, written after Entries (the damage on the holder).</summary>
         public List<TickEntry> ArcEntries { get; } = new List<TickEntry>();
 
+        /// <summary>For TickKind.Hortimonculus: the buffIds, written before Entries (the healing).</summary>
+        public List<ulong> BuffIds { get; } = new List<ulong>();
+
         public GameEffectTickPacket(int effectId, TickKind kind)
         {
             EffectId = effectId;
@@ -44,7 +50,7 @@ namespace Rasa.Packets.MapChannel.Server
 
         public override void Write(PythonWriter pw)
         {
-            pw.WriteTuple(Kind == TickKind.Bare ? 1 : Kind == TickKind.Storm ? 3 : 2);
+            pw.WriteTuple(Kind == TickKind.Bare ? 1 : Kind == TickKind.Storm || Kind == TickKind.Hortimonculus ? 3 : 2);
             pw.WriteInt(EffectId);
 
             if (Kind == TickKind.Bare)
@@ -54,6 +60,17 @@ namespace Rasa.Packets.MapChannel.Server
             if (Kind == TickKind.EntityId)
             {
                 pw.WriteULong(Entries.Count > 0 ? Entries[0].EntityId : 0);
+                return;
+            }
+
+            if (Kind == TickKind.Hortimonculus)
+            {
+                pw.WriteList(BuffIds.Count);
+
+                foreach (var buffId in BuffIds)
+                    pw.WriteULong(buffId);
+
+                WriteHeal(pw, Entries);
                 return;
             }
 
@@ -84,6 +101,18 @@ namespace Rasa.Packets.MapChannel.Server
                         pw.WriteULong(entry.EntityId);
                         break;
                 }
+            }
+        }
+
+        private static void WriteHeal(PythonWriter pw, List<TickEntry> entries)
+        {
+            pw.WriteList(entries.Count);
+
+            foreach (var entry in entries)
+            {
+                pw.WriteTuple(2);
+                pw.WriteULong(entry.EntityId);
+                pw.WriteInt(entry.Amount);
             }
         }
 

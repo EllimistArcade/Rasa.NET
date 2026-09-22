@@ -453,7 +453,7 @@ namespace Rasa.Managers
         {
             return action.Module == "abilities.sprint" || action.Module == PolymorphModule || action.Module == CrabMinesModule || action.Module == RealityRipperModule || action.Module == TrapModule || action.Module == TurretModule
                 || action.Module == HortimonculusModule || action.Module == ReanimationModule || action.Module == ReanimationWaveModule
-                || action.Module == SpotterModule
+                || action.Module == SpotterModule || action.Module == BotConstructionModule
                 || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
         }
 
@@ -601,6 +601,12 @@ namespace Rasa.Managers
             if (actionInfo.Module == SpotterModule)
             {
                 SummonSpotter(mapChannel, client, player, info, action);
+                return;
+            }
+
+            if (actionInfo.Module == BotConstructionModule)
+            {
+                ConstructBot(mapChannel, client, player, info, action);
                 return;
             }
 

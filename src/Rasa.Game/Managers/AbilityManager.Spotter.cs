@@ -85,14 +85,38 @@ namespace Rasa.Managers
             [588] = new SpotterVariant { Name = "Chaingunner", NameId = 7075, CreatureClassId = 21914, WeaponClassId = 20535 },
         };
 
+        /// <summary>
+        /// A summoned minion - a spotter, or a Bot Construction bot, which works the same way
+        /// (AbilityManager.BotConstruction). Module is which ability made it: one of each at a time.
+        /// </summary>
         private sealed class Spotter
         {
+            public string Module;
             public MapChannel MapChannel;
             public Creature Creature;
             public Manifestation Owner;
             public GameEffect Effect;
+            public int DespawnTypeId;
             public int HateFromMasterPercent;
             public long RemoveAt;
+
+            /// <summary>A Repair or Multi Bot: percent of max armour it restores every BotRepairIntervalMs; 0 for none.</summary>
+            public int RepairPercent;
+            public long NextRepairAt;
+        }
+
+        /// <summary>What a summon ability makes: the creature, its attacks, and its minion / despawn effects.</summary>
+        private sealed class MinionSpec
+        {
+            public string Module;
+            public string Name;
+            public uint NameId;
+            public uint CreatureClassId;
+            public uint AppearanceWeaponClassId;
+            public List<WeaponClassInfo> Weapons = new List<WeaponClassInfo>();
+            public int MinionTypeId;
+            public int DespawnTypeId;
+            public int RepairPercent;
         }
 
         private static readonly List<Spotter> Spotters = new List<Spotter>();
@@ -132,26 +156,55 @@ namespace Rasa.Managers
             return Instance != null && Instance.TryGetLevel(actionId, level, out info);
         }
 
+        /// <summary>A weapon class's WeaponClassInfo, or null when the server has none.</summary>
+        private static WeaponClassInfo WeaponInfoOf(uint weaponClassId)
+        {
+            return EntityClassManager.Instance.LoadedEntityClasses.TryGetValue((EntityClasses)weaponClassId, out var weaponClass)
+                ? weaponClass.WeaponClassInfo
+                : null;
+        }
+
         /// <summary>Summons the pump's spotter beside the player, sending away the one they had.</summary>
         private void SummonSpotter(MapChannel mapChannel, Client client, Manifestation player, ActionLevelInfo info, ActionData action)
         {
-            var recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None);
             var variantId = info.Get(AbilityProperty.CreatureVariantId);
+            var weapon = SpotterVariants.TryGetValue(variantId, out var variant) ? WeaponInfoOf(variant.WeaponClassId) : null;
 
-            if (!SpotterVariants.TryGetValue(variantId, out var variant)
-                || !EntityClassManager.Instance.LoadedEntityClasses.TryGetValue((EntityClasses)variant.WeaponClassId, out var weaponClass)
-                || weaponClass.WeaponClassInfo == null)
+            if (weapon == null)
             {
                 Logger.WriteLog(LogType.Error, $"Spotter level {info.Level}: creature variant {variantId} is not known; nothing summoned.");
-                CellManager.Instance.CellCallMethod(mapChannel, player, recovery);
+                CellManager.Instance.CellCallMethod(mapChannel, player, new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
                 return;
             }
 
-            // "Only 1 spotter can be active at a time."
+            var spec = new MinionSpec
+            {
+                Module = SpotterModule,
+                Name = variant.Name,
+                NameId = variant.NameId,
+                CreatureClassId = variant.CreatureClassId,
+                AppearanceWeaponClassId = variant.WeaponClassId,
+                MinionTypeId = SpotterMinionTypeId,
+                DespawnTypeId = SpotterDespawnTypeId
+            };
+
+            spec.Weapons.Add(weapon);
+
+            SummonMinion(mapChannel, client, player, info, action, spec);
+        }
+
+        /// <summary>
+        /// Makes the spec's creature the player's minion beside them, sending away the one this
+        /// ability made before: "Only 1 spotter" / "Only 1 bot can be active at a time."
+        /// </summary>
+        private void SummonMinion(MapChannel mapChannel, Client client, Manifestation player, ActionLevelInfo info, ActionData action, MinionSpec spec)
+        {
+            var recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None);
+
             List<Spotter> old;
 
             lock (SpottersLock)
-                old = Spotters.Where(s => s.Owner == player && s.RemoveAt == 0).ToList();
+                old = Spotters.Where(s => s.Owner == player && s.Module == spec.Module && s.RemoveAt == 0).ToList();
 
             foreach (var previous in old)
                 SendSpotterAway(previous);
@@ -163,24 +216,25 @@ namespace Rasa.Managers
 
             var spotter = new Creature
             {
-                EntityClass = (EntityClasses)variant.CreatureClassId,
-                NameId = variant.NameId,
+                EntityClass = (EntityClasses)spec.CreatureClassId,
+                NameId = spec.NameId,
                 TargetCategory = TargetCategory.Friendly,
                 Level = (uint)level,
                 MaxHitPoints = (uint)health,
                 RunSpeed = 9f,
                 WalkSpeed = 5f,
                 AggroRange = 20f,
-                AppearanceData = new Dictionary<EquipmentData, AppearanceData>
-                {
-                    [EquipmentData.Weapon] = new AppearanceData { SlotId = EquipmentData.Weapon, Class = variant.WeaponClassId, Color = Color.RandomColor(), Hue2 = Color.RandomColor() }
-                },
+                AppearanceData = new Dictionary<EquipmentData, AppearanceData>(),
                 State = CharacterState.Idle,
-                Name = variant.Name,
+                Name = spec.Name,
                 HateToMasterPercent = info.Get(AbilityProperty.MinionHateToMasterPercent)
             };
 
-            spotter.Actions.Add(WeaponAttackFor(weaponClass.WeaponClassInfo, level));
+            if (spec.AppearanceWeaponClassId != 0)
+                spotter.AppearanceData[EquipmentData.Weapon] = new AppearanceData { SlotId = EquipmentData.Weapon, Class = spec.AppearanceWeaponClassId, Color = Color.RandomColor(), Hue2 = Color.RandomColor() };
+
+            foreach (var weapon in spec.Weapons)
+                spotter.Actions.Add(WeaponAttackFor(weapon, level));
 
             spotter.Attributes.Add(Attributes.Body, new ActorAttributes(Attributes.Body, 1, 1, 1, 0, 0));
             spotter.Attributes.Add(Attributes.Mind, new ActorAttributes(Attributes.Mind, 1, 1, 1, 0, 0));
@@ -199,9 +253,9 @@ namespace Rasa.Managers
             // The player's to command; it follows them and fights what they fight.
             MinionManager.Instance.Adopt(client, spotter);
 
-            // SPOTTER_MINION: the client counts its damage as the player's.
+            // SPOTTER_MINION / BOT_CONSTRUCTION_MINION: the client counts its damage as the player's.
             var lifetimeMs = Math.Max(1000, info.Get(AbilityProperty.CreatureLifetimeMs, 900000));
-            var effect = NewEffect(mapChannel, player, info, SpotterMinionTypeId, null);
+            var effect = NewEffect(mapChannel, player, info, spec.MinionTypeId, null);
 
             effect.ExpiresTick = Environment.TickCount64 + lifetimeMs;
             effect.AnnounceOnAttach = true;
@@ -213,11 +267,15 @@ namespace Rasa.Managers
             lock (SpottersLock)
                 Spotters.Add(new Spotter
                 {
+                    Module = spec.Module,
                     MapChannel = mapChannel,
                     Creature = spotter,
                     Owner = player,
                     Effect = effect,
-                    HateFromMasterPercent = info.Get(AbilityProperty.MinionHateFromMasterPercent)
+                    DespawnTypeId = spec.DespawnTypeId,
+                    HateFromMasterPercent = info.Get(AbilityProperty.MinionHateFromMasterPercent),
+                    RepairPercent = spec.RepairPercent,
+                    NextRepairAt = Environment.TickCount64 + BotRepairIntervalMs
                 });
 
             Hit(recovery, spotter);
@@ -255,7 +313,7 @@ namespace Rasa.Managers
 
             var despawn = new GameEffect
             {
-                TypeId = SpotterDespawnTypeId,
+                TypeId = spotter.DespawnTypeId,
                 EffectId = GameEffectManager.Instance.NextEffectId(mapChannel),
                 EffectLevel = spotter.Effect.EffectLevel,
                 SourceId = spotter.Owner.EntityId,
@@ -319,6 +377,14 @@ namespace Rasa.Managers
                         Spotters.Remove(spotter);
 
                     MinionManager.Instance.Dismiss(mapChannel, creature);
+                    continue;
+                }
+
+                // A Repair or Multi Bot tends its owner's and their squad's armour.
+                if (spotter.RemoveAt == 0 && spotter.RepairPercent > 0 && now >= spotter.NextRepairAt)
+                {
+                    spotter.NextRepairAt = now + BotRepairIntervalMs;
+                    RepairAround(mapChannel, spotter);
                 }
             }
         }

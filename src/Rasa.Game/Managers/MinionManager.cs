@@ -18,10 +18,9 @@ namespace Rasa.Managers
     /// controlled by a player; these are summoned using the Create Clone, Spotter, and Bot
     /// Construction ability." Everything here is about those - not turrets, not mission NPCs.
     ///
-    /// Nothing summons one yet, because there is no ability framework to fire Bot Construction
-    /// from. <c>.minion</c> stands in for that: it adopts a creature as the caller's minion so the
-    /// command layer can be exercised against a real client before the thing that will eventually
-    /// create them exists.
+    /// Spotter and Bot Construction summon them (AbilityManager.SummonMinion); Create Clone does
+    /// not yet. <c>.minion</c> is a GM tool that adopts any creature as the caller's minion, for
+    /// exercising the command layer without the abilities.
     ///
     /// Two client-side facts shape all of this:
     ///

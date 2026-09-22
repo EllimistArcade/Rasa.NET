@@ -968,6 +968,11 @@ namespace Rasa.Managers
             if (creature.MasterEntityId != 0 && creature.Stance == MinionStance.Passive)
                 return;
 
+            // Nor does a minion with no attack (the Repair Bot): it would only chase its target
+            // and stand there.
+            if (creature.MasterEntityId != 0 && creature.Actions.Count == 0)
+                return;
+
             // Only a fight its category allows: nothing on its own side, nothing that takes no
             // part in fights (TargetCategories.MayFight, MayFightPlayer). A NEUTRAL creature
             // fights whoever attacks it; an object or decoration fights nobody.

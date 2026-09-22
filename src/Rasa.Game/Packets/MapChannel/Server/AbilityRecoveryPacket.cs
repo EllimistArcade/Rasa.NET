@@ -26,7 +26,7 @@ namespace Rasa.Packets.MapChannel.Server
     /// </summary>
     public class AbilityRecoveryPacket : ServerPythonPacket
     {
-        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists, TypeIds, RawInfo }
+        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists, TypeIds, RawInfo, HealRepair }
 
         public override GameOpcode Opcode { get; } = GameOpcode.PerformRecovery;
 
@@ -115,6 +115,12 @@ namespace Rasa.Packets.MapChannel.Server
                     case HitDataKind.Heal:
                         pw.WriteInt(hit.Amount);
                         break;
+                    case HitDataKind.HealRepair:
+                        // (healAmount, repairAmount) - TechnicianHealAbility.DoAbility.
+                        pw.WriteTuple(2);
+                        pw.WriteInt(hit.Amount);
+                        pw.WriteInt(hit.Repair);
+                        break;
                     case HitDataKind.EffectAttach:
                         pw.WriteTuple(2);
                         pw.WriteULong(hit.EntityId);
@@ -151,6 +157,10 @@ namespace Rasa.Packets.MapChannel.Server
         public ulong EntityId { get; set; }
         public int Amount { get; set; }
         public int Resisted { get; set; }
+
+        /// <summary>For HitDataKind.HealRepair: the armour repaired, beside Amount healed.</summary>
+        public int Repair { get; set; }
+
         public DamageType DamageType { get; set; }
         public bool IsCritical { get; set; }
         public bool DeathBlow { get; set; }

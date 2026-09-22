@@ -95,6 +95,9 @@ namespace Rasa.Structures
         /// <summary>Polymorph: the creature weapon the player fires while morphed; null when they are themselves.</summary>
         public Item MorphWeapon { get; set; }
 
+        /// <summary>The creature's combat actions a polymorphed player has in their drawer, and may perform (AbilityManager.Polymorph).</summary>
+        public System.Collections.Generic.List<(Data.ActionId ActionId, uint Level)> MorphAbilities { get; set; } = new System.Collections.Generic.List<(Data.ActionId, uint)>();
+
         /// <summary>Polymorph: the target category the player counts as while morphed ("including their faction"); null for their own.</summary>
         public Data.TargetCategory? MorphCategory { get; set; }
 

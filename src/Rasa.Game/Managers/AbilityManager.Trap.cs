@@ -98,6 +98,7 @@ namespace Rasa.Managers
         {
             /// <summary>A Trap (decoy: threat, strike on death) rather than a Turret.</summary>
             public bool IsDecoy = true;
+            public ActionId Action;
             public uint Pump;
             public int ShotMin;
             public int ShotMax;
@@ -145,12 +146,13 @@ namespace Rasa.Managers
         /// "Only 1 of each type of turret can be active at a time" - a new one takes the old one's
         /// place.
         /// </summary>
-        private void PlaceTurret(MapChannel mapChannel, Manifestation player, ActionLevelInfo info, ActionData action, bool decoy)
+        /// <param name="defaultDuration">Seconds it lasts when the ability has no DURATION: 60, or the Thrax Technician's Mini Turret's 30.</param>
+        private void PlaceTurret(MapChannel mapChannel, Manifestation player, ActionLevelInfo info, ActionData action, bool decoy, int defaultDuration = 60)
         {
             List<Trap> old;
 
             lock (TrapsLock)
-                old = Traps.Where(t => t.Owner == player && t.RemoveAt == 0 && t.IsDecoy == decoy && (decoy || t.Pump == info.Level)).ToList();
+                old = Traps.Where(t => t.Owner == player && t.RemoveAt == 0 && t.IsDecoy == decoy && (decoy || (t.Pump == info.Level && t.Action == info.ActionId))).ToList();
 
             foreach (var trap in old)
                 RemoveTrap(trap);
@@ -196,7 +198,7 @@ namespace Rasa.Managers
             CellManager.Instance.AddToWorld(mapChannel, turret);
 
             var now = Environment.TickCount64;
-            var durationSeconds = info.Get(AbilityProperty.Duration, 60);
+            var durationSeconds = info.Get(AbilityProperty.Duration, defaultDuration);
 
             GameEffect death;
 
@@ -229,6 +231,7 @@ namespace Rasa.Managers
                 Traps.Add(new Trap
                 {
                     IsDecoy = decoy,
+                    Action = info.ActionId,
                     Pump = info.Level,
                     ShotMin = min,
                     ShotMax = Math.Max(min, info.Get(AbilityProperty.DamageAmountMax, min)),

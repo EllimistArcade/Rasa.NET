@@ -41,9 +41,12 @@ namespace Rasa.Managers
     /// - "Including their faction": the player counts as that target category to creatures
     ///   (Manifestation.MorphCategory, CombatCategory). HOSTILE creatures do not go for a player
     ///   morphed HOSTILE, FRIENDLY ones do; either answers a player who attacks it.
-    /// - The drawer is empty: the creatures' other combat actions are creature actions the server
-    ///   cannot perform for a player yet, and the weapon is their attack.
-    /// - Abilities are refused while morphed, bar Polymorph itself.
+    /// - The drawer holds the creature's combat actions the pump's tooltip names, at their
+    ///   player-facing levels (MorphVariant.Abilities, AbilityManager.MorphAbilities): Kick; Mini
+    ///   Turret and Repair; Revitalize and Noxious Burst; Smash and Ground Pound. The revives -
+    ///   the Technician's Jumpstart, the Caretaker's Resuscitate, the Machina's Self Revive - wait
+    ///   on death and are left out.
+    /// - Abilities are refused while morphed, bar Polymorph itself and those.
     /// - Level 5's POLYMORPH_HOMINUS_MACHINA (106, GAME_EFFECT_ARG1 25, ARG2 -50) is attached and
     ///   announced for its FX; the client gives it no tooltip and no behaviour, so what 25 and -50
     ///   were is not known and nothing is done with them.
@@ -68,19 +71,26 @@ namespace Rasa.Managers
             public int MeshId;
             public uint WeaponClassId;
             public TargetCategory TargetCategory;
+
+            /// <summary>The creature's combat actions in the drawer: (action, level).</summary>
+            public (ActionId ActionId, uint Level)[] Abilities = new (ActionId, uint)[0];
         }
 
         /// <summary>CREATURE_VARIANT_ID → what the player turns into, from the client's entity classes.</summary>
         public static readonly Dictionary<int, MorphVariant> MorphVariants = new Dictionary<int, MorphVariant>
         {
             // Pump 1: Thrax Pistol Soldier - Bane_Thrax_Soldier_Pistol, firing Weapon_Creature_Bane_Pistol (1/1, laser).
-            [1863] = new MorphVariant { Name = "Thrax Pistol Soldier", CreatureClassId = 3762, MeshId = 30407, WeaponClassId = 3782, TargetCategory = TargetCategory.Hostile },
+            [1863] = new MorphVariant { Name = "Thrax Pistol Soldier", CreatureClassId = 3762, MeshId = 30407, WeaponClassId = 3782, TargetCategory = TargetCategory.Hostile,
+                             Abilities = new[] { (ActionId.CrThraxKick, 5u) } },
             // Pump 2: Thrax Technician - Bane_Thrax_Technician, Weapon_Creature_Thrax_Technician (1/296, EMP).
-            [1868] = new MorphVariant { Name = "Thrax Technician", CreatureClassId = 7043, MeshId = 18368, WeaponClassId = 20689, TargetCategory = TargetCategory.Hostile },
+            [1868] = new MorphVariant { Name = "Thrax Technician", CreatureClassId = 7043, MeshId = 18368, WeaponClassId = 20689, TargetCategory = TargetCategory.Hostile,
+                             Abilities = new[] { (ActionId.CrTechnicianTurret, 3u), (ActionId.CrTechnicianHeal, 5u) } },
             // Pump 3: Bane Caretaker - Bane_Caretaker; the only caretaker weapon class is the holographic copy's (1/190, physical).
-            [1858] = new MorphVariant { Name = "Bane Caretaker", CreatureClassId = 9244, MeshId = 21376, WeaponClassId = 21835, TargetCategory = TargetCategory.Hostile },
+            [1858] = new MorphVariant { Name = "Bane Caretaker", CreatureClassId = 9244, MeshId = 21376, WeaponClassId = 21835, TargetCategory = TargetCategory.Hostile,
+                             Abilities = new[] { (ActionId.CrCaretakerHeal, 5u), (ActionId.CrCaretakerAttack, 5u) } },
             // Pump 4: Kael - Bane_Kael_Standard, Weapon_Creature_Kael (melee 174/44, physical).
-            [1864] = new MorphVariant { Name = "Kael", CreatureClassId = 4046, MeshId = 14434, WeaponClassId = 3952, TargetCategory = TargetCategory.Hostile },
+            [1864] = new MorphVariant { Name = "Kael", CreatureClassId = 4046, MeshId = 14434, WeaponClassId = 3952, TargetCategory = TargetCategory.Hostile,
+                             Abilities = new[] { (ActionId.CrKaelSmash, 5u), (ActionId.CrKaelGroundPound, 5u) } },
             // Pump 5: Hominis Machina - Bane_Hominis_Machina, Weapon_Creature_Hominis_Machina (1/97, laser).
             [1869] = new MorphVariant { Name = "Hominis Machina", CreatureClassId = 3868, MeshId = 15868, WeaponClassId = 4365, TargetCategory = TargetCategory.Hostile },
             // PAU Angel activator - PAU_Vehicle_ANGEL, Weapon_PAU_ANGEL_LeechGun_Physical (constant fire 179/8).
@@ -130,6 +140,7 @@ namespace Rasa.Managers
 
             player.MorphWeapon = weapon;
             player.MorphCategory = variant.TargetCategory;
+            player.MorphAbilities = variant.Abilities.ToList();
             player.WeaponReady = true;
 
             // The weapon entity has to exist on every client that will announce the morph.
@@ -142,7 +153,7 @@ namespace Rasa.Managers
 
             // BaseMorphEffect.OnAttach(target, newMeshId, newClassId, weaponId, abilityInfo).
             GameEffectManager.Instance.Attach(mapChannel, player, effect,
-                variant.MeshId, (int)variant.CreatureClassId, weapon.EntityId, new List<(int, int)>());
+                variant.MeshId, (int)variant.CreatureClassId, weapon.EntityId, variant.Abilities.Select(a => ((int)a.ActionId, (int)a.Level)).ToList());
 
             recovery.Hits.Add(new AbilityHit { EntityId = player.EntityId });
             recovery.TypeIds.Add(PolymorphTypeId);
@@ -248,6 +259,7 @@ namespace Rasa.Managers
 
             player.MorphWeapon = null;
             player.MorphCategory = null;
+            player.MorphAbilities = new List<(ActionId, uint)>();
 
             if (mapChannel == null)
                 return;

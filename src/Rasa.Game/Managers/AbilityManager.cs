@@ -73,7 +73,9 @@ namespace Rasa.Managers
         {
             "abilities.lightning", "abilities.knockback", "abilities.rushingblow", "abilities.shrapnel",
             "abilities.tectonicstrike", "abilities.stun", "abilities.concussivewave", "abilities.energywave",
-            "abilities.vortex", "abilities.deathdamage", "abilities.stalkereggattack"
+            "abilities.vortex", "abilities.deathdamage", "abilities.stalkereggattack",
+            // Polymorph's creature attacks (AbilityManager.MorphAbilities).
+            KaelSmashModule, KaelGroundPoundModule, CaretakerAttackModule
         };
 
         /// <summary>
@@ -298,7 +300,7 @@ namespace Rasa.Managers
 
             // Polymorphed: "unable to access their inventory, abilities or consumables". The client
             // locks its own UI; this is the server holding to it. Polymorph itself still ends it.
-            if (IsMorphed(player) && action.Module != PolymorphModule)
+            if (IsMorphed(player) && action.Module != PolymorphModule && !IsMorphAbility(player, actionId, level))
             {
                 Fail(client, actionId, level, PlayerMessage.PmCannotPerformActionNow);
                 return;
@@ -461,6 +463,10 @@ namespace Rasa.Managers
                 return _itemTemplateActions.TryGetValue(item.ItemTemplateId, out var performs) && performs.ActionId == actionId && performs.Level == level;
             }
 
+            // Polymorphed: the creature's combat actions are theirs while it lasts.
+            if (IsMorphAbility(player, actionId, level))
+                return true;
+
             foreach (var skill in player.Skills.Values)
                 if (skill.AbilityId == (int)actionId && skill.SkillLevel >= level)
                     return true;
@@ -474,6 +480,7 @@ namespace Rasa.Managers
             return action.Module == "abilities.sprint" || action.Module == PolymorphModule || action.Module == CrabMinesModule || action.Module == RealityRipperModule || action.Module == TrapModule || action.Module == TurretModule
                 || action.Module == HortimonculusModule || action.Module == ReanimationModule || action.Module == ReanimationWaveModule
                 || action.Module == SpotterModule || action.Module == BotConstructionModule || action.Module == CreateCloneModule
+                || MorphSupportModules.Contains(action.Module)
                 || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
         }
 
@@ -603,6 +610,12 @@ namespace Rasa.Managers
             // The charge has arrived: the blow lands from where it ends.
             if (actionInfo.Module == RushingBlowModule)
                 FinishCharge(player);
+
+            if (MorphSupportModules.Contains(actionInfo.Module))
+            {
+                ResolveMorphSupport(mapChannel, client, player, actionInfo, info, action);
+                return;
+            }
 
             if (actionInfo.Module == TurretModule)
             {
@@ -808,7 +821,7 @@ namespace Rasa.Managers
         /// </summary>
         private void ResolveDirectDamage(MapChannel mapChannel, Client client, Manifestation player, ActionInfo actionInfo, ActionLevelInfo info, ActionData action)
         {
-            var damageType = (DamageType)info.Get(AbilityProperty.DamageType, (int)DamageType.Physical);
+            var damageType = (DamageType)info.Get(AbilityProperty.DamageType, (int)DefaultDamageTypeOf(actionInfo.Module));
             var scaleType = info.Get(AbilityProperty.DamageScaleType);
             var min = info.Get(AbilityProperty.DamageAmountMin);
             var max = Math.Max(min, info.Get(AbilityProperty.DamageAmountMax, min));
@@ -843,7 +856,10 @@ namespace Rasa.Managers
                 targets.Add(primary);
             }
 
-            var recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.Damage)
+            // A creature attack's client class wants each hit's rawInfo as it is (KaelSmashAbility and
+            // the rest); the players' abilities, DamageBase's (rawInfo, onHitData).
+            var recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId,
+                RawInfoModules.Contains(actionInfo.Module) ? AbilityRecoveryPacket.HitDataKind.RawInfo : AbilityRecoveryPacket.HitDataKind.Damage)
             {
                 ArcData = actionInfo.Module == "abilities.lightning"
             };

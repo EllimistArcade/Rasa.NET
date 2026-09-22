@@ -22,11 +22,22 @@ namespace Rasa.Managers
     ///   master only looks for enemies when it is (BehaviorManager.ScansForEnemies).
     /// When the effect ends - run out, or the creature dead - it is Bane again with its own aggro
     /// range, its hate wiped once more, and whoever it finds first is who it fights.
+    ///
+    /// Hack (AA_SAPPER_HACK 303, abilities.hack) is the same turn for machines: "Debuffs a single
+    /// enemy mechanical target making it attack other enemy units within a given radius for a set
+    /// time. Larger mechanicals such as Stalkers, Striders and Juggernauts are immune to this
+    /// effect." HackAction allows a MECHANICAL or MACHINA creature; its effect is HACKED_EFFECT
+    /// (223), announced by the client's targetGameEffect. Per pump: DURATION 10-30 s,
+    /// EFFECT_RADIUS ("Hate Area") 10-50 m, range 20-50 m. A creature of SPECIES_STALKER,
+    /// SPECIES_STRIDER or SPECIES_JUGGERNAUT takes nothing and the clients are told it is immune
+    /// (GameEffectAttachFailed, EFFECT_ATTACH_FAIL_IMMUNE).
     /// </summary>
     public partial class AbilityManager
     {
         public const string TraitorModule = "abilities.traitor";
         public const int TraitorTypeId = 10000057;               // TRAITOR_EFFECT
+        public const string HackModule = "abilities.hack";
+        public const int HackedTypeId = 223;                     // HACKED_EFFECT
 
         /// <summary>Whether the client's TraitorAction would allow this target: a BIOLOGICAL or MACHINA creature.</summary>
         public static bool CanTurnTraitor(Creature creature)
@@ -39,13 +50,60 @@ namespace Rasa.Managers
             return flags.Contains((int)CreatureFlag.Biological) || flags.Contains((int)CreatureFlag.Machina);
         }
 
+        /// <summary>Whether the client's HackAction would allow this target: a MECHANICAL or MACHINA creature.</summary>
+        public static bool CanHack(Creature creature)
+        {
+            if (creature == null)
+                return false;
+
+            var flags = CreatureManager.CreatureFlagsOf(creature);
+
+            return flags.Contains((int)CreatureFlag.Mechanical) || flags.Contains((int)CreatureFlag.Machina);
+        }
+
+        /// <summary>"Larger mechanicals such as Stalkers, Striders and Juggernauts are immune to this effect."</summary>
+        public static bool IsHackImmune(Creature creature)
+        {
+            if (creature == null)
+                return false;
+
+            var flags = CreatureManager.CreatureFlagsOf(creature);
+
+            return flags.Contains((int)CreatureFlag.SpeciesStalker) || flags.Contains((int)CreatureFlag.SpeciesStrider) || flags.Contains((int)CreatureFlag.SpeciesJuggernaut);
+        }
+
         /// <summary>Turns the creature for DURATION; false when it cannot be turned.</summary>
         private bool AttachTraitor(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
         {
-            if (!CanTurnTraitor(target) || !IsHostile(player, target) || target.Faction == Factions.AFS)
+            return CanTurnTraitor(target) && TurnCreature(mapChannel, player, target, info, TraitorTypeId);
+        }
+
+        /// <summary>
+        /// Hacks the machine for DURATION; false when it cannot be. An immune one is announced as
+        /// immune to everyone who can see it.
+        /// </summary>
+        private bool AttachHack(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
+        {
+            if (!CanHack(target) || !IsHostile(player, target) || target.Faction == Factions.AFS)
                 return false;
 
-            var effect = NewEffect(mapChannel, player, info, TraitorTypeId, info.Get(AbilityProperty.Duration, 10));
+            if (IsHackImmune(target))
+            {
+                CellManager.Instance.CellCallMethod(mapChannel, target,
+                    new GameEffectAttachFailedPacket(HackedTypeId, GameEffectAttachFailedPacket.FailReason.Immune, player.EntityId));
+                return false;
+            }
+
+            return TurnCreature(mapChannel, player, target, info, HackedTypeId);
+        }
+
+        /// <summary>Traitor and Hack alike: the creature fights for the player for DURATION under effect typeId.</summary>
+        private bool TurnCreature(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info, int typeId)
+        {
+            if (!IsHostile(player, target) || target.Faction == Factions.AFS)
+                return false;
+
+            var effect = NewEffect(mapChannel, player, info, typeId, info.Get(AbilityProperty.Duration, 10));
 
             effect.IsBuff = false;
             effect.AllowDetach = false;

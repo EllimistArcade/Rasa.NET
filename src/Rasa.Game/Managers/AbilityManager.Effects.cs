@@ -99,10 +99,15 @@ namespace Rasa.Managers
                 }
 
                 case TraitorModule:
+                case HackModule:
                 {
                     var target = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
+                    var turned = target != null && (actionInfo.Module == HackModule
+                        ? AttachHack(mapChannel, player, target, info)
+                        : AttachTraitor(mapChannel, player, target, info));
 
-                    if (target != null && AttachTraitor(mapChannel, player, target, info))
+                    // Hit: the client's targetGameEffect announces TRAITOR_EFFECT / HACKED_EFFECT on it.
+                    if (turned)
                     {
                         ManifestationManager.Instance.EnterCombat(client);
                         Hit(recovery, target);

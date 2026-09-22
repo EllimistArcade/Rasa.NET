@@ -79,6 +79,7 @@ namespace Rasa.Managers
             var hate = OfHit(landed, absorbed, resisted) * ThreatModifierOf(attacker) / 100.0;
 
             hate = ToSummon(victim, attacker, hate);
+            hate = ToMaster(victim, attacker, hate);
 
             // A hit for nothing still says who is shooting.
             victim.Hate.Ensure(attacker.EntityId, NoticedThreat);
@@ -111,6 +112,27 @@ namespace Rasa.Managers
                 foreach (var creature in cell.CreatureList.ToList())
                     if (creature.State != CharacterState.Dead && creature.Hate.Contains(healed.EntityId))
                         creature.Hate.Add(healer.EntityId, ToSummon(creature, healer, hate));
+        }
+
+        /// <summary>
+        /// MINION_HATE_TO_MASTER_PERCENT (Spotter): of the hate a summon earns, its share goes to
+        /// its master instead - when the master is a player on the same map. Returns what is left
+        /// for the summon.
+        /// </summary>
+        public static double ToMaster(Creature victim, Actor attacker, double hate)
+        {
+            if (hate <= 0 || !(attacker is Creature summon) || summon.HateToMasterPercent <= 0 || summon.MasterEntityId == 0)
+                return hate;
+
+            if (!EntityManager.Instance.Players.TryGetValue(summon.MasterEntityId, out var master) || master.MapContextId != victim.MapContextId)
+                return hate;
+
+            var share = AbilityManager.HateTransferred(hate, summon.HateToMasterPercent);
+
+            victim.Hate.Ensure(master.EntityId, NoticedThreat);
+            victim.Hate.Add(master.EntityId, share);
+
+            return hate - share;
         }
 
         /// <summary>

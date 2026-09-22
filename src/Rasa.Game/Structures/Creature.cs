@@ -94,6 +94,12 @@ namespace Rasa.Structures
         /// </summary>
         public ulong MasterEntityId { get; set; }
 
+        /// <summary>
+        /// Percent of the hate this creature earns that goes to its master instead (Spotter's
+        /// MINION_HATE_TO_MASTER_PERCENT); 0 for none. See Threat.FromDamage.
+        /// </summary>
+        public int HateToMasterPercent { get; set; }
+
         /// <summary>Whether this minion fights back, goes looking, or does neither.</summary>
         public MinionStance Stance { get; set; } = MinionStance.Defensive;
 

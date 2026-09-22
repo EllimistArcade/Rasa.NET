@@ -351,13 +351,19 @@ namespace Rasa.Managers
                 // same enemy."
                 if (creature.Controller.ActionFollow.AssistTargetId != 0 && creature.Stance != MinionStance.Passive)
                 {
-                    var assisted = EntityManager.Instance.GetActor(creature.Controller.ActionFollow.AssistTargetId);
+                    // TryGetValue: the assisted player may have gone, and GetActor throws on a miss.
+                    EntityManager.Instance.Actors.TryGetValue(creature.Controller.ActionFollow.AssistTargetId, out var assisted);
 
-                    if (assisted != null && assisted.Target != 0 && assisted.Target != creature.EntityId)
+                    // Only a target it can fight (Threat.CanFight - alive, on the map, one its
+                    // category allows): a player who has a friend or a corpse selected is not
+                    // asking for help, and the minion carries on following.
+                    if (assisted != null && assisted.Target != 0 && assisted.Target != creature.EntityId && Threat.CanFight(creature, assisted.Target))
                     {
                         creature.Target = assisted.Target;
                         SetActionFighting(creature, assisted.Target);
-                        return;
+
+                        if (creature.Controller.CurrentAction == BehaviorActionFighting)
+                            return;
                     }
                 }
 

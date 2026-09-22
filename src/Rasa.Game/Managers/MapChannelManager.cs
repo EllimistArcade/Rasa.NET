@@ -268,6 +268,9 @@ namespace Rasa.Managers
                         // Reanimation: the risen whose master has gone, and the spent ones.
                         AbilityManager.Instance.ReanimationWorker(mapChannel);
 
+                        // Spotter: the spent ones taken away, the fallen let go.
+                        AbilityManager.Instance.SpotterWorker(mapChannel);
+
                         // Tactical Evasion: the smoke screens, and the marks a retreat goes back to.
                         AbilityManager.Instance.SmokeWorker(mapChannel);
                     }

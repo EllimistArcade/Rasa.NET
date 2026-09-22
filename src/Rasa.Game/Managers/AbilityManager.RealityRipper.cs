@@ -85,7 +85,7 @@ namespace Rasa.Managers
 
         /// <summary>
         /// HATE_TRANSFER_PERCENT, as the share of the threat an owner generates that goes to their
-        /// summon instead: the owner's summon - trap, turret, rift or reanimated creature -
+        /// summon instead: the owner's summon - trap, turret, rift, reanimated creature or spotter -
         /// nearest the creature among those whose reach the creature is in (a trap's, turret's or
         /// reanimated creature's attack range, a rift's radius), and its percent. Null when there
         /// is none.
@@ -127,6 +127,10 @@ namespace Rasa.Managers
 
             foreach (var (risen, reach, transfer) in RisenOf(owner))
                 Consider(risen, reach, transfer);
+
+            // Spotter's MINION_HATE_FROM_MASTER_PERCENT.
+            foreach (var (spotter, reach, transfer) in SpottersOf(owner))
+                Consider(spotter, reach, transfer);
 
             return (best, percent);
         }

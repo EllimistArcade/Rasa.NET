@@ -143,6 +143,26 @@ namespace Rasa.Managers
             return null;
         }
 
+        /// <summary>
+        /// Unlinks a minion and leaves it where it is - a summon killed in the fight, whose corpse
+        /// goes the usual way. It is nobody's to command any more.
+        /// </summary>
+        public void Release(Creature minion)
+        {
+            if (minion == null)
+                return;
+
+            if (_byMaster.TryGetValue(minion.MasterEntityId, out var list))
+            {
+                list.Remove(minion);
+
+                if (list.Count == 0)
+                    _byMaster.Remove(minion.MasterEntityId);
+            }
+
+            minion.MasterEntityId = 0;
+        }
+
         /// <summary>Unlinks a minion and takes it out of the world.</summary>
         public void Dismiss(MapChannel mapChannel, Creature minion)
         {

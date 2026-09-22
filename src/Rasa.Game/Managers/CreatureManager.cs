@@ -374,6 +374,9 @@ namespace Rasa.Managers
 
             // A reanimated creature: its REANIMATED, for a client meeting it after it rose.
             AbilityManager.ShowReanimatedTo(client, creature);
+
+            // A spotter: its SPOTTER_MINION, likewise.
+            AbilityManager.ShowSpotterTo(client, creature);
         }
 
         public void CreatureInit()

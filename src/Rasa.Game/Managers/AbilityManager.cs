@@ -453,6 +453,7 @@ namespace Rasa.Managers
         {
             return action.Module == "abilities.sprint" || action.Module == PolymorphModule || action.Module == CrabMinesModule || action.Module == RealityRipperModule || action.Module == TrapModule || action.Module == TurretModule
                 || action.Module == HortimonculusModule || action.Module == ReanimationModule || action.Module == ReanimationWaveModule
+                || action.Module == SpotterModule
                 || IsDirectDamage(action, info) || TimedEffectModules.Contains(action.Module);
         }
 
@@ -594,6 +595,12 @@ namespace Rasa.Managers
             {
                 PlantTrap(mapChannel, player, info, action);
                 CellManager.Instance.CellCallMethod(mapChannel, player, new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
+                return;
+            }
+
+            if (actionInfo.Module == SpotterModule)
+            {
+                SummonSpotter(mapChannel, client, player, info, action);
                 return;
             }
 

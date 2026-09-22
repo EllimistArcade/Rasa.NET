@@ -27,6 +27,11 @@ namespace Rasa.Structures
         /// <summary>Where CreatureAttacks.DamageTypeOf keeps what it worked out; 0 until it has.</summary>
         public DamageType ResolvedDamageType { get; set; }
 
+        /// <summary>An attack made up in code rather than read from creature_action (a summon's weapon).</summary>
+        public CreatureAction()
+        {
+        }
+
         public CreatureAction(CreatureActionEntry action)
         {
             Id = action.Id;

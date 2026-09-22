@@ -166,7 +166,7 @@ namespace Rasa.Managers
             var turret = new Creature
             {
                 EntityClass = TrapClass,
-                Faction = Factions.AFS,
+                TargetCategory = TargetCategory.Friendly,
                 Level = level,
                 MaxHitPoints = (uint)health,
                 AppearanceData = new Dictionary<EquipmentData, AppearanceData>

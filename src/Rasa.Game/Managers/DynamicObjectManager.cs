@@ -460,7 +460,7 @@ namespace Rasa.Managers
 
                         Logger.WriteLog(LogType.Debug, $"Action Exicuted");
                         controlpoint.TriggeredByPlayers.Remove(client);
-                        controlpoint.Faction = controlpoint.Faction == Factions.AFS ? Factions.Bane : Factions.AFS;
+                        controlpoint.TargetCategory = controlpoint.TargetCategory == TargetCategory.Friendly ? TargetCategory.Hostile : TargetCategory.Friendly;
                         controlpoint.StateId = controlpoint.StateId == UseObjectState.CpointStateFactionAOwned ? UseObjectState.CpointStateFactionBOwned : UseObjectState.CpointStateFactionAOwned;
 
                         CellManager.Instance.CellCallMethod(controlpoint, new ForceStatePacket(controlpoint.StateId, 100));
@@ -618,7 +618,7 @@ namespace Rasa.Managers
                 client.CallMethod(player.EntityId, new TeleportPacket(dropship.Destination, rotation, TeleportType.Default, 5));
                 client.CellMoveObject(client, new MoveObjectMessage(player.EntityId, new Models.Movement(dropship.Destination, 0f, 0, new Vector2(rotation, 0f))), false);
 
-                var arrival = new Dropship(Factions.AFS, DropshipType.Teleporter, client, DropshipRole.Arrival);
+                var arrival = new Dropship(TargetCategory.Friendly, DropshipType.Teleporter, client, DropshipRole.Arrival);
 
                 CellManager.Instance.AddToWorld(mapChannel, arrival);
                 Dropships.Add(arrival.EntityId, arrival);
@@ -798,7 +798,7 @@ namespace Rasa.Managers
                             Position = teleporter.Position,
                             Rotation = teleporter.Rotation,
                             MapContextId = teleporter.MapContextId,
-                            Faction = Factions.AFS,
+                            TargetCategory = TargetCategory.Friendly,
                             StateId = UseObjectState.TsState1,
                             Comment = teleporter.Description
                         });
@@ -947,7 +947,7 @@ namespace Rasa.Managers
                 // A flight, whether or not it crosses a map: the departure lands, takes the
                 // player aboard and leaves; where it leaves for is the dropship's business
                 // (DropshipsWorker). Movement stays blocked until the arrival sets them down.
-                var dropship = new Dropship(Factions.AFS, DropshipType.Teleporter, client, DropshipRole.Departure, teleporter.Position, mapContextId)
+                var dropship = new Dropship(TargetCategory.Friendly, DropshipType.Teleporter, client, DropshipRole.Departure, teleporter.Position, mapContextId)
                 {
                     DestinationRotation = teleporter.Rotation
                 };

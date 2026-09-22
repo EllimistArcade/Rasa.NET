@@ -121,7 +121,7 @@ namespace Rasa.Managers
         /// <summary>Whether a corpse ability may be aimed at this body: dead, biological, an enemy's, and not already used.</summary>
         internal static bool IsUsableCorpse(Actor target)
         {
-            if (!(target is Creature corpse) || !IsBiologicalCorpse(corpse) || corpse.Faction == Factions.AFS || corpse.IsScripted)
+            if (!(target is Creature corpse) || !IsBiologicalCorpse(corpse) || !TargetCategories.PlayerMayAttack(corpse.TargetCategory) || corpse.IsScripted)
                 return false;
 
             lock (BurningCorpsesLock)
@@ -206,7 +206,7 @@ namespace Rasa.Managers
                 Position = corpse.Position,
                 Rotation = corpse.Rotation,
                 MapContextId = corpse.MapContextId,
-                Faction = Factions.AFS,
+                TargetCategory = TargetCategory.Object,
                 StateId = UseObjectState.StatePowerDown,
                 IsInWorld = true,
                 ObjectData = plant,

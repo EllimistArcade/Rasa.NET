@@ -122,6 +122,19 @@ namespace Rasa.Managers
             if (creature.State == CharacterState.Dead || creature.State == CharacterState.Dying)
                 return;
 
+            // Its target category has to allow the hit: a player may strike HOSTILE and NEUTRAL,
+            // a creature anything its own category may fight (TargetCategories). The client does
+            // not offer the rest as targets; this is the server holding to it.
+            var sourceCategory = missile.Source is Manifestation shooter ? shooter.CombatCategory
+                : missile.Source is Creature attacker ? attacker.TargetCategory : TargetCategory.Ignore;
+
+            if (missile.Source != null && (missile.Source is Manifestation ? !TargetCategories.PlayerMayAttack(creature.TargetCategory)
+                                                                           : !TargetCategories.MayFight(sourceCategory, creature.TargetCategory)))
+            {
+                missile.DamageA = 0;
+                return;
+            }
+
             // Shooting something is being in a fight, not only being shot at - otherwise a player
             // who opens fire and wins never enters combat at all.
             EnterCombat(missile.Source);

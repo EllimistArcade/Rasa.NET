@@ -157,6 +157,7 @@ namespace Rasa.Managers
             RegisterCommand(".tele", GmLevel.GameMaster, TeleCommand);
             RegisterCommand(".teleport", GmLevel.GameMaster, TeleportCommand);
             RegisterCommand(".teleup", GmLevel.GameMaster, TeleUpCommand);
+            RegisterCommand(".targetcategory", GmLevel.GameMaster, TargetCategoryCommand);
 
             // Admin: hands out progression, changes who a player is, reloads server data.
             // A restart does not undo these.
@@ -799,7 +800,7 @@ namespace Rasa.Managers
 
             // On the player's side whatever the row says, or the thing they just summoned shoots
             // them. The seeded bots are already AFS; this covers spawning anything else.
-            creature.Faction = Factions.AFS;
+            creature.TargetCategory = TargetCategory.Friendly;
 
             CreatureManager.Instance.SetLocation(creature, _client.Movement.Position, _client.Movement.ViewDirection.X, _client.Player.MapContextId);
             CellManager.Instance.AddToWorld(_client.Player.MapChannel, creature);
@@ -1112,6 +1113,43 @@ namespace Rasa.Managers
             return;
         }
 
+        /// <summary>
+        /// .targetcategory [hostile|friendly|object|neutral|decoration|decorationproxy|ignore|0-6]:
+        /// shows the targeted creature's target category, or sets it and tells the clients, so a
+        /// NEUTRAL or inert creature can be tried out without touching the creature table.
+        /// </summary>
+        private void TargetCategoryCommand(string[] parts)
+        {
+            var entityId = _client.Player.Target;
+
+            if (entityId == 0 || EntityManager.Instance.GetEntityType(entityId) != EntityType.Creature)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "Target a creature to use .targetcategory [hostile|friendly|object|neutral|decoration|decorationproxy|ignore]");
+                return;
+            }
+
+            var creature = EntityManager.Instance.GetCreature(entityId);
+
+            if (parts.Length < 2)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"Target category: {creature.TargetCategory} ({(int)creature.TargetCategory})");
+                return;
+            }
+
+            if (!Enum.TryParse<TargetCategory>(parts[1], true, out var category) || !Enum.IsDefined(typeof(TargetCategory), category))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"Unknown target category {parts[1]}; use hostile, friendly, object, neutral, decoration, decorationproxy, ignore or 0-6");
+                return;
+            }
+
+            creature.TargetCategory = category;
+            creature.Hate.Clear();
+            BehaviorManager.Instance.StopFighting(creature);
+            CellManager.Instance.CellCallMethod(creature, new TargetCategoryPacket(category));
+
+            CommunicatorManager.Instance.SystemMessage(_client, $"Target category set to {category} ({(int)category})");
+        }
+
         private void NpcInfoCommand(string[] parts)
         {
             if (parts.Length == 1)
@@ -1136,6 +1174,7 @@ namespace Rasa.Managers
                     var creature = EntityManager.Instance.GetCreature(entityId);
 
                     msg += $"CreatureDbId = {creature.DbId}\n";
+                    msg += $"TargetCategory = {creature.TargetCategory}\n";
 
                     if (creature.SpawnPool != null)
                         msg += $"SpawnPoolDbId = {creature.SpawnPool.DbId}\n";

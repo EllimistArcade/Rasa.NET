@@ -25,11 +25,12 @@ namespace Rasa.Structures
         /// <summary>A departure whose destination pad is on the map it leaves from: no map change, a flight and a move.</summary>
         internal bool StaysOnMap => Role == DropshipRole.Departure && DestinationMapId == MapContextId;
 
-        public Dropship(Factions faction, DropshipType dropshipType, SpawnPool spawnPool = null)
+        /// <param name="side">Whose ship: FRIENDLY for the AFS (human) dropship, HOSTILE for the Bane one.</param>
+        public Dropship(TargetCategory side, DropshipType dropshipType, SpawnPool spawnPool = null)
         {
             EntityId = EntityManager.Instance.GetEntityId;
-            EntityClassId = faction == Factions.AFS ? Data.EntityClasses.UsableCrSpawnerHumDropshipV01 : Data.EntityClasses.UsableCrSpawnerBaneDropshipV01;
-            Faction = faction;
+            EntityClassId = side == TargetCategory.Friendly ? Data.EntityClasses.UsableCrSpawnerHumDropshipV01 : Data.EntityClasses.UsableCrSpawnerBaneDropshipV01;
+            TargetCategory = side;
             StateId = UseObjectState.CsStateBegin;
             PhaseTimeleft = 5000;
             Phase = 0;
@@ -49,12 +50,12 @@ namespace Rasa.Structures
         /// with the pad they chose as its destination; an arrival is built where they have just
         /// been put down, with no destination.
         /// </summary>
-        public Dropship(Factions faction, DropshipType dropshipType, Client client, DropshipRole role, Vector3 destination = new Vector3(), uint destinationMapId = 0)
+        public Dropship(TargetCategory side, DropshipType dropshipType, Client client, DropshipRole role, Vector3 destination = new Vector3(), uint destinationMapId = 0)
         {
             Role = role;
             EntityId = EntityManager.Instance.GetEntityId;
-            EntityClassId = faction == Factions.AFS ? Data.EntityClasses.UsableCrSpawnerHumDropshipV01 : Data.EntityClasses.UsableCrSpawnerBaneDropshipV01;
-            Faction = faction;
+            EntityClassId = side == TargetCategory.Friendly ? Data.EntityClasses.UsableCrSpawnerHumDropshipV01 : Data.EntityClasses.UsableCrSpawnerBaneDropshipV01;
+            TargetCategory = side;
             StateId = UseObjectState.CsStateBegin;
             PhaseTimeleft = 5000;
             Phase = 0;

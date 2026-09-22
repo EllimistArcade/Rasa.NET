@@ -358,7 +358,7 @@ namespace Rasa.Managers
                 new AppearanceDataPacket(creature.AppearanceData),
                 new LevelPacket(creature.Level),
                 new AttributeInfoPacket(creature.Attributes),
-                new TargetCategoryPacket(creature.Faction),
+                new TargetCategoryPacket(creature.TargetCategory),
                 new UpdateAttributesPacket(creature.Attributes, 0),
                 new IsRunningPacket(false)
             };

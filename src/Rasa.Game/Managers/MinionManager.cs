@@ -581,7 +581,7 @@ namespace Rasa.Managers
                 return true;
 
             if (EntityManager.Instance.Creatures.TryGetValue(target.EntityId, out var creature))
-                return creature.Faction == Factions.AFS;
+                return creature.TargetCategory == TargetCategory.Friendly;
 
             return false;
         }

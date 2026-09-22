@@ -112,7 +112,7 @@ namespace Rasa.Managers
             var mine = new Creature
             {
                 EntityClass = CrabMineClass,
-                Faction = Factions.AFS,
+                TargetCategory = TargetCategory.Friendly,
                 Level = level,
                 MaxHitPoints = (uint)health,
                 RunSpeed = CrabMineSpeed,

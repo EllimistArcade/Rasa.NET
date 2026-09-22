@@ -7,9 +7,9 @@
     {
         public override GameOpcode Opcode { get; } = GameOpcode.TargetCategory;
 
-        public Factions TargetCategory { get; set; }
+        public TargetCategory TargetCategory { get; set; }
 
-        public TargetCategoryPacket(Factions targetCategory)
+        public TargetCategoryPacket(TargetCategory targetCategory)
         {
             TargetCategory = targetCategory;
         }

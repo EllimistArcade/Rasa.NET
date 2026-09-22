@@ -21,7 +21,13 @@ namespace Rasa.Structures
         public Vector3 Position { get; set; }
         public double Rotation { get; set; }
         public uint MapContextId { get; set; }
-        public Factions Faction { get; set; }
+
+        /// <summary>
+        /// For a control point or a dropship, whose side it is - FRIENDLY for the AFS, HOSTILE for
+        /// the Bane; OBJECT for an ability's usable. Objects are not sent it; the client's usable
+        /// classes work out their own.
+        /// </summary>
+        public TargetCategory TargetCategory { get; set; }
         public long RespawnTime { get; set; }
         public DynamicObjectType DynamicObjectType { get; set; }
         public List<Client> TriggeredByPlayers = new List<Client>();

@@ -84,7 +84,7 @@ namespace Rasa.Managers
         /// </summary>
         private bool AttachHack(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
         {
-            if (!CanHack(target) || !IsHostile(player, target) || target.Faction == Factions.AFS)
+            if (!CanHack(target) || !IsHostile(player, target))
                 return false;
 
             if (IsHackImmune(target))
@@ -100,7 +100,7 @@ namespace Rasa.Managers
         /// <summary>Traitor and Hack alike: the creature fights for the player for DURATION under effect typeId.</summary>
         private bool TurnCreature(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info, int typeId)
         {
-            if (!IsHostile(player, target) || target.Faction == Factions.AFS)
+            if (!IsHostile(player, target))
                 return false;
 
             var effect = NewEffect(mapChannel, player, info, typeId, info.Get(AbilityProperty.Duration, 10));
@@ -108,7 +108,7 @@ namespace Rasa.Managers
             effect.IsBuff = false;
             effect.AllowDetach = false;
 
-            var faction = target.Faction;
+            var faction = target.TargetCategory;
             var aggroRange = target.AggroRange;
             var master = target.MasterEntityId;
             var stance = target.Stance;
@@ -118,7 +118,7 @@ namespace Rasa.Managers
                 if (!(actor is Creature turned))
                     return;
 
-                turned.Faction = faction;
+                turned.TargetCategory = faction;
                 turned.AggroRange = aggroRange;
                 turned.MasterEntityId = master;
                 turned.Stance = stance;
@@ -133,13 +133,13 @@ namespace Rasa.Managers
 
             GameEffectManager.Instance.Attach(mapChannel, target, effect);
 
-            target.Faction = Factions.AFS;
+            target.TargetCategory = TargetCategory.Friendly;
             target.AggroRange = info.Get(AbilityProperty.EffectRadius, 10);
             target.MasterEntityId = player.EntityId;
             target.Stance = MinionStance.Aggressive;   // a creature with a master only scans when aggressive
             target.Hate.Clear();
 
-            CellManager.Instance.CellCallMethod(target, new TargetCategoryPacket(Factions.AFS));
+            CellManager.Instance.CellCallMethod(target, new TargetCategoryPacket(TargetCategory.Friendly));
             BehaviorManager.Instance.StopFighting(target);
 
             // The rest forget it was ever on their side.

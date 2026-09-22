@@ -95,8 +95,11 @@ namespace Rasa.Structures
         /// <summary>Polymorph: the creature weapon the player fires while morphed; null when they are themselves.</summary>
         public Item MorphWeapon { get; set; }
 
-        /// <summary>Polymorph: the faction the player counts as while morphed ("including their faction"); null for their own.</summary>
-        public Data.Factions? MorphFaction { get; set; }
+        /// <summary>Polymorph: the target category the player counts as while morphed ("including their faction"); null for their own.</summary>
+        public Data.TargetCategory? MorphCategory { get; set; }
+
+        /// <summary>What the player counts as to creatures: FRIENDLY, unless Polymorph has made them otherwise.</summary>
+        public Data.TargetCategory CombatCategory => MorphCategory ?? Data.TargetCategory.Friendly;
 
         public void PlaceAt(Vector3 position)
         {

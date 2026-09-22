@@ -142,7 +142,7 @@ namespace Rasa.Managers
             var rift = new Creature
             {
                 EntityClass = RealityRipperClass,
-                Faction = Factions.AFS,
+                TargetCategory = TargetCategory.Friendly,
                 Level = level,
                 MaxHitPoints = (uint)health,
                 AppearanceData = new Dictionary<EquipmentData, AppearanceData>(),

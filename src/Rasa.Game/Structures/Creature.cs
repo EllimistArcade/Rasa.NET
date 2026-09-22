@@ -13,7 +13,9 @@ namespace Rasa.Structures
         public Npc Npc { get; set; }
         // loot data (only if creature is harvestable)
         public CreatureLootData LootData { get; set; }
-        public Factions Faction { get; set; }
+
+        /// <summary>How it presents and whom it fights (Data.TargetCategories); the creature table's faction column.</summary>
+        public TargetCategory TargetCategory { get; set; }
         public uint Level { get; set; }
         public uint MaxHitPoints { get; set; }
         public uint NameId { get; set; }
@@ -121,7 +123,7 @@ namespace Rasa.Structures
         {
             DbId = data.Id;
             EntityClass = (EntityClasses)data.ClassId;
-            Faction = (Factions)data.Faction;
+            TargetCategory = (TargetCategory)data.Faction;
             Level = data.Level;
             MaxHitPoints = data.MaxHitPoints;
             NameId = data.NameId;
@@ -138,7 +140,7 @@ namespace Rasa.Structures
             AppearanceData = creature.AppearanceData;
             DbId = creature.DbId;
             EntityClass = creature.EntityClass;
-            Faction = creature.Faction;
+            TargetCategory = creature.TargetCategory;
             Level = creature.Level;
             MaxHitPoints = creature.MaxHitPoints;
             NameId = creature.NameId;

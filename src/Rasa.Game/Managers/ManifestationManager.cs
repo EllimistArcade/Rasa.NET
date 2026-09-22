@@ -1532,7 +1532,7 @@ namespace Rasa.Managers
                 new CharacterNamePacket(player.Name),
                 new ActorNamePacket(player.FamilyName),
                 new IsRunningPacket(player.IsRunning),
-                new TargetCategoryPacket(Factions.AFS),
+                new TargetCategoryPacket(TargetCategory.Friendly),
                 new PlayerFlagsPacket(),
                 new IsTrialAccountPacket(player.IsTrialAccount),
                 new EquipmentInfoPacket(client.Player.Inventory.EquippedInventory),

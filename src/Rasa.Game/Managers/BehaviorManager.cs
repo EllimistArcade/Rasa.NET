@@ -109,23 +109,23 @@ namespace Rasa.Managers
             if (Detection.IsBlind(creature))
                 return false;
 
-            // AFS do not attack AFS
-            var attacksPlayers = creature.Faction != Factions.AFS;
+            // Only HOSTILE and FRIENDLY go looking for a fight, and only with each other
+            // (TargetCategories.Seeks): a NEUTRAL creature waits to be attacked, and an object or
+            // decoration takes no part.
+            if (creature.TargetCategory != TargetCategory.Hostile && creature.TargetCategory != TargetCategory.Friendly)
+                return false;
 
             foreach (var cell in CellManager.CellsIn(mapChannel, creature.Cells))
             {
                 foreach (var client in cell.ClientList)
                 {
-                    // Cell lists can hold a client whose character is already gone. AFS creatures
-                    // leave players alone - unless Polymorph has made the player one of the Bane.
-                    if (client.Player == null || (!attacksPlayers && client.Player.MorphFaction != Factions.Bane))
+                    // Cell lists can hold a client whose character is already gone. A player is
+                    // FRIENDLY - sought by HOSTILE creatures only - unless Polymorph has made them
+                    // something else.
+                    if (client.Player == null || !TargetCategories.Seeks(creature.TargetCategory, client.Player.CombatCategory))
                         continue;
 
                     if (client.Player.GmFlagAlwaysFriendly)
-                        continue;
-
-                    // Polymorphed into one of its own faction: not an enemy to it.
-                    if (client.Player.MorphFaction == creature.Faction)
                         continue;
 
                     if (client.Player.Attributes[Attributes.Health].Current <= 0)
@@ -158,7 +158,7 @@ namespace Rasa.Managers
                     if (tCreature == creature)
                         continue;
 
-                    if (tCreature.Faction == creature.Faction)
+                    if (!TargetCategories.Seeks(creature.TargetCategory, tCreature.TargetCategory))
                         continue;
 
                     // check distance
@@ -958,6 +958,12 @@ namespace Rasa.Managers
             if (creature.MasterEntityId != 0 && creature.Stance == MinionStance.Passive)
                 return;
 
+            // Only a fight its category allows: nothing on its own side, nothing that takes no
+            // part in fights (TargetCategories.MayFight). A NEUTRAL creature fights whoever
+            // attacks it; an object or decoration fights nobody.
+            if (!TargetCategories.MayFight(creature.TargetCategory, CategoryOf(targetEntityId)))
+                return;
+
             creature.Controller.CurrentAction = BehaviorActionFighting;
             // Whatever the creature was walking towards is not where the fight is: without this
             // it chased its last wander node before ever heading for its target.
@@ -969,6 +975,21 @@ namespace Rasa.Managers
 
             // Whatever brought it here - the scan, a hit, an assist - the target is on its table.
             Threat.Noticed(creature, targetEntityId);
+        }
+
+        /// <summary>
+        /// The target category of an actor by entity id: a creature's own, a player's as creatures
+        /// see it (Manifestation.CombatCategory); IGNORE for anything else.
+        /// </summary>
+        internal static TargetCategory CategoryOf(ulong entityId)
+        {
+            if (EntityManager.Instance.Creatures.TryGetValue(entityId, out var creature))
+                return creature.TargetCategory;
+
+            if (EntityManager.Instance.Players.TryGetValue(entityId, out var player))
+                return player.CombatCategory;
+
+            return TargetCategory.Ignore;
         }
 
         /// <summary>The fight is over for this creature: it forgets everyone it hated and wanders again.</summary>

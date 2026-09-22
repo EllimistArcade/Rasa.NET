@@ -129,7 +129,7 @@ namespace Rasa.Managers
         {
             var risen = new Creature(corpse)
             {
-                Faction = Factions.AFS,
+                TargetCategory = TargetCategory.Friendly,
                 Level = ReanimatedLevel(player.Level, info.Get(AbilityProperty.CreatureLevelDifference)),
                 MasterEntityId = player.EntityId,
                 Stance = MinionStance.Aggressive,   // it looks for the fight; a creature with a master only scans when aggressive

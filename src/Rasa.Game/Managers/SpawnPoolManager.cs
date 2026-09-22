@@ -170,7 +170,7 @@ namespace Rasa.Managers
                     IncreaseQueuedCreatureCount(spawnPool, creatureList.Count);
 
                     // create bane_dropship
-                    var dropship = new Dropship(Factions.Bane, DropshipType.Spawner, spawnPool);
+                    var dropship = new Dropship(TargetCategory.Hostile, DropshipType.Spawner, spawnPool);
 
                     CellManager.Instance.AddToWorld(mapChannel, dropship);
 
@@ -183,7 +183,7 @@ namespace Rasa.Managers
                     IncreaseQueuedCreatureCount(spawnPool, creatureList.Count);
 
                     // create human_dropship
-                    var dropship = new Dropship(Factions.AFS, DropshipType.Spawner, spawnPool);
+                    var dropship = new Dropship(TargetCategory.Friendly, DropshipType.Spawner, spawnPool);
 
                     CellManager.Instance.AddToWorld(mapChannel, dropship);
 

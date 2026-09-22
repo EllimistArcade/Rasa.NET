@@ -492,12 +492,13 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Who a player's damage may land on: creatures that are not AFS. Other players are not
-        /// targets - there is no PvP to speak of yet - and AFS creatures are the friendly NPCs.
+        /// Who a player's damage may land on: HOSTILE and NEUTRAL creatures (TargetCategories.
+        /// PlayerMayAttack). Other players are not targets - there is no PvP to speak of yet - and
+        /// FRIENDLY creatures are the friendly NPCs.
         /// </summary>
         internal static bool IsHostile(Manifestation player, Actor target)
         {
-            return target is Creature creature && creature.Faction != Factions.AFS && creature.State != CharacterState.Dying && creature.Attributes[Attributes.Health].Current > 0;
+            return target is Creature creature && TargetCategories.PlayerMayAttack(creature.TargetCategory) && creature.State != CharacterState.Dying && creature.Attributes[Attributes.Health].Current > 0;
         }
 
         /// <summary>The first attribute the player cannot pay, or null if they can pay them all.</summary>
@@ -898,7 +899,7 @@ namespace Rasa.Managers
             return cos >= Math.Cos(halfAngleDegrees * Math.PI / 180.0);
         }
 
-        /// <summary>Living, non-AFS creatures in a cone from the performer.</summary>
+        /// <summary>Living creatures a player may attack in a cone from the performer.</summary>
         internal static List<Creature> HostilesInCone(MapChannel mapChannel, Manifestation player, Vector3 aim, float range, float halfAngleDegrees)
         {
             return HostilesWithin(mapChannel, player, player.Position, range)
@@ -906,7 +907,7 @@ namespace Rasa.Managers
                 .ToList();
         }
 
-        /// <summary>Living, non-AFS creatures within radius metres of a point, from the cells around the performer.</summary>
+        /// <summary>Living creatures a player may attack within radius metres of a point, from the cells around the performer.</summary>
         internal static List<Creature> HostilesWithin(MapChannel mapChannel, Manifestation player, Vector3 centre, float radius)
         {
             var found = new List<Creature>();

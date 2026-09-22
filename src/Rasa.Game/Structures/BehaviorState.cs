@@ -9,7 +9,6 @@ namespace Rasa.Structures
     {
         public long DeadTime { get; set; } // amount of time that has passed since the actor died
         public byte CurrentAction { get; set; }
-        public Factions Faction { get; set; }
         // combat info
         public long TimerPathUpdateLock = 5000; // avoids path-update-spamming for permanently moving units => ToDo: see to we need to increase or decrease value
         // path info

@@ -40,7 +40,9 @@ namespace Rasa.Managers
     /// - after Lifetime, it plays the self-destruct windup where it stands and explodes after it;
     /// - its owner leaving the map takes it away unexploded.
     /// The explosion damages every hostile creature within EFFECT_RADIUS of the mine, credited to
-    /// the owner, and the mine is taken out of the world once 409's recovery has played. The mine
+    /// the owner, and the mine is taken out of the world CrabMineBlastLingerMs later - long enough
+    /// for the clients to have the blast and start its FX, and not the three seconds of 409's
+    /// recovery animation, which left the mine standing there after it had gone off. The mine
     /// is stepped every CrabMineStepMs by the worker rather than on BehaviorManager's slower think.
     ///
     /// Not in the client, so chosen: SeekRange 20 m, DetonateRange 3 m, MineSpeed 6 m/s,
@@ -60,6 +62,14 @@ namespace Rasa.Managers
         public const int CrabMineSelfDestructMs = 3000;            // CR_CRAB_MINE_SELF_DESTRUCT's windup
         public const int CrabMineBaseHealth = 100;
         public const int CrabMineDeathRecoveryMs = 3000;           // CR_CRAB_MINE_DEATH's recovery, animation 1154
+
+        /// <summary>
+        /// How long a blown mine stays in the world. CR_CRAB_MINE_DEATH's recovery is 3 s
+        /// (animation 1154), and waiting it out kept the model standing where it exploded for
+        /// those three seconds; the blast and its FX are sent the moment it goes off, so it only
+        /// has to outlive the packet.
+        /// </summary>
+        public const int CrabMineBlastLingerMs = 500;
 
         /// <summary>How often a running mine is moved and its movement sent.</summary>
         public const int CrabMineStepMs = 100;
@@ -265,8 +275,8 @@ namespace Rasa.Managers
         /// <summary>
         /// The blast: CR_CRAB_MINE_DEATH performed by the mine, its recovery listing every hostile
         /// creature within the radius with its damage - credited to the owner - as the bare
-        /// rawInfo CrabMineDeathAbility reads. The mine is dead from here, and taken away once the
-        /// recovery has played.
+        /// rawInfo CrabMineDeathAbility reads. The mine is dead from here, and taken away
+        /// CrabMineBlastLingerMs later.
         /// </summary>
         private void Detonate(CrabMine mine)
         {
@@ -274,7 +284,7 @@ namespace Rasa.Managers
             var creature = mine.Creature;
             var owner = mine.Owner;
 
-            mine.RemoveAt = Environment.TickCount64 + CrabMineDeathRecoveryMs;
+            mine.RemoveAt = Environment.TickCount64 + CrabMineBlastLingerMs;
             creature.KnockbackTo = null;
             creature.State = CharacterState.Dead;
             creature.Attributes[Attributes.Health].Current = 0;     // off every scan and every fight

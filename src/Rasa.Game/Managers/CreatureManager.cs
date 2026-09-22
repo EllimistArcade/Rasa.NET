@@ -87,6 +87,10 @@ namespace Rasa.Managers
         {
             var haveWeapon = creature.AppearanceData.ContainsKey(EquipmentData.Weapon);
 
+            // A summoned minion wears what it was given: a clone of an unarmed player stays unarmed.
+            if (creature.MasterEntityId != 0)
+                return;
+
             if (!haveWeapon)
             {
                 var weapon = new AppearanceData
@@ -362,6 +366,10 @@ namespace Rasa.Managers
                 new UpdateAttributesPacket(creature.Attributes, 0),
                 new IsRunningPacket(false)
             };
+
+            // A clone's "Clone of %s" takes its master's name from here.
+            if (creature.ActorName != null)
+                entityData.Add(new ActorNamePacket(creature.ActorName));
 
             client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(creature.EntityId, creature.EntityClass, entityData));
 

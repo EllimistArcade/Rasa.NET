@@ -117,6 +117,9 @@ namespace Rasa.Managers
             public int MinionTypeId;
             public int DespawnTypeId;
             public int RepairPercent;
+
+            /// <summary>Last touches on the creature once it is built at its level (Create Clone's looks and weapon); null for none.</summary>
+            public Action<Creature> Dress;
         }
 
         private static readonly List<Spotter> Spotters = new List<Spotter>();
@@ -235,6 +238,8 @@ namespace Rasa.Managers
 
             foreach (var weapon in spec.Weapons)
                 spotter.Actions.Add(WeaponAttackFor(weapon, level));
+
+            spec.Dress?.Invoke(spotter);
 
             spotter.Attributes.Add(Attributes.Body, new ActorAttributes(Attributes.Body, 1, 1, 1, 0, 0));
             spotter.Attributes.Add(Attributes.Mind, new ActorAttributes(Attributes.Mind, 1, 1, 1, 0, 0));

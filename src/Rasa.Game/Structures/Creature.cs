@@ -64,6 +64,12 @@ namespace Rasa.Structures
         //sint32** aggrotable; //stores enemydamage
         //sint32 aggrocount;
         public double Scale = 1.0d;
+
+        /// <summary>
+        /// A name sent as the actor's own (Recv_ActorName), or null for none. The client puts it
+        /// into a creature name with a %s - Create Clone's "Clone of %s".
+        /// </summary>
+        public string ActorName { get; set; }
         // origin
         public SpawnPool SpawnPool { get; set; }    // the spawnpool that initiated the creation of this creature
         // behavior controller

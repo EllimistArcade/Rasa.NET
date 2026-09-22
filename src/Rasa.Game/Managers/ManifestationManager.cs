@@ -375,7 +375,7 @@ namespace Rasa.Managers
 
             MissileManager.Instance.MissileLaunch(mapChannel, action, damage, 0,
                 WeaponDamageType(player, (DamageType)(weaponInfo.WeaponAltInfo?.AltDamageType ?? 0)), melee: true,
-                stunChance: Stuns.HandToHandChance(pump), stunMs: Stuns.HandToHandMs(pump));
+                knockbackChance: Stuns.HandToHandKnockbackChance(pump), knockbackStunMs: Stuns.HandToHandMs(pump));
         }
 
         /// <summary>

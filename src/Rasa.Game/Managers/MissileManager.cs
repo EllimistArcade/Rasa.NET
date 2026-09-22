@@ -200,10 +200,11 @@ namespace Rasa.Managers
                 if (creature.State != CharacterState.Dying && missile.RootMs > 0)
                     CrowdControl.Root(mapChannel, creature, missile.Source, CrowdControl.NetGunRootTypeId, missile.RootMs);
 
-                // Firearms' shotguns knock it back: the client's default distance, since the
-                // weapon's own knockback numbers are not in anything we have.
+                // Firearms' shotguns and Hand to Hand knock it back: the client's default
+                // distance, since the weapons' own knockback numbers are not in anything we have.
+                // A melee knockback stays down for Hand to Hand's stun duration on top.
                 if (creature.State != CharacterState.Dying && missile.KnockbackChance > 0 && Stuns.Roll(missile.KnockbackChance))
-                    CrowdControl.Knockback(mapChannel, creature, missile.Source, CrowdControl.DefaultKnockbackDistance, CrowdControl.KnockbackTypeId, damageType);
+                    CrowdControl.Knockback(mapChannel, creature, missile.Source, CrowdControl.DefaultKnockbackDistance, CrowdControl.KnockbackTypeId, damageType, missile.KnockbackStunMs);
             }
 
             if (creature.State == CharacterState.Dying)
@@ -460,7 +461,8 @@ namespace Rasa.Managers
         /// <param name="rootMs">How long the hit holds a creature where it stands (net guns).</param>
         /// <param name="splashRadius">Metres around the target a launcher's splash reaches (Splash); 0 for none.</param>
         /// <param name="coneHalfAngle">Degrees either side of the shooter's facing a cone weapon hits (ConeWeapons); 0 for a single target.</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0)
+        /// <param name="knockbackStunMs">How much longer a creature the knockback lands on stays down (Hand to Hand).</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0, int knockbackStunMs = 0)
         {
             var missile = new Missile
             {
@@ -474,6 +476,7 @@ namespace Rasa.Managers
                 StunMs = stunMs,
                 RootMs = rootMs,
                 KnockbackChance = Math.Max(0, knockbackChance),
+                KnockbackStunMs = Math.Max(0, knockbackStunMs),
                 // Launchers: the share each splashed creature takes is of the damage before the
                 // crit roll, which only the target hit makes.
                 SplashRadius = Math.Max(0, splashRadius),
@@ -615,7 +618,8 @@ namespace Rasa.Managers
                 StunChance = missile.StunChance,
                 StunMs = missile.StunMs,
                 RootMs = canCrit ? missile.RootMs : 0,
-                KnockbackChance = canCrit ? missile.KnockbackChance : 0
+                KnockbackChance = canCrit ? missile.KnockbackChance : 0,
+                KnockbackStunMs = missile.KnockbackStunMs
             };
 
             if (canCrit)

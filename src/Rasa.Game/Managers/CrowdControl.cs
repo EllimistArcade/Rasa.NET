@@ -111,9 +111,10 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Knocks a creature back from <paramref name="source"/>. typeId is the client effect that
-        /// shows it: KNOCKBACK, or CRIT_SONIC for a Sonic crit.
+        /// shows it: KNOCKBACK, or CRIT_SONIC for a Sonic crit. extraStunMs keeps it down that much
+        /// longer after the getup time (Hand to Hand's "Stun Duration").
         /// </summary>
-        public static bool Knockback(MapChannel mapChannel, Creature target, Actor source, float distance, int typeId, DamageType damageType)
+        public static bool Knockback(MapChannel mapChannel, Creature target, Actor source, float distance, int typeId, DamageType damageType, int extraStunMs = 0)
         {
             if (target == null || source == null || distance <= 0f || target.State == CharacterState.Dead || target.State == CharacterState.Dying)
                 return false;
@@ -125,6 +126,7 @@ namespace Rasa.Managers
             var destination = KnockbackDestination(mapChannel, target.Position, dir, distance);
             var travelled = Vector3.Distance(target.Position, destination);
             var flightMs = (int)(travelled / KnockbackSpeed * 1000f);
+            var downMs = flightMs + GetupMs + Math.Max(0, extraStunMs);
 
             if (travelled > 0.1f)
             {
@@ -142,11 +144,11 @@ namespace Rasa.Managers
                 SourceLevel = (source as Manifestation)?.Level ?? 1,
                 IsBuff = false,
                 IsStun = true,
-                ExpiresTick = Environment.TickCount64 + flightMs + GetupMs
+                ExpiresTick = Environment.TickCount64 + downMs
             };
 
             // KnockbackEffect.OnAttach(target, duration).
-            GameEffectManager.Instance.Attach(mapChannel, target, knock, (flightMs + GetupMs) / 1000.0);
+            GameEffectManager.Instance.Attach(mapChannel, target, knock, downMs / 1000.0);
 
             // A knockback is a stun: it may open the Critical Death window.
             CritDeathManager.Instance.TryEnterPreDeath(mapChannel, target, source, damageType);

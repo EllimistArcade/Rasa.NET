@@ -20,8 +20,10 @@ namespace Rasa.Managers
     ///  - Critical hits by Ice (CRIT_ICE 3, "Frozen", a StunEffect), for CritStunMs - not in the
     ///    client (CritEffects). A Sonic crit (CRIT_SONIC 7, "Stunned") is a knockback: CrowdControl.
     ///  - Knockbacks, which stun for the flight and the getup after it: CrowdControl.
-    ///  - Hand to Hand on melee hits: pump 4 "Knockback Chance: +50%, Stun Duration: 1s", pump 5
-    ///    "+75%, 2s". Taken as a stun at the knockback chance, since there is no knockback yet.
+    ///  - Hand to Hand on melee hits: pump 3 "Knockback Chance: +25%", pump 4 "+50%, Stun
+    ///    Duration: 1s", pump 5 "+75%, 2s". The chance is a knockback's (HandToHandKnockbackChance);
+    ///    the stun duration is how much longer the creature it knocks down stays down
+    ///    (HandToHandMs, CrowdControl.Knockback's extraStunMs).
     ///  - Launchers on grenades: "Grenades: +25% / +40% / +50% Stun Chance" at pumps 3-5. The
     ///    duration is not given: GrenadeStunMs.
     ///
@@ -40,7 +42,7 @@ namespace Rasa.Managers
         /// <summary>How long a grenade's stun lasts. Not in the client.</summary>
         public const int GrenadeStunMs = 2000;
 
-        private static readonly int[] HandToHandChanceByPump = { 0, 0, 0, 0, 50, 75 };
+        private static readonly int[] HandToHandChanceByPump = { 0, 0, 0, 25, 50, 75 };
         private static readonly int[] HandToHandMsByPump = { 0, 0, 0, 0, 1000, 2000 };
         private static readonly int[] GrenadeChanceByPump = { 0, 0, 0, 25, 40, 50 };
 
@@ -48,7 +50,10 @@ namespace Rasa.Managers
 
         private static int Pump(int pump) => Math.Max(0, Math.Min(5, pump));
 
-        public static int HandToHandChance(int pump) => HandToHandChanceByPump[Pump(pump)];
+        /// <summary>Hand to Hand's "Knockback Chance", in percent, at this pump.</summary>
+        public static int HandToHandKnockbackChance(int pump) => HandToHandChanceByPump[Pump(pump)];
+
+        /// <summary>Hand to Hand's "Stun Duration" in ms at this pump: added to a melee knockback's time down.</summary>
         public static int HandToHandMs(int pump) => HandToHandMsByPump[Pump(pump)];
         public static int GrenadeChance(int pump) => GrenadeChanceByPump[Pump(pump)];
 

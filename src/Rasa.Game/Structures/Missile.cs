@@ -27,8 +27,10 @@
         public int StunMs { get; set; }
         /// <summary>How long the hit holds a creature where it stands (net guns); 0 for not at all.</summary>
         public int RootMs { get; set; }
-        /// <summary>Chance in percent that the hit knocks a creature back (Firearms' shotguns).</summary>
+        /// <summary>Chance in percent that the hit knocks a creature back (Firearms' shotguns, Hand to Hand).</summary>
         public int KnockbackChance { get; set; }
+        /// <summary>How much longer a creature this knocks back stays down (Hand to Hand's "Stun Duration").</summary>
+        public int KnockbackStunMs { get; set; }
         /// <summary>Metres around the target that a launcher's splash reaches (Splash); 0 for none.</summary>
         public float SplashRadius { get; set; }
         /// <summary>What each splashed creature takes, worked out from the damage before the crit roll.</summary>

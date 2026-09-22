@@ -114,6 +114,10 @@ namespace Rasa.Managers
             // setting to follow their master."
             BehaviorManager.Instance.SetActionFollow(minion, master.Player.EntityId);
 
+            // And fight what they fight: assisting the master, so a bot goes for whatever its
+            // owner targets until told to assist someone else (Assist Target).
+            minion.Controller.ActionFollow.AssistTargetId = master.Player.EntityId;
+
             master.CallMethod(master.Player.EntityId, new MinionAddedPacket(minion.EntityId));
         }
 

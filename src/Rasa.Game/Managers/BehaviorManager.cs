@@ -353,22 +353,15 @@ namespace Rasa.Managers
                 // are primarily offensive, assist mode will automatically issue a Target command
                 // whenever the player attacks an enemy so that the subordinate is targeting the
                 // same enemy."
-                if (creature.Controller.ActionFollow.AssistTargetId != 0 && creature.Stance != MinionStance.Passive)
+                var assistedTarget = AssistedTarget(creature);
+
+                if (assistedTarget != 0)
                 {
-                    // TryGetValue: the assisted player may have gone, and GetActor throws on a miss.
-                    EntityManager.Instance.Actors.TryGetValue(creature.Controller.ActionFollow.AssistTargetId, out var assisted);
+                    creature.Target = assistedTarget;
+                    SetActionFighting(creature, assistedTarget);
 
-                    // Only a target it can fight (Threat.CanFight - alive, on the map, one its
-                    // category allows): a player who has a friend or a corpse selected is not
-                    // asking for help, and the minion carries on following.
-                    if (assisted != null && assisted.Target != 0 && assisted.Target != creature.EntityId && Threat.CanFight(creature, assisted.Target))
-                    {
-                        creature.Target = assisted.Target;
-                        SetActionFighting(creature, assisted.Target);
-
-                        if (creature.Controller.CurrentAction == BehaviorActionFighting)
-                            return;
-                    }
+                    if (creature.Controller.CurrentAction == BehaviorActionFighting)
+                        return;
                 }
 
                 var destination = creature.Controller.ActionFollow.Anchor;
@@ -482,8 +475,14 @@ namespace Rasa.Managers
             else if (creature.Controller.CurrentAction == BehaviorActionFighting)
             {
                 // Who it hates most and can still fight is who it fights (Threat). Nobody left:
-                // the fight is over and the table goes with it.
-                var chosen = Threat.ChooseTarget(creature);
+                // the fight is over and the table goes with it. A minion assisting someone fights
+                // what they have targeted first, switching when they do, and falls back on its
+                // hate when they have nothing it can fight selected.
+                var assisting = AssistedTarget(creature);
+                var chosen = assisting != 0 ? assisting : Threat.ChooseTarget(creature);
+
+                if (assisting != 0)
+                    creature.Target = assisting;
 
                 if (chosen == 0)
                 {
@@ -1151,6 +1150,26 @@ namespace Rasa.Managers
             creature.Controller.ActionFollow.PathUpdateTime = 0;
             creature.Controller.Path.Clear();
             creature.Controller.PathIndex = 0;
+        }
+
+        /// <summary>
+        /// What the entity a minion assists has targeted, when the minion may fight it (Threat.CanFight
+        /// - alive, on the map, one its category allows); 0 when it assists nobody, is Passive, or
+        /// the assisted has nothing it can fight selected - a player with a friend or a corpse
+        /// selected is not asking for help.
+        /// </summary>
+        public static ulong AssistedTarget(Creature creature)
+        {
+            var assistId = creature.Controller.ActionFollow.AssistTargetId;
+
+            if (assistId == 0 || creature.MasterEntityId == 0 || creature.Stance == MinionStance.Passive)
+                return 0;
+
+            // TryGetValue: the assisted player may have gone, and GetActor throws on a miss.
+            if (!EntityManager.Instance.Actors.TryGetValue(assistId, out var assisted) || assisted.Target == 0 || assisted.Target == creature.EntityId)
+                return 0;
+
+            return Threat.CanFight(creature, assisted.Target) ? assisted.Target : 0;
         }
 
         /// <summary>

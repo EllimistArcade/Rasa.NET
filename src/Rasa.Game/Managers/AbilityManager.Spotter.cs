@@ -198,7 +198,6 @@ namespace Rasa.Managers
 
             // The player's to command; it follows them and fights what they fight.
             MinionManager.Instance.Adopt(client, spotter);
-            spotter.Controller.ActionFollow.AssistTargetId = player.EntityId;
 
             // SPOTTER_MINION: the client counts its damage as the player's.
             var lifetimeMs = Math.Max(1000, info.Get(AbilityProperty.CreatureLifetimeMs, 900000));

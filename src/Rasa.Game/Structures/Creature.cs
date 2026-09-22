@@ -123,7 +123,10 @@ namespace Rasa.Structures
         {
             DbId = data.Id;
             EntityClass = (EntityClasses)data.ClassId;
-            TargetCategory = (TargetCategory)data.Faction;
+            // The faction column holds the category; a value the client's targetdata does not
+            // have would reach the client as a category it cannot show, so it counts as HOSTILE,
+            // what every row but the AFS ones has always been.
+            TargetCategory = Enum.IsDefined(typeof(TargetCategory), (int)data.Faction) ? (TargetCategory)data.Faction : TargetCategory.Hostile;
             Level = data.Level;
             MaxHitPoints = data.MaxHitPoints;
             NameId = data.NameId;

@@ -29,10 +29,11 @@ namespace Rasa.Managers
     ///   bonus, "a damage bonus for each pump level the user has, regardless of what pump level is
     ///   used": +10% for every pump of Crab Mines the player owns.
     ///
-    /// The server's part is the mine itself. It is an AFS creature of the player's level at the
-    /// player's feet, so Bane creatures can find and kill it and the player cannot. It has no
+    /// The server's part is the mine itself. It is a FRIENDLY creature of the player's level at
+    /// the player's feet, so hostile creatures can find and kill it and the player cannot. It has no
     /// behaviour of its own (BehaviorManager leaves it alone); CrabMineWorker runs it each tick:
-    /// - it seeks the nearest hostile creature within SeekRange of itself and runs at it at
+    /// - it seeks the nearest HOSTILE creature (AbilityManager.EnemiesWithin - not a NEUTRAL one)
+    ///   within SeekRange of itself and runs at it at
     ///   MineSpeed, facing where it goes;
     /// - within DetonateRange of it, it explodes;
     /// - killed, it explodes where it fell;
@@ -212,7 +213,7 @@ namespace Rasa.Managers
                     continue;
                 }
 
-                var prey = HostilesWithin(mapChannel, mine.Owner, creature.Position, CrabMineSeekRange)
+                var prey = EnemiesWithin(mapChannel, mine.Owner, creature.Position, CrabMineSeekRange)
                     .Where(c => c.State != CharacterState.Dead && c.State != CharacterState.Dying)
                     .OrderBy(c => Vector3.DistanceSquared(c.Position, creature.Position))
                     .FirstOrDefault();

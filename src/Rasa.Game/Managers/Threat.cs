@@ -172,10 +172,14 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Whether a creature can fight this entity at all right now: a living player it can see
-        /// on its own map, or a living creature that is not its own faction.
+        /// on its own map, or a living creature on it - either one its target category allows
+        /// (BehaviorManager.MayFight), so a table never hands it a target SetActionFighting refuses.
         /// </summary>
         public static bool CanFight(Creature creature, ulong entityId)
         {
+            if (!BehaviorManager.MayFight(creature, entityId))
+                return false;
+
             switch (EntityManager.Instance.GetEntityType(entityId))
             {
                 case EntityType.Character:

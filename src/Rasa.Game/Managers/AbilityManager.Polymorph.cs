@@ -38,8 +38,9 @@ namespace Rasa.Managers
     ///   pistol's 2809 sits beside the level 50 player pistols), so it is scaled down to the
     ///   player's level on the curve player weapons follow, doubling every 8 levels
     ///   (ScaleToLevel) - 40 at level 1 for the Bane pistol, against 55 for a level 1 pistol.
-    /// - "Including their faction": the player counts as that faction (Manifestation.MorphCategory).
-    ///   Creatures of it do not notice them; AFS creatures, which never attack players, do.
+    /// - "Including their faction": the player counts as that target category to creatures
+    ///   (Manifestation.MorphCategory, CombatCategory). HOSTILE creatures do not go for a player
+    ///   morphed HOSTILE, FRIENDLY ones do; either answers a player who attacks it.
     /// - The drawer is empty: the creatures' other combat actions are creature actions the server
     ///   cannot perform for a player yet, and the weapon is their attack.
     /// - Abilities are refused while morphed, bar Polymorph itself.

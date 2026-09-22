@@ -800,7 +800,7 @@ namespace Rasa.Managers
             }
 
             // On the player's side whatever the row says, or the thing they just summoned shoots
-            // them. The seeded bots are already AFS; this covers spawning anything else.
+            // them. The seeded bots are already FRIENDLY; this covers spawning anything else.
             creature.TargetCategory = TargetCategory.Friendly;
 
             CreatureManager.Instance.SetLocation(creature, _client.Movement.Position, _client.Movement.ViewDirection.X, _client.Player.MapContextId);

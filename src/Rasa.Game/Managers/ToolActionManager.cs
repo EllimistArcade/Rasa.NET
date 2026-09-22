@@ -772,8 +772,10 @@ namespace Rasa.Managers
                 return ValidateHarvestTarget(client, packet, creature, targetId);
 
             // healdisc, repairtool, armoraug and nerfweapon are all TARGET_FRIENDLY or
-            // TARGET_SELF. ToDo: target category - HOSTILE creatures should be refused here, but
-            // faction and the client's target categories do not line up yet.
+            // TARGET_SELF, which targetedaction.py holds to category == FRIENDLY: a creature has
+            // to be one. A player is always friendly to another.
+            if (creature != null && creature.TargetCategory != TargetCategory.Friendly)
+                return PlayerMessage.PmTargetInvalid;
 
             // repairtool.py refuses a dead player outright; healdisc.py allows a corpse only at
             // Healing 3 or better. ToDo: repairtool also refuses dead BIOLOGICAL creatures, which

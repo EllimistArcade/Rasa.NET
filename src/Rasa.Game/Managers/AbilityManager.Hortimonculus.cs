@@ -38,7 +38,7 @@ namespace Rasa.Managers
     ///   35 s, 1 min, 2 min - are what the health lasts at that decay.
     ///
     /// The server's part:
-    /// - the corpse must be a dead, BIOLOGICAL, non-AFS creature that nothing else has claimed;
+    /// - the corpse must be a dead, BIOLOGICAL, HOSTILE or NEUTRAL creature that nothing else has claimed;
     ///   it is given up for despawn as the plant grows from it, as Cadaver Immolation's is;
     /// - every INTERVAL the plant heals the owner and their squad within EFFECT_RADIUS by
     ///   DECAY_PERCENTAGE of its maximum health each, and loses that much health itself;

@@ -10,18 +10,19 @@ namespace Rasa.Managers
     /// one; its target effect, TRAITOR_EFFECT (10000057, FX 1113), is announced on the target
     /// by the recovery. Per pump: DURATION 10-30 s, EFFECT_RADIUS 10-50 m.
     ///
-    /// For the effect's duration the creature is AFS:
+    /// For the effect's duration the creature is FRIENDLY (Data.TargetCategory):
     /// - its hate is wiped and it stops what it was doing, so it no longer goes for the players;
-    /// - AFS creatures never attack players, and a creature's scan goes for creatures of any
-    ///   other faction, so it turns on the Bane around it - within EFFECT_RADIUS, which stands
-    ///   in for its aggro range - and they on it;
-    /// - the clients are told its target category is AFS, so it shows as friendly, and players'
-    ///   abilities (AbilityManager.IsHostile) leave it alone;
+    /// - FRIENDLY creatures never go for players, and seek HOSTILE creatures (TargetCategories.
+    ///   Seeks), so it turns on the hostile creatures around it, whatever they are - within
+    ///   EFFECT_RADIUS, which stands in for its aggro range - and they on it. NEUTRAL creatures it
+    ///   leaves alone unless they attack it;
+    /// - the clients are told its target category is FRIENDLY, so it shows as friendly, and
+    ///   players' abilities (AbilityManager.IsHostile) leave it alone;
     /// - its MasterEntityId is the caster, so what it kills is the caster's
     ///   (CreatureManager.HandleCreatureKill), and its stance Aggressive, since a creature with a
     ///   master only looks for enemies when it is (BehaviorManager.ScansForEnemies).
-    /// When the effect ends - run out, or the creature dead - it is Bane again with its own aggro
-    /// range, its hate wiped once more, and whoever it finds first is who it fights.
+    /// When the effect ends - run out, or the creature dead - it has its own target category and
+    /// aggro range back, its hate wiped once more, and whoever it finds first is who it fights.
     ///
     /// Hack (AA_SAPPER_HACK 303, abilities.hack) is the same turn for machines: "Debuffs a single
     /// enemy mechanical target making it attack other enemy units within a given radius for a set
@@ -108,7 +109,7 @@ namespace Rasa.Managers
             effect.IsBuff = false;
             effect.AllowDetach = false;
 
-            var faction = target.TargetCategory;
+            var category = target.TargetCategory;
             var aggroRange = target.AggroRange;
             var master = target.MasterEntityId;
             var stance = target.Stance;
@@ -118,7 +119,7 @@ namespace Rasa.Managers
                 if (!(actor is Creature turned))
                     return;
 
-                turned.TargetCategory = faction;
+                turned.TargetCategory = category;
                 turned.AggroRange = aggroRange;
                 turned.MasterEntityId = master;
                 turned.Stance = stance;
@@ -126,7 +127,7 @@ namespace Rasa.Managers
 
                 if (map != null && turned.State != CharacterState.Dead)
                 {
-                    CellManager.Instance.CellCallMethod(turned, new TargetCategoryPacket(faction));
+                    CellManager.Instance.CellCallMethod(turned, new TargetCategoryPacket(category));
                     BehaviorManager.Instance.StopFighting(turned);
                 }
             };

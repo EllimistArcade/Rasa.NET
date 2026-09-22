@@ -31,8 +31,9 @@ namespace Rasa.Managers
     ///   pump's DAMAGE_TYPE, EFFECT_RADIUS 10 m.
     ///
     /// The server's part:
-    /// - the trap is an AFS, scripted creature at the spot (or 2 m in front of the player), held
-    ///   still, so Bane creatures shoot at it; a new trap takes the old one away;
+    /// - the trap is a FRIENDLY, scripted creature at the spot (or 2 m in front of the player),
+    ///   held still, so hostile creatures shoot at it; a new trap takes the old one away; it aims
+    ///   at HOSTILE creatures only (AbilityManager.EnemiesWithin), leaving NEUTRAL ones be;
     /// - TRAP_SELF_EFFECT carries THREAT_MODIFIER_PERCENT, so what the trap does is hated twenty
     ///   times over (Threat.ThreatModifierOf);
     /// - every TrapShotMs it fires its turret weapon at the nearest hostile creature within the
@@ -301,7 +302,7 @@ namespace Rasa.Managers
 
             if (trap.Aim == null || trap.Aim.State == CharacterState.Dead || trap.Aim.State == CharacterState.Dying
                 || Vector3.Distance(trap.Aim.Position, turret.Position) > trap.Range)
-                trap.Aim = HostilesWithin(mapChannel, trap.Owner, turret.Position, trap.Range)
+                trap.Aim = EnemiesWithin(mapChannel, trap.Owner, turret.Position, trap.Range)
                     .Where(c => c.State != CharacterState.Dead && c.State != CharacterState.Dying)
                     .OrderBy(c => Vector3.DistanceSquared(c.Position, turret.Position))
                     .FirstOrDefault();

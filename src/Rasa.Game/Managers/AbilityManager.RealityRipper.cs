@@ -25,7 +25,7 @@ namespace Rasa.Managers
     ///   scaled) every INTERVAL of 1 s, HATE_TRANSFER_PERCENT 25.
     ///
     /// The server's part:
-    /// - the rift is an AFS, scripted creature (as a crab mine is) at the spot, so Bane creatures
+    /// - the rift is a FRIENDLY, scripted creature (as a crab mine is) at the spot, so hostile creatures
     ///   can attack it, and killing it ends it early;
     /// - every INTERVAL, each hostile creature within the radius not already taken is dragged to
     ///   CrowdControl.PullStopShort of the rift over TeleportMs (CrowdControl.Pull), and given 204

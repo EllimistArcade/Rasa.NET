@@ -907,6 +907,16 @@ namespace Rasa.Managers
                 .ToList();
         }
 
+        /// <summary>
+        /// Living creatures a player's summon goes looking for within radius metres of a point:
+        /// HOSTILE only (TargetCategories.AlliesSeek) - a turret or a crab mine leaves NEUTRAL
+        /// creatures alone, as a FRIENDLY creature's scan does. Blasts and areas use HostilesWithin.
+        /// </summary>
+        internal static List<Creature> EnemiesWithin(MapChannel mapChannel, Manifestation player, Vector3 centre, float radius)
+        {
+            return HostilesWithin(mapChannel, player, centre, radius).Where(c => TargetCategories.AlliesSeek(c.TargetCategory)).ToList();
+        }
+
         /// <summary>Living creatures a player may attack within radius metres of a point, from the cells around the performer.</summary>
         internal static List<Creature> HostilesWithin(MapChannel mapChannel, Manifestation player, Vector3 centre, float radius)
         {

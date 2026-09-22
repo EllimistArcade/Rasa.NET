@@ -959,9 +959,9 @@ namespace Rasa.Managers
                 return;
 
             // Only a fight its category allows: nothing on its own side, nothing that takes no
-            // part in fights (TargetCategories.MayFight). A NEUTRAL creature fights whoever
-            // attacks it; an object or decoration fights nobody.
-            if (!TargetCategories.MayFight(creature.TargetCategory, CategoryOf(targetEntityId)))
+            // part in fights (TargetCategories.MayFight, MayFightPlayer). A NEUTRAL creature
+            // fights whoever attacks it; an object or decoration fights nobody.
+            if (!MayFight(creature, targetEntityId))
                 return;
 
             creature.Controller.CurrentAction = BehaviorActionFighting;
@@ -978,18 +978,18 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// The target category of an actor by entity id: a creature's own, a player's as creatures
-        /// see it (Manifestation.CombatCategory); IGNORE for anything else.
+        /// Whether the creature's target category lets it fight this entity: another creature by
+        /// TargetCategories.MayFight, a player by MayFightPlayer (their CombatCategory); nothing else.
         /// </summary>
-        internal static TargetCategory CategoryOf(ulong entityId)
+        internal static bool MayFight(Creature creature, ulong entityId)
         {
-            if (EntityManager.Instance.Creatures.TryGetValue(entityId, out var creature))
-                return creature.TargetCategory;
+            if (EntityManager.Instance.Creatures.TryGetValue(entityId, out var other))
+                return TargetCategories.MayFight(creature.TargetCategory, other.TargetCategory);
 
             if (EntityManager.Instance.Players.TryGetValue(entityId, out var player))
-                return player.CombatCategory;
+                return TargetCategories.MayFightPlayer(creature.TargetCategory, player.CombatCategory);
 
-            return TargetCategory.Ignore;
+            return false;
         }
 
         /// <summary>The fight is over for this creature: it forgets everyone it hated and wanders again.</summary>

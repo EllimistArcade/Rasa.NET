@@ -37,6 +37,11 @@ namespace Rasa.Data
     ///   - players, their abilities, creatures on either side - and it fights back whoever does;
     /// - OBJECT, DECORATION, DECORATIONPROXY and IGNORE take no part: never attacked, never
     ///   attacking, never noticed.
+    ///
+    /// A player is FRIENDLY to creatures unless Polymorph has made them otherwise
+    /// (Manifestation.CombatCategory), and is held to <see cref="MayFightPlayer"/> rather than
+    /// <see cref="MayFight"/>: a creature of the player's own morphed side still answers a player
+    /// who attacks it, as it always did - only a FRIENDLY creature never fights a FRIENDLY player.
     /// </summary>
     public static class TargetCategories
     {
@@ -64,6 +69,26 @@ namespace Rasa.Data
 
             return attacker != target || attacker == TargetCategory.Neutral;
         }
+
+        /// <summary>
+        /// Whether a creature of this category may fight a player counting as playerCategory once
+        /// there is a reason to (it was attacked, it was ordered): any combatant, bar a FRIENDLY
+        /// creature against a FRIENDLY player. Going looking for one is <see cref="Seeks"/>.
+        /// </summary>
+        public static bool MayFightPlayer(TargetCategory creature, TargetCategory playerCategory)
+        {
+            if (!IsCombatant(creature))
+                return false;
+
+            return !(creature == TargetCategory.Friendly && playerCategory == TargetCategory.Friendly);
+        }
+
+        /// <summary>
+        /// Whether a player's summon or ally goes looking for a creature of this category - a
+        /// turret's aim, a crab mine's prey: the same as a FRIENDLY creature's scan, HOSTILE only.
+        /// NEUTRAL is left alone until someone attacks it.
+        /// </summary>
+        public static bool AlliesSeek(TargetCategory target) => Seeks(TargetCategory.Friendly, target);
 
         /// <summary>Whether a player may attack an entity of this category: HOSTILE or NEUTRAL, as the client's own Attack option and hostile targeting allow.</summary>
         public static bool PlayerMayAttack(TargetCategory target)

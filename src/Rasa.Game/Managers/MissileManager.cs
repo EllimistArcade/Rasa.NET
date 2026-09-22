@@ -274,6 +274,15 @@ namespace Rasa.Managers
             if (actor.State == CharacterState.Dead)
                 return;
 
+            // A creature's hit has to be one its target category allows on a player
+            // (TargetCategories.MayFightPlayer): a FRIENDLY creature's stray shot does nothing.
+            if (missile.Source is Creature attacker && actor is Manifestation hitPlayer
+                && !TargetCategories.MayFightPlayer(attacker.TargetCategory, hitPlayer.CombatCategory))
+            {
+                missile.DamageA = 0;
+                return;
+            }
+
             // Both ends: whoever was hit, and whoever hit them if that was a player too.
             EnterCombat(actor);
             EnterCombat(missile.Source);

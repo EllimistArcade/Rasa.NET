@@ -29,12 +29,12 @@ namespace Rasa.Managers
     ///   names a variant from a table we do not have; each corpse rises as its own kind instead.
     ///
     /// The server's part:
-    /// - a corpse must be a dead, BIOLOGICAL, non-AFS creature no other corpse ability has claimed
+    /// - a corpse must be a dead, BIOLOGICAL, HOSTILE or NEUTRAL creature no other corpse ability has claimed
     ///   (IsUsableCorpse). A new creature of its kind - class, name, actions, appearance, speeds
     ///   and full health - rises where it lay, and the body is given up for despawn;
-    /// - it is AFS, its level the player's plus CREATURE_LEVEL_DIFFERENCE (at least 1), its master
-    ///   the player, Aggressive, and it follows the player (BehaviorManager), fighting the Bane
-    ///   it finds; they fight it back. What it kills is the player's
+    /// - it is FRIENDLY, its level the player's plus CREATURE_LEVEL_DIFFERENCE (at least 1), its
+    ///   master the player, Aggressive, and it follows the player (BehaviorManager), fighting the
+    ///   HOSTILE creatures it finds; they fight it back. What it kills is the player's
     ///   (CreatureManager.HandleCreatureKill). It is not a commandable subordinate - those are
     ///   Create Clone, Spotter and Bot Construction - so it is not handed to MinionManager;
     /// - it carries REANIMATED for DURATION; when that runs out, or its master leaves the map,

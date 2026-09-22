@@ -705,10 +705,27 @@ namespace Rasa.Managers
             }
 
             // The crit comes first, before resistance, shields or armour take their share of it.
+            var coverModifier = 1.0;
+
             if (targetType == EntityType.Creature || targetType == EntityType.Character)
             {
                 var amount = missile.DamageA;
                 missile.IsCritical = CriticalHits.Resolve(missile.Source, missile.TargetActor, missile.IsMelee, missile.CritChance, ref amount);
+
+                // "Enemies deliver bonus damage to crouched targets": a melee hit on someone
+                // crouched does CROUCHED_MELEE_DAMAGE_TAKEN of itself.
+                if (missile.IsMelee && Cover.IsCrouching(missile.TargetActor))
+                    amount = (int)Math.Round(amount * Cover.CrouchedMeleeDamageTaken);
+
+                // A ranged hit does the share of itself that gets past the cover around the target.
+                if (!missile.IsMelee && missile.Source != null)
+                {
+                    coverModifier = Cover.Modifier(mapChannel, missile.Source, missile.TargetActor);
+
+                    if (coverModifier < 1.0)
+                        amount = (int)Math.Round(amount * coverModifier);
+                }
+
                 missile.DamageA = amount;
             }
 
@@ -716,7 +733,8 @@ namespace Rasa.Managers
             {
                 FinalAmt = missile.DamageA,
                 EntityId = missile.TargetEntityId,
-                IsCritical = missile.IsCritical ? 1 : 0
+                IsCritical = missile.IsCritical ? 1 : 0,
+                CoverModifier = coverModifier
             };
 
             // A shot at nothing lists no hit: it used to list entity 0.

@@ -12,7 +12,8 @@ namespace Rasa.Packets.MapChannel.Server
     /// </summary>
     public static class DamageInfoWriter
     {
-        public static void WriteRawInfo(PythonWriter pw, DamageType damageType, long finalAmount, int resisted = 0, bool isCritical = false, bool deathBlow = false)
+        /// <param name="coverModifier">The share that got past cover: 1.0 for none in the way. The client's hit display is red at 0.8 and above, then orange, yellow, and green below 0.2 - so 0 reads as fully covered.</param>
+        public static void WriteRawInfo(PythonWriter pw, DamageType damageType, long finalAmount, int resisted = 0, bool isCritical = false, bool deathBlow = false, double coverModifier = 1.0)
         {
             pw.WriteTuple(12);
             pw.WriteUInt((uint)damageType);     // damageType
@@ -23,7 +24,7 @@ namespace Rasa.Packets.MapChannel.Server
             pw.WriteLong(finalAmount);          // finalAmt
             pw.WriteInt(isCritical ? 1 : 0);    // isCrit
             pw.WriteInt(deathBlow ? 1 : 0);     // deathBlow
-            pw.WriteUInt(0);                    // coverModifier
+            pw.WriteDouble(coverModifier);      // coverModifier
             pw.WriteInt(0);                     // wasImmune
             pw.WriteList(0);                    // targetEffectIds
             pw.WriteList(0);                    // sourceEffectIds

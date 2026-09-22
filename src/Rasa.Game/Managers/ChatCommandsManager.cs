@@ -127,6 +127,7 @@ namespace Rasa.Managers
             RegisterCommand(".npcinfo", GmLevel.Observer, NpcInfoCommand);
             RegisterCommand(".rqs", GmLevel.Observer, RqsWindowCommand);
             RegisterCommand(".where", GmLevel.Observer, WhereCommand);
+            RegisterCommand(".cover", GmLevel.Observer, CoverCommand);
 
             // GameMaster: moves you, spawns and drives scenery and creatures, drives
             // your own client. A restart undoes all of it.
@@ -1148,6 +1149,50 @@ namespace Rasa.Managers
             CellManager.Instance.CellCallMethod(creature, new TargetCategoryPacket(category));
 
             CommunicatorManager.Instance.SystemMessage(_client, $"Target category set to {category} ({(int)category})");
+        }
+
+        /// <summary>
+        /// .cover: the cover between you and your target, both ways - how many of the body points
+        /// each can see of the other, and the damage share a ranged hit would do (Managers.Cover).
+        /// Crouch and move about to see what a sandbag or a wall is worth.
+        /// </summary>
+        private void CoverCommand(string[] parts)
+        {
+            var player = _client.Player;
+            var mapChannel = player.MapChannel;
+
+            if (mapChannel?.Cover == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "No cover file for this map (navmesh/<map>.cover, Rasa.NavMesh --cover-only)");
+                return;
+            }
+
+            var targetId = player.Target;
+            Actor target = EntityManager.Instance.GetEntityType(targetId) switch
+            {
+                EntityType.Creature => EntityManager.Instance.GetCreature(targetId),
+                EntityType.Character => EntityManager.Instance.GetPlayer(targetId),
+                _ => null
+            };
+
+            if (target == null || target.MapContextId != player.MapContextId)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "Target a creature or player to use .cover");
+                return;
+            }
+
+            string Describe(Actor from, Actor to)
+            {
+                var eye = Cover.EyeOf(from);
+                var points = Cover.SamplePoints(to, eye);
+                var clear = points.Count(p => !mapChannel.Cover.Blocked(eye, p));
+                var modifier = Cover.Modifier(mapChannel, from, to);
+
+                return $"{clear}/{points.Length} points clear{(to.IsCrouching ? " (crouched)" : "")}, damage x{modifier:0.00}";
+            }
+
+            CommunicatorManager.Instance.SystemMessage(_client, $"Its shots at you: {Describe(target, player)}");
+            CommunicatorManager.Instance.SystemMessage(_client, $"Your shots at it: {Describe(player, target)}");
         }
 
         private void NpcInfoCommand(string[] parts)

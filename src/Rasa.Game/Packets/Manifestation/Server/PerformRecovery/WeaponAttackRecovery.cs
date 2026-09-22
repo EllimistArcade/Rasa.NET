@@ -43,7 +43,7 @@
                     pw.WriteLong(hit.FinalAmt);         // self.finalamt: each hit its own (a launcher's splash)
                     pw.WriteInt(hit.IsCritical);        // self.iscrit
                     pw.WriteInt(hit.DeathBlow);         // self.deathblow
-                    pw.WriteUInt(hit.CoverModifier);    // self.covermodifier
+                    pw.WriteDouble(hit.CoverModifier);    // self.covermodifier
                     pw.WriteInt(hit.WasImune);          // self.wasimmune
                     pw.WriteList(0);                    // todo: targeteffectids
                     pw.WriteList(0);                    // todo: sourceeffectids

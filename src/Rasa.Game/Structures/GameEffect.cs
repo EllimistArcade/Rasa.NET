@@ -135,6 +135,12 @@ namespace Rasa.Structures
 
         #endregion
 
+        /// <summary>
+        /// Percent of the holder's cover that still counts against ranged hits (Target Painting's
+        /// EFFECT_COVER_MODIFIER, "Reduced Cover: 50%" .. 0%); null for no change. See Managers.Cover.
+        /// </summary>
+        public int? CoverCountsPercent { get; set; }
+
         /// <summary>Percent of every hit on the holder that goes past its armour straight to health (Target Painting).</summary>
         public int ArmorPiercePercent { get; set; }
 

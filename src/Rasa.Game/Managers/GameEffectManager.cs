@@ -644,6 +644,18 @@ namespace Rasa.Managers
             return total;
         }
 
+        /// <summary>How much of the actor's cover still counts, in percent: the least any effect on it allows (Target Painting), 100 with none.</summary>
+        public static int CoverCountsPercentOf(Actor actor)
+        {
+            var percent = 100;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                if (effect.CoverCountsPercent.HasValue)
+                    percent = Math.Min(percent, effect.CoverCountsPercent.Value);
+
+            return Math.Max(0, percent);
+        }
+
         /// <summary>Percent of each hit on the actor that goes past its armour (Target Painting), at most 100.</summary>
         public static int ArmorPiercePercentOf(Actor actor)
         {

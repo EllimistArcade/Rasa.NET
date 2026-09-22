@@ -606,8 +606,9 @@ namespace Rasa.Managers
         /// EFFECT_ARMOR_PIERCE_PERCENT (0 / 10 / 20 / 30 / 40) of every hit on it goes past its
         /// armour to health, whoever hits it. The tooltip ("Reduced Cover: %(coverMod)s%%, Armor
         /// Recharge: %(armorMod)s%%, Armor Piercing: +%(pierceMod)s%%") also shows
-        /// EFFECT_COVER_MODIFIER and EFFECT_ARMOR_REGEN_MODIFIER; neither does anything on the
-        /// server yet - there is no cover, and creature armour does not regenerate server-side.
+        /// EFFECT_COVER_MODIFIER (50 / 40 / 30 / 20 / 0), the percent of the target's cover that
+        /// still counts against ranged hits (Managers.Cover), and EFFECT_ARMOR_REGEN_MODIFIER,
+        /// which does nothing yet - creature armour does not regenerate server-side.
         /// </summary>
         private static void AttachTargetPainting(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
         {
@@ -615,7 +616,8 @@ namespace Rasa.Managers
 
             effect.IsBuff = false;
             effect.ArmorPiercePercent = info.Get(AbilityProperty.EffectArmorPiercePercent);
-            effect.Tooltip["coverMod"] = info.Get(AbilityProperty.EffectCoverModifier);
+            effect.CoverCountsPercent = info.Get(AbilityProperty.EffectCoverModifier);
+            effect.Tooltip["coverMod"] = effect.CoverCountsPercent.Value;
             effect.Tooltip["armorMod"] = info.Get(AbilityProperty.EffectArmorRegenModifier, 100);
             effect.Tooltip["pierceMod"] = effect.ArmorPiercePercent;
 

@@ -316,6 +316,10 @@ namespace Rasa.Managers
             if (mapChannel == null || client.State != ClientState.Ingame || player.State == CharacterState.Dead)
                 return;
 
+            // Stunned or knocked down: no swing until it ends.
+            if (Stuns.IsStunned(player))
+                return;
+
             var weapon = InventoryManager.Instance.CurrentWeapon(client);
             var weaponInfo = weapon?.ItemTemplate?.WeaponInfo;
 
@@ -479,8 +483,8 @@ namespace Rasa.Managers
                 GameEffectManager.Instance.Attach(mapChannel, player, hidden);
             }
 
-            // Graviton: armour regeneration. Knockback and stun resistance are shown and wait for
-            // knockback and stun.
+            // Graviton: armour regeneration, and the chance to resist a stun or knockback
+            // (PlayerCrowdControl).
             (pump, pieces) = ArmorOf(player, ArmorSkills.Graviton);
             var graviton = ArmorSkills.GravitonPercent(pump, pieces);
 
@@ -488,6 +492,7 @@ namespace Rasa.Managers
             {
                 var effect = SkillPassive(mapChannel, player, ArmorSkills.GravitonVisibleTypeId, pump, true);
                 effect.ArmorRegenPercent = graviton;
+                effect.KnockbackStunResistPercent = graviton;
                 effect.Tooltip["resistMod"] = graviton;
                 effect.Tooltip["regenMod"] = graviton;
                 GameEffectManager.Instance.Attach(mapChannel, player, effect);
@@ -663,6 +668,11 @@ namespace Rasa.Managers
             // Reached from the auto-fire list on the main loop as well as from the handler; a
             // client that has left the world since must not be fired for.
             if (client.Player == null || client.State != ClientState.Ingame)
+                return FireResult.NotFired;
+
+            // Stunned or knocked down: the client holds the trigger back itself, and the server
+            // does not fire for an auto-fire it left running.
+            if (Stuns.IsStunned(client.Player))
                 return FireResult.NotFired;
 
             // Polymorphed: the creature's weapon, whatever is in the player's own hands.

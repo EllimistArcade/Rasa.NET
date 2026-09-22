@@ -731,6 +731,20 @@ namespace Rasa.Managers
             return amount - absorbed;
         }
 
+        /// <summary>Percent chance, summed over the effects on an actor, that a stun or knockback is resisted (Graviton Armor).</summary>
+        public static int KnockbackStunResistOf(Actor actor)
+        {
+            if (actor == null)
+                return 0;
+
+            var total = 0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                total += effect.KnockbackStunResistPercent;
+
+            return Math.Max(0, total);
+        }
+
         /// <summary>Percent of damage taken that the effects on an actor reflect back at the attacker (Reflective Armor).</summary>
         /// <param name="damageType">The hit's type; an effect that reflects only some types (Reflection) answers its own alone.</param>
         public static int ReflectPercentOf(Actor actor, DamageType damageType = 0)

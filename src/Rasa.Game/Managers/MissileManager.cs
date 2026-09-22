@@ -341,6 +341,10 @@ namespace Rasa.Managers
             // what landed into healing for the squad.
             if (actor is Manifestation victim && armorDecrease + healthDecrease > 0)
                 AbilityManager.OnPlayerDamaged(mapChannel, victim, armorDecrease + healthDecrease);
+
+            // A creature attack that knocks back or stuns does so to a player as well.
+            if (missile.Source is Creature striker && actor is Manifestation struck)
+                PlayerCrowdControl.CreatureActionHit(mapChannel, striker, struck, missile.ActionId, missile.ActionArgId);
         }
 
         /// <summary>

@@ -9,7 +9,7 @@ namespace Rasa.Managers
     /// <summary>
     /// Stunning creatures. A stun is a GameEffect flagged IsStun; while one is on a creature it
     /// neither moves nor attacks (BehaviorManager), and the client's StunEffect puts it in its
-    /// uncontrolled state with movement blocked. Players are not stunned yet.
+    /// uncontrolled state with movement blocked. Players: PlayerCrowdControl.
     ///
     /// Where stuns come from, and the numbers:
     ///

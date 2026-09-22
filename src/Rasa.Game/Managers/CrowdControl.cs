@@ -7,8 +7,8 @@ namespace Rasa.Managers
     using Structures;
 
     /// <summary>
-    /// Knockback, slows and freezes on creatures. Players are not affected yet: the client flies a
-    /// knocked-back player itself, and nothing a creature does slows or roots a player yet.
+    /// Knockback, slows and freezes on creatures. A player is knocked back and stunned by
+    /// PlayerCrowdControl; nothing a creature does slows or roots a player yet.
     ///
     /// Knockback: the creature slides KNOCKBACK_DISTANCE metres straight away from whoever hit it,
     /// at KnockbackSpeed, stopping short where the navmesh ends, then takes the client's getup

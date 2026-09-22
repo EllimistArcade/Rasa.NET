@@ -147,6 +147,9 @@ namespace Rasa.Structures
         /// </summary>
         public int MindControlPump { get; set; }
 
+        /// <summary>Percent chance that a stun or knockback on the holder does not land (Graviton Armor). See Managers.PlayerCrowdControl.</summary>
+        public int KnockbackStunResistPercent { get; set; }
+
         /// <summary>Percent of every hit on the holder that goes past its armour straight to health (Target Painting).</summary>
         public int ArmorPiercePercent { get; set; }
 

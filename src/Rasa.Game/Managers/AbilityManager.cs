@@ -144,6 +144,19 @@ namespace Rasa.Managers
             return _actions.TryGetValue(actionId, out var action) && action.Levels.TryGetValue(level, out info);
         }
 
+        /// <summary>An action's client module and its level's data - a creature's attack as much as a player's ability.</summary>
+        public bool TryGetAction(ActionId actionId, uint level, out string module, out ActionLevelInfo info)
+        {
+            module = null;
+            info = null;
+
+            if (!_actions.TryGetValue(actionId, out var action) || !action.Levels.TryGetValue(level, out info))
+                return false;
+
+            module = action.Module;
+            return true;
+        }
+
         /// <summary>The action a usable item template performs, if it performs one.</summary>
         public bool TryGetItemAction(uint itemTemplateId, out ActionId actionId, out uint level)
         {
@@ -253,6 +266,13 @@ namespace Rasa.Managers
             if (player.State == CharacterState.Dead)
             {
                 Fail(client, actionId, level, PlayerMessage.PmActionFailedActorDead);
+                return;
+            }
+
+            // Stunned or knocked down (PlayerCrowdControl): nothing until it ends.
+            if (Stuns.IsStunned(player))
+            {
+                Fail(client, actionId, level, PlayerMessage.PmCannotPerformActionNow);
                 return;
             }
 

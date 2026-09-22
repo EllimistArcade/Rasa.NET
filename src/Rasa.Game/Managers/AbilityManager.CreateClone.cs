@@ -26,8 +26,8 @@ namespace Rasa.Managers
     /// - creature name 9082 is "Clone of %s", and a creature's name puts its actor name
     ///   (Recv_ActorName) into the %s: sent the player's name, it reads "Clone of Atomsk".
     ///
-    /// The clone is a FRIENDLY creature on the player's body model (NPC_Human_Swapset_Male /
-    /// Female, the human NPCs' classes), with the player's scale and appearance - every slot, the
+    /// The clone is a FRIENDLY creature on the player's body model (NPC_Human_Swapset_Male_Boss /
+    /// Female_Boss, human NPC classes with no vendor augmentation), with the player's scale and appearance - every slot, the
     /// weapon too - at the player's level plus CREATURE_LEVEL_DIFFERENCE, with the player's maximum health and armour. Its attack is the
     /// player's equipped weapon: the weapon's damage (a player weapon's own, not a level-50
     /// creature figure) scaled down by the levels it is below the player as creature weapons scale
@@ -43,12 +43,17 @@ namespace Rasa.Managers
         public const uint CloneNameId = 9082;                    // "Clone of %s"
 
         /// <summary>
-        /// NPC_Human_Swapset_Male / _Female: creatures on the player's own body models (4257 /
-        /// 4254) that wear appearance data, as the human NPCs do. HumanBaseMale / Female are
-        /// Manifestation classes, not creatures.
+        /// NPC_Human_Swapset_Male_Boss / _Female_Boss: creatures on the player's own body models
+        /// (4257 / 4254) that wear appearance data, as the human NPCs do (HumanBaseMale / Female
+        /// are Manifestation classes, not creatures). Augmentations CREATURE, NPC and HARVESTABLE
+        /// only: the plain NPC_Human_Swapset_Male / _Female (3846 / 3848) also carry VENDOR, which
+        /// a clone is not. Same creature flags as those (BIOLOGICAL, SPECIES_HUMAN), so no boss
+        /// indicator - that comes from the flags, not the class name. None of the three puts a use
+        /// action on a living friendly creature: NPC only offers Converse with a conversation
+        /// status, which a clone is never sent.
         /// </summary>
-        public const uint CloneMaleClassId = 3846;
-        public const uint CloneFemaleClassId = 3848;
+        public const uint CloneMaleClassId = 10610;
+        public const uint CloneFemaleClassId = 10609;
 
         /// <summary>A player weapon's damage at a level below the player's, as creature weapons scale: 2^(difference / 8).</summary>
         public static int CloneDamage(int damage, int playerLevel, int cloneLevel)

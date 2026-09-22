@@ -148,7 +148,8 @@ namespace Rasa.Managers
             // all of it to health while an EMP crit suppresses its armour
             var armorDecrease = GameEffectManager.ArmorSuppressed(creature) ? 0 : Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
             creature.Attributes[Attributes.Armor].Current -= armorDecrease;
-            CellManager.Instance.CellCallMethod(mapChannel, creature, new UpdateArmorPacket(creature.Attributes[Attributes.Armor], creature.EntityId));
+            // With the rate the effects make, or a painted creature's bar would start regenerating again on the clients.
+            CellManager.Instance.CellCallMethod(mapChannel, creature, new UpdateArmorPacket(GameEffectManager.WithRegen(creature, creature.Attributes[Attributes.Armor]), creature.EntityId));
 
             // decrease health (if armor is depleted)
             var healthDecrease = Math.Min(missile.DamageA - armorDecrease, creature.Attributes[Attributes.Health].Current);

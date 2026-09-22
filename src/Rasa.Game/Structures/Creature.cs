@@ -70,6 +70,9 @@ namespace Rasa.Structures
         /// into a creature name with a %s - Create Clone's "Clone of %s".
         /// </summary>
         public string ActorName { get; set; }
+
+        /// <summary>Seconds of regeneration counted, so a refresh period of N ticks every Nth (CreatureArmor).</summary>
+        public long RegenSeconds { get; set; }
         // origin
         public SpawnPool SpawnPool { get; set; }    // the spawnpool that initiated the creation of this creature
         // behavior controller

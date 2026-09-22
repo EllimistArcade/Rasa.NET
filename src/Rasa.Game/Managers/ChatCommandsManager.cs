@@ -1221,6 +1221,13 @@ namespace Rasa.Managers
                     msg += $"CreatureDbId = {creature.DbId}\n";
                     msg += $"TargetCategory = {creature.TargetCategory}\n";
 
+                    if (creature.Attributes.TryGetValue(Attributes.Health, out var npcHealth))
+                        msg += $"Health = {npcHealth.Current} / {npcHealth.CurrentMax}\n";
+
+                    // Armour, and what it regenerates with the effects on it (CreatureArmor).
+                    if (creature.Attributes.TryGetValue(Attributes.Armor, out var npcArmor))
+                        msg += $"Armor = {npcArmor.Current} / {npcArmor.CurrentMax}, +{GameEffectManager.RegenAmount(creature, npcArmor)} every {npcArmor.RefreshPeriod} s\n";
+
                     if (creature.SpawnPool != null)
                         msg += $"SpawnPoolDbId = {creature.SpawnPool.DbId}\n";
 

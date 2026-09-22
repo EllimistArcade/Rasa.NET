@@ -209,7 +209,9 @@ namespace Rasa.Managers
                 // Target Painting: that share of the hit goes past the armour.
                 armorTaken = Math.Min(amount - amount * GameEffectManager.ArmorPiercePercentOf(target) / 100, armor.Current);
                 armor.Current -= armorTaken;
-                CellManager.Instance.CellCallMethod(mapChannel, target, new UpdateArmorPacket(armor, target is Creature ? target.EntityId : 0));
+                CellManager.Instance.CellCallMethod(mapChannel, target, target is Creature
+                    ? new UpdateArmorPacket(GameEffectManager.WithRegen(target, armor), target.EntityId)
+                    : new UpdateArmorPacket(armor, 0));
             }
 
             var healthTaken = Math.Min(amount - armorTaken, health.Current);
@@ -305,6 +307,9 @@ namespace Rasa.Managers
                 if (player.Attributes.TryGetValue(Attributes.Power, out var power))
                     Regenerate(player, power, player.RegenSeconds);
             }
+
+            // Creatures' armour.
+            CreatureArmor.Regenerate(mapChannel);
         }
 
         /// <summary>

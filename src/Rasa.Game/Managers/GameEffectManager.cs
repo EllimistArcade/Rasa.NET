@@ -928,6 +928,10 @@ namespace Rasa.Managers
                 if (actor.Attributes.TryGetValue(Attributes.Health, out var creatureHealth))
                     CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateHealthPacket(WithRegen(actor, creatureHealth), actor.EntityId));
 
+                // Its armour's too: Target Painting stops it regenerating (CreatureArmor).
+                if (actor.Attributes.TryGetValue(Attributes.Armor, out var creatureArmor))
+                    CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateArmorPacket(WithRegen(actor, creatureArmor), actor.EntityId));
+
                 return;
             }
 
@@ -946,7 +950,8 @@ namespace Rasa.Managers
                 client.CallMethod(actor.EntityId, new UpdatePowerPacket(WithRegen(actor, power), 0));
         }
 
-        private static ActorAttributes WithRegen(Actor actor, ActorAttributes attribute)
+        /// <summary>A copy of the attribute carrying the regeneration rate the effects on the actor make, for sending.</summary>
+        public static ActorAttributes WithRegen(Actor actor, ActorAttributes attribute)
         {
             return new ActorAttributes(attribute.AttributeId, attribute.NormalMax, attribute.CurrentMax, attribute.Current, RegenAmount(actor, attribute), attribute.RefreshPeriod);
         }

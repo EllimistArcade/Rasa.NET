@@ -282,7 +282,8 @@ namespace Rasa.Managers
                 creature.Attributes.Add(Attributes.Chi, new ActorAttributes(Attributes.Chi, 0, 0, 0, 0, 0));
                 creature.Attributes.Add(Attributes.Power, new ActorAttributes(Attributes.Power, 0, 0, 0, 0, 0));
                 creature.Attributes.Add(Attributes.Aware, new ActorAttributes(Attributes.Aware, 0, 0, 0, 0, 0));
-                creature.Attributes.Add(Attributes.Armor, new ActorAttributes(Attributes.Armor, creatureStats.Armor, creatureStats.Armor, creatureStats.Armor, 5, 1000));
+                // Armour regenerates (CreatureArmor): its rate is sent from the start.
+                creature.Attributes.Add(Attributes.Armor, new ActorAttributes(Attributes.Armor, creatureStats.Armor, creatureStats.Armor, creatureStats.Armor, CreatureArmor.BaseRegen(creatureStats.Armor), CombatRegen.RegenPeriodSeconds));
                 creature.Attributes.Add(Attributes.Speed, new ActorAttributes(Attributes.Speed, 1, 1, 1, 0, 0));
                 creature.Attributes.Add(Attributes.Regen, new ActorAttributes(Attributes.Regen, 0, 0, 0, 0, 0));
             }
@@ -295,7 +296,7 @@ namespace Rasa.Managers
                 creature.Attributes.Add(Attributes.Chi, new ActorAttributes(Attributes.Chi, 0, 0, 0, 0, 0));
                 creature.Attributes.Add(Attributes.Power, new ActorAttributes(Attributes.Power, 0, 0, 0, 0, 0));
                 creature.Attributes.Add(Attributes.Aware, new ActorAttributes(Attributes.Aware, 0, 0, 0, 0, 0));
-                creature.Attributes.Add(Attributes.Armor, new ActorAttributes(Attributes.Armor, 100, 100, 100, 5, 1000));
+                creature.Attributes.Add(Attributes.Armor, new ActorAttributes(Attributes.Armor, 100, 100, 100, CreatureArmor.BaseRegen(100), CombatRegen.RegenPeriodSeconds));
                 creature.Attributes.Add(Attributes.Speed, new ActorAttributes(Attributes.Speed, 1, 1, 1, 0, 0));
                 creature.Attributes.Add(Attributes.Regen, new ActorAttributes(Attributes.Regen, 0, 0, 0, 0, 0));
             }

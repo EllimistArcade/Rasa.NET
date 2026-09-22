@@ -141,6 +141,12 @@ namespace Rasa.Structures
         /// </summary>
         public int? CoverCountsPercent { get; set; }
 
+        /// <summary>
+        /// Mind Control's pump on the creature holding it (1 Frighten .. 5 Infectious), 0 for any
+        /// other effect. BehaviorManager.MayFight reads it: see AbilityManager.MindControl.
+        /// </summary>
+        public int MindControlPump { get; set; }
+
         /// <summary>Percent of every hit on the holder that goes past its armour straight to health (Target Painting).</summary>
         public int ArmorPiercePercent { get; set; }
 

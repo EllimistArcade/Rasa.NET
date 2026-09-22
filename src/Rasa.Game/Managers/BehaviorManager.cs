@@ -329,8 +329,12 @@ namespace Rasa.Managers
                     if (creature.Controller.Path.Count == 0)
                         BuildPath(mapChannel, creature, creature.Controller.ActionWander.WanderDestination);
 
-                    if (FollowPath(mapChannel, creature, Math.Min(creature.WalkSpeed, WanderWalkSpeed), delta))
+                    // Frightened: it runs, rather than strolls.
+                    var wanderSpeed = creature.Controller.ActionWander.Fleeing ? creature.RunSpeed : Math.Min(creature.WalkSpeed, WanderWalkSpeed);
+
+                    if (FollowPath(mapChannel, creature, wanderSpeed, delta))
                     {
+                        creature.Controller.ActionWander.Fleeing = false;
                         creature.Controller.ActionWander.State = WanderIdle;
                         creature.Controller.ActionWander.RestDuration = 0;
                         creature.LastRestTime = 0;
@@ -371,7 +375,8 @@ namespace Rasa.Managers
 
                 if (!creature.Controller.ActionFollow.HasAnchor)
                 {
-                    var followed = EntityManager.Instance.GetActor(creature.Controller.ActionFollow.FollowTargetId);
+                    // TryGetValue: GetActor throws on a miss.
+                    EntityManager.Instance.Actors.TryGetValue(creature.Controller.ActionFollow.FollowTargetId, out var followed);
 
                     // Nothing left to follow - the master logged out, or the followed player has
                     // gone. Stand still rather than walking to the origin; MinionManager's worker
@@ -986,17 +991,72 @@ namespace Rasa.Managers
         /// <summary>
         /// Whether the creature's target category lets it fight this entity: another creature by
         /// TargetCategories.MayFight, a player by MayFightPlayer (their CombatCategory); nothing else.
+        ///
+        /// Mind Control bends it (AbilityManager.MindControl): a Frightened creature fights nobody;
+        /// a Confused one any combatant creature and the players it could fight anyway; a Subverted
+        /// one only the creatures of its own category. And whoever a Confused or Subverted creature
+        /// turns on may answer it, whatever their categories.
         /// </summary>
-        internal static bool MayFight(Creature creature, ulong entityId)
+        public static bool MayFight(Creature creature, ulong entityId)
         {
+            var pump = AbilityManager.MindControlPumpOf(creature);
+
+            if (pump == AbilityManager.MindControlFrighten)
+                return false;
+
             if (EntityManager.Instance.Creatures.TryGetValue(entityId, out var other))
+            {
+                if (other == creature)
+                    return false;
+
+                if (pump == AbilityManager.MindControlConfusion)
+                    return TargetCategories.IsCombatant(other.TargetCategory);
+
+                if (pump == AbilityManager.MindControlSubversion)
+                    return other.TargetCategory == creature.TargetCategory;
+
+                if (TargetCategories.IsCombatant(creature.TargetCategory) && AbilityManager.IsMindConfused(other))
+                    return true;
+
                 return TargetCategories.MayFight(creature.TargetCategory, other.TargetCategory);
+            }
 
             if (EntityManager.Instance.Players.TryGetValue(entityId, out var player))
-                return TargetCategories.MayFightPlayer(creature.TargetCategory, player.CombatCategory);
+                return pump != AbilityManager.MindControlSubversion && TargetCategories.MayFightPlayer(creature.TargetCategory, player.CombatCategory);
 
             return false;
         }
+
+        /// <summary>
+        /// Mind Control's Frighten: the creature drops its fight and runs FleeDistance away from
+        /// whoever it fears, along the navmesh where the map has one.
+        /// </summary>
+        public void Flee(MapChannel mapChannel, Creature creature, Vector3 from)
+        {
+            if (creature.Controller == null || creature.RunSpeed < 0.01f)
+                return;
+
+            var away = new Vector3(creature.Position.X - from.X, 0, creature.Position.Z - from.Z);
+
+            if (away.LengthSquared() < 0.01f)
+            {
+                var angle = new Random().NextDouble() * Math.PI * 2;
+                away = new Vector3((float)Math.Cos(angle), 0, (float)Math.Sin(angle));
+            }
+
+            var destination = creature.Position + Vector3.Normalize(away) * FleeDistance;
+
+            destination = NavMeshManager.NearestWalkable(mapChannel, destination) ?? destination;
+
+            SetActionWander(creature);
+            creature.Controller.ActionWander.WanderDestination = destination;
+            creature.Controller.ActionWander.State = WanderMoving;
+            creature.Controller.ActionWander.Fleeing = true;
+            creature.LastRestTime = 0;
+        }
+
+        /// <summary>How far a frightened creature runs from whoever frightened it before it looks again.</summary>
+        public const float FleeDistance = 20f;
 
         /// <summary>The fight is over for this creature: it forgets everyone it hated and wanders again.</summary>
         public void GiveUp(Creature creature)
@@ -1060,6 +1120,7 @@ namespace Rasa.Managers
         {
             creature.Controller.CurrentAction = BehaviorActionWander;
             creature.Controller.ActionWander.State = WanderIdle;
+            creature.Controller.ActionWander.Fleeing = false;
             creature.Controller.Path.Clear();
             creature.Controller.PathIndex = 0;
         }
@@ -1095,10 +1156,17 @@ namespace Rasa.Managers
         /// <summary>
         /// Whether this creature goes looking for a fight. An ordinary creature always does; a
         /// minion does only when its master has set it Aggressive. Defensive still fights back,
-        /// because retaliation comes through SetActionFighting rather than through a scan.
+        /// because retaliation comes through SetActionFighting rather than through a scan. One under
+        /// Mind Control's Frighten, Confusion or Subversion does not: its fear, or the worker that
+        /// picks who it turns on, decides.
         /// </summary>
         private static bool ScansForEnemies(Creature creature)
         {
+            var pump = AbilityManager.MindControlPumpOf(creature);
+
+            if (pump > 0 && pump <= AbilityManager.MindControlSubversion)
+                return false;
+
             return creature.MasterEntityId == 0 || creature.Stance == MinionStance.Aggressive;
         }
 

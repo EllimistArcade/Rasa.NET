@@ -76,7 +76,7 @@ namespace Rasa.Managers
         /// <summary>Turns the creature for DURATION; false when it cannot be turned.</summary>
         private bool AttachTraitor(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info)
         {
-            return CanTurnTraitor(target) && TurnCreature(mapChannel, player, target, info, TraitorTypeId);
+            return CanTurnTraitor(target) && TurnCreature(mapChannel, player, target, info, TraitorTypeId) != null;
         }
 
         /// <summary>
@@ -95,14 +95,18 @@ namespace Rasa.Managers
                 return false;
             }
 
-            return TurnCreature(mapChannel, player, target, info, HackedTypeId);
+            return TurnCreature(mapChannel, player, target, info, HackedTypeId) != null;
         }
 
-        /// <summary>Traitor and Hack alike: the creature fights for the player for DURATION under effect typeId.</summary>
-        private bool TurnCreature(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info, int typeId)
+        /// <summary>
+        /// Traitor, Hack and Mind Control's Enslavement alike: the creature fights for the player for
+        /// DURATION under effect typeId. Its aggro range is EFFECT_RADIUS, or its own when
+        /// keepAggroRange. Returns the attached effect, null when it cannot be turned.
+        /// </summary>
+        private GameEffect TurnCreature(MapChannel mapChannel, Manifestation player, Creature target, ActionLevelInfo info, int typeId, bool keepAggroRange = false)
         {
             if (!IsHostile(player, target))
-                return false;
+                return null;
 
             var effect = NewEffect(mapChannel, player, info, typeId, info.Get(AbilityProperty.Duration, 10));
 
@@ -135,7 +139,8 @@ namespace Rasa.Managers
             GameEffectManager.Instance.Attach(mapChannel, target, effect);
 
             target.TargetCategory = TargetCategory.Friendly;
-            target.AggroRange = info.Get(AbilityProperty.EffectRadius, 10);
+            if (!keepAggroRange)
+                target.AggroRange = info.Get(AbilityProperty.EffectRadius, 10);
             target.MasterEntityId = player.EntityId;
             target.Stance = MinionStance.Aggressive;   // a creature with a master only scans when aggressive
             target.Hate.Clear();
@@ -149,7 +154,7 @@ namespace Rasa.Managers
                     if (other != target)
                         other.Hate.Remove(target.EntityId);
 
-            return true;
+            return effect;
         }
     }
 }

@@ -116,6 +116,21 @@ namespace Rasa.Managers
                     break;
                 }
 
+                case MindControlModule:
+                {
+                    var target = action.TargetId != 0 ? ResolveTarget(mapChannel, action.TargetId) as Creature : null;
+
+                    // MindControlAction's DoAbility announces each (entityId, effectTypeId) hit as an attach.
+                    if (target != null && AttachMindControl(mapChannel, player, target, info))
+                    {
+                        ManifestationManager.Instance.EnterCombat(client);
+                        recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.EffectAttach);
+                        Hit(recovery, target, MindControlTypeId);
+                    }
+
+                    break;
+                }
+
                 case "abilities.cloakwave":
                     CloakWave(mapChannel, player, info, recovery);
                     break;

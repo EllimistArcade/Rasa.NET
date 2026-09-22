@@ -271,6 +271,9 @@ namespace Rasa.Managers
                         // Spotter: the spent ones taken away, the fallen let go.
                         AbilityManager.Instance.SpotterWorker(mapChannel);
 
+                        // Mind Control: the frightened kept running, the confused turned on someone new.
+                        AbilityManager.Instance.MindControlWorker(mapChannel);
+
                         // Tactical Evasion: the smoke screens, and the marks a retreat goes back to.
                         AbilityManager.Instance.SmokeWorker(mapChannel);
                     }

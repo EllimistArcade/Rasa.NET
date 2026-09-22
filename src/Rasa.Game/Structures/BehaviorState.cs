@@ -69,6 +69,9 @@ namespace Rasa.Structures
 
         /// <summary>How long this idle spell lasts before the next stroll; drawn anew each time the creature stops.</summary>
         public long RestDuration { get; set; }
+
+        /// <summary>Running away (Mind Control's Frighten) rather than strolling: the walk is at run speed.</summary>
+        public bool Fleeing { get; set; }
     }
     
     public class AiPathFollowing

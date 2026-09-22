@@ -123,13 +123,12 @@ namespace Rasa.Managers
                 return;
 
             // Its target category has to allow the hit: a player may strike HOSTILE and NEUTRAL,
-            // a creature anything its own category may fight (TargetCategories). The client does
-            // not offer the rest as targets; this is the server holding to it.
-            var sourceCategory = missile.Source is Manifestation shooter ? shooter.CombatCategory
-                : missile.Source is Creature attacker ? attacker.TargetCategory : TargetCategory.Ignore;
-
+            // a creature anything its own category may fight (TargetCategories), as Mind Control
+            // bends it (BehaviorManager.MayFight). The client does not offer the rest as targets;
+            // this is the server holding to it.
             if (missile.Source != null && (missile.Source is Manifestation ? !TargetCategories.PlayerMayAttack(creature.TargetCategory)
-                                                                           : !TargetCategories.MayFight(sourceCategory, creature.TargetCategory)))
+                                           : missile.Source is Creature attacker ? !BehaviorManager.MayFight(attacker, creature.EntityId)
+                                           : true))
             {
                 missile.DamageA = 0;
                 return;
@@ -181,6 +180,10 @@ namespace Rasa.Managers
                 // Explosive Nanites go off on damage taken.
                 if (missile.DamageA > 0)
                     AbilityManager.OnCreatureDamaged(mapChannel, creature);
+
+                // Mind Control's Infectious: a slave's victim may be confused in turn.
+                if (missile.DamageA > 0 && missile.Source is Creature slave)
+                    AbilityManager.Instance.OnMindSlaveHit(mapChannel, slave, creature);
             }
         }
 

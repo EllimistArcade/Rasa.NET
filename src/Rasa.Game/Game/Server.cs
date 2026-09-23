@@ -341,6 +341,9 @@ namespace Rasa.Game
             AbilityManager.Instance.AbilityInit();
             ManifestationManager.Instance.LoadSkillClasses();
 
+            // After AbilityInit, which loads the action data it checks the creature rows against.
+            CreatureManager.Instance.ValidateActions();
+
             // Last line of Start(), and it has to stay last. It used to sit inside
             // MapChannelInit, which is the sixth of the loaders above - so the navmesh, the
             // clans, the dynamic objects, the map triggers, the map links, the regions, the

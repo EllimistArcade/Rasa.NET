@@ -314,6 +314,10 @@ namespace Rasa.Managers
                         if (creature.WalkSpeed < 0.01f || creature.RunSpeed < 0.01f)
                             return; // creature doesn't wander
 
+                        // A Shield Drone covers a piece of ground, so it stays on it.
+                        if (ShieldDrone.HoldsGround(creature))
+                            return;
+
                         // set destination
                         creature.Controller.ActionWander.WanderDestination = GetDestination(mapChannel, creature);
 
@@ -627,6 +631,14 @@ namespace Rasa.Managers
                 }
 
                 if (needToMove == false)
+                    return;
+
+                // A Shield Drone does not go to its target; the target comes to it. The guide
+                // gives it "Offense: None" and tells the player to "sprint directly toward them",
+                // which only works if the drone stays where its shield is - so it keeps whoever
+                // shot it in its hate table, strikes anything that closes inside three metres,
+                // and never leaves the ground it is covering.
+                if (ShieldDrone.HoldsGround(creature))
                     return;
 
                 if (targetDistSqr <= 3.0f * 3.0f)

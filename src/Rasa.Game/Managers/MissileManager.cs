@@ -144,6 +144,10 @@ namespace Rasa.Managers
 
             var resisted = Math.Max(0, beforeResist - missile.DamageA);
 
+            // A Shield Drone's shield, before armour: it takes its share of any non-EMP hit on a
+            // Bane standing inside it, and none at all from an attacker who is inside it too.
+            missile.DamageA = ShieldDrone.Mitigate(mapChannel, creature, missile.Source, missile.DamageA, missile.DamageType);
+
             // decrease armor first - all of it but what bypasses armour
             // all of it to health while an EMP crit suppresses its armour
             var armorDecrease = GameEffectManager.ArmorSuppressed(creature) ? 0 : Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
@@ -186,6 +190,13 @@ namespace Rasa.Managers
                 if (missile.DamageA > 0 && missile.Source is Creature slave)
                     AbilityManager.Instance.OnMindSlaveHit(mapChannel, slave, creature);
             }
+
+            // A Shield Drone sends almost all of it back, unless the shot came from inside the
+            // shield. Last, so what is reflected is what the drone actually took, and so a drone
+            // killed by the hit still answers it - "errant shots are reflected off these
+            // projected shields, oftentimes resulting in death to the attackers".
+            if (armorDecrease + healthDecrease > 0)
+                ShieldDrone.Reflect(mapChannel, creature, missile.Source, armorDecrease + healthDecrease, missile.DamageType);
         }
 
         private readonly Random _random = new Random();
@@ -796,6 +807,18 @@ namespace Rasa.Managers
                 // packet is the same shape. It fell through to the default here, which did the
                 // right thing but logged every swing as an unsupported action.
                 case ActionId.WeaponMelee:
+                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
+                    break;
+
+                // A creature's own ability - the Forean's lightning, the Boargar's stun and
+                // charge, the Amoeboid's slime, the Mox's energy attack, the Shield Drone's
+                // strike. The recovery is the same shape as a weapon's and not a special case:
+                // BaseActorAbility and BaseWeaponAttack both extend TargetedAction, whose
+                // DoAction(actor, hits, misses, missdata, hitdata) is what this packet writes.
+                // They came through the default arm below and worked, while logging every swing
+                // as unsupported - which is how an attack that was drawing nothing at all looked
+                // exactly like one that was fine.
+                case var _ when AbilityManager.Instance.TryGetLevel(missile.ActionId, missile.ActionArgId, out _):
                     CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
                     break;
                 //else if (missile->actionId == 203)

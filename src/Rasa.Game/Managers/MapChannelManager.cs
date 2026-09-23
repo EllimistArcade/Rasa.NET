@@ -276,6 +276,9 @@ namespace Rasa.Managers
 
                         // Tactical Evasion: the smoke screens, and the marks a retreat goes back to.
                         AbilityManager.Instance.SmokeWorker(mapChannel);
+
+                        // Shield Drones: the shield raised, held over whoever is under it, and its heal.
+                        ShieldDrone.Worker(mapChannel);
                     }
 
                     // a second's health, armour, power and chi for everyone here

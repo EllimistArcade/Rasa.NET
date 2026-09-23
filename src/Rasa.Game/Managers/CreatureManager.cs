@@ -536,6 +536,56 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// Checks that every creature_action row names an attack the client can actually draw.
+        ///
+        /// A row states its attack as an (action, argument) pair, and that pair is what the client
+        /// resolves to decide the animation, the FX families and the timings. A pair the client has
+        /// no row for does not fail: client/actions/__init__.py logs to its own console and hands
+        /// back a default ActorActionInfo - no windup animation, no FX - so the attack still lands
+        /// its damage and draws nothing whatsoever. Eight of the forty-four shipped rows were in
+        /// that state, and the only way to find out was to stand in front of one and notice that a
+        /// creature hitting you was doing it in silence.
+        ///
+        /// The client's own table of valid pairs is already in the database as action_level, which
+        /// is what AbilityManager loads, so the check is a single lookup per row. That is also why
+        /// this runs from Server after AbilityInit rather than from CreatureInit: the table it
+        /// checks against does not exist yet at the point the creatures are read.
+        ///
+        /// Reported once per row rather than once per creature - one bad row is usually shared by
+        /// a whole family - and server-wide, because a creature is not tied to a map until it is
+        /// spawned and MapErrorManager shows server-wide entries on every map anyway.
+        /// </summary>
+        public void ValidateActions()
+        {
+            var seen = new HashSet<uint>();
+            var bad = 0;
+
+            foreach (var creature in LoadedCreatures.Values)
+            {
+                foreach (var action in creature.Actions)
+                {
+                    if (!seen.Add(action.Id))
+                        continue;
+
+                    if (AbilityManager.Instance.TryGetLevel(action.ActionId, action.ActionArgId, out _))
+                        continue;
+
+                    bad++;
+
+                    Logger.WriteLog(LogType.Error,
+                        $"creature_action {action.Id} ({action.Description}) performs {(uint)action.ActionId}/{action.ActionArgId}, " +
+                        "which the client has no action data for: it will deal its damage and draw nothing.");
+
+                    MapErrorManager.Instance.Record(
+                        $"creature_action {action.Id} ({action.Description}) names {(uint)action.ActionId}/{action.ActionArgId}, which the client cannot draw.");
+                }
+            }
+
+            Logger.WriteLog(LogType.Initialize,
+                $"CreatureActions = {seen.Count}, undrawable = {bad}");
+        }
+
         public void CellDiscardCreaturesToClient(Client client, List<Creature> discardCreatures)
         {
             foreach (var creature in discardCreatures)

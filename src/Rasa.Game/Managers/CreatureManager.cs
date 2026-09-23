@@ -151,6 +151,11 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A Machina's first death in a life is not its end (CreatureSupport): it goes down,
+            // and gets up again.
+            if (CreatureSupport.DefersDeath(mapChannel, creature))
+                return;
+
             // Killed by something fighting for a player - a trap's shot, a creature turned by
             // Traitor, a minion: the kill is that player's, experience, adrenaline, loot and
             // harvest rights alike. The blow stays the creature's for threat.

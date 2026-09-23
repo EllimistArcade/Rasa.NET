@@ -276,7 +276,8 @@ namespace Rasa.Managers
 
             // Mid-charge (Kael rushing blow), or winding up to blow itself up (a Fithik), it does
             // nothing else until that is done.
-            if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature) || CreatureBombs.IsSelfDestructing(creature))
+            if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature) || CreatureBombs.IsSelfDestructing(creature)
+                || CreatureSupport.IsCasting(creature))
             {
                 needCellUpdate = CellChanged(creature, delta);
                 return;
@@ -687,6 +688,11 @@ namespace Rasa.Managers
                     return;
                 }
 
+                // A Caretaker or a Technician looks after its side first: a heal, a repair or a
+                // revive, when one would do something (CreatureSupport).
+                if (CreatureSupport.TryStart(mapChannel, creature))
+                    return;
+
                 var needToMove = true;
 
                 // An attack in range that it could not use for want of a clear line: it has to go
@@ -695,6 +701,10 @@ namespace Rasa.Managers
 
                 foreach (var action in creature.Actions)
                 {
+                    // Heals and revives are not aimed at the enemy (CreatureSupport.TryStart).
+                    if (CreatureSupport.Is(action))
+                        continue;
+
                     // check if we can execute action
                     if (targetDistSqr < action.RangeMin * action.RangeMin || targetDistSqr >= action.RangeMax * action.RangeMax)
                         continue;
@@ -1254,7 +1264,7 @@ namespace Rasa.Managers
 
             foreach (var other in creature.Actions)
             {
-                if (other == action || other.RangeMax <= 0 || AmoeboidVomit.IsVomit(other) || other.ActionId == ShieldDrone.HealAction)
+                if (other == action || other.RangeMax <= 0 || AmoeboidVomit.IsVomit(other) || other.ActionId == ShieldDrone.HealAction || CreatureSupport.Is(other))
                     continue;
 
                 if (other.RangeMax < action.RangeMax)

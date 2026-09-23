@@ -211,6 +211,9 @@ namespace Rasa.Managers
                     // Creature bombs, death blasts and self-destructs whose time has come.
                     CreatureBombs.Worker(mapChannel);
 
+                    // Creature heals, repairs and revives whose windup is up.
+                    CreatureSupport.Worker(mapChannel);
+
                     // Crab Mines: seeking, running, going off.
                     AbilityManager.Instance.CrabMineWorker(mapChannel);
 

@@ -559,6 +559,8 @@ namespace Rasa.Managers
             {
                 if (actor is Manifestation holder)
                     targets.AddRange(AbilityManager.HostilesWithin(mapChannel, holder, actor.Position, effect.TickRadius));
+                else if (actor is Creature creatureHolder)
+                    targets.AddRange(CreatureBombs.Caught(mapChannel, creatureHolder, actor.Position, effect.TickRadius));   // a Thrax's Scourge
             }
             else
                 targets.Add(actor);
@@ -610,9 +612,12 @@ namespace Rasa.Managers
         /// </summary>
         private void TickAura(MapChannel mapChannel, Actor actor, GameEffect effect)
         {
+            // A player's aura reaches their squad; a creature's (a Thrax boss's Rage), its own side.
             var members = actor is Manifestation holder
-                ? AbilityManager.SquadWithin(mapChannel, holder, effect.AuraRadius).Where(m => m != actor).ToList()
-                : new List<Manifestation>();
+                ? AbilityManager.SquadWithin(mapChannel, holder, effect.AuraRadius).Where(m => m != actor).Cast<Actor>().ToList()
+                : actor is Creature creatureHolder
+                    ? CreatureBuffs.AlliesWithin(mapChannel, creatureHolder, creatureHolder.Position, effect.AuraRadius).Cast<Actor>().ToList()
+                    : new List<Actor>();
 
             foreach (var child in effect.Children.ToList())
             {

@@ -717,6 +717,17 @@ namespace Rasa.Managers
                         continue;   // action on cooldown
                     }
 
+                    // Rage, Scourge, a warcry: on itself or its own side, and only when it would
+                    // do something; otherwise on to the next action (CreatureBuffs).
+                    if (CreatureBuffs.Is(action))
+                    {
+                        if (!CreatureBuffs.Perform(mapChannel, creature, action, targetActor))
+                            continue;
+
+                        action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
+                        break;
+                    }
+
                     needToMove = false;
 
                     // rotate
@@ -729,6 +740,9 @@ namespace Rasa.Managers
                     // row's damage is the effect's (CreatureEffectAttacks).
                     if (!CreatureEffectAttacks.Hits(CreatureEffectAttacks.KindOf(action.ActionId, action.ActionArgId)))
                         dmg = 0;
+
+                    // Raised or lowered by what is on it: a Thrax boss's Rage.
+                    dmg = GameEffectManager.ApplyDamageDealt(creature, dmg);
 
                     // A Laser crit on it weakens its ranged attacks - a charge's blow is not one.
                     if (action.ActionId != ActionId.WeaponMelee && !KaelRushingBlow.Is(action))

@@ -39,6 +39,11 @@
         public System.Collections.Generic.List<Creature> ConeTargets { get; set; }
         /// <summary>What each creature in the cone takes before its own crit roll: the shot's damage as fired.</summary>
         public int ConeDamage { get; set; }
+        /// <summary>
+        /// A creature's attack: what each player caught in its area (CreatureAreaAttacks) takes
+        /// before their own crit roll - the attack's damage as launched.
+        /// </summary>
+        public int AreaDamage { get; set; }
         public long TriggerTime { get; set; }       // amount of milliseconds left before the missile is triggered, is decreased on every tick
         public MissileArgs Args = new MissileArgs();
     }

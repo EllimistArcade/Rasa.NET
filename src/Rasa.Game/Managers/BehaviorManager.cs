@@ -89,6 +89,13 @@ namespace Rasa.Managers
         /// <summary>How often a creature re-tests whether it can see what it is shooting at.</summary>
         private const long SightRecheckMs = 500;
 
+        /// <summary>
+        /// How long an attack in range may have left to cool down and still keep its creature
+        /// where it stands (ClosesInWhileCooling). A gunner between shots holds its ground; a
+        /// Kael whose tectonic strike is ten seconds from ready walks in and uses its fists.
+        /// </summary>
+        public const long HoldForCooldownMs = 1500;
+
         public const byte WanderIdle = 0;
         public const byte WanderMoving = 1;
 
@@ -687,10 +694,17 @@ namespace Rasa.Managers
                         continue;
                     }
 
-                    needToMove = false;
-
                     if (action.CooldownTimer > 0)
+                    {
+                        // An attack cooling down holds its creature at this range only if there
+                        // is nothing closer in it could be using meanwhile.
+                        if (!ClosesInWhileCooling(creature, action))
+                            needToMove = false;
+
                         continue;   // action on cooldown
+                    }
+
+                    needToMove = false;
 
                     // rotate
                     UpdateEntityMovement(targetDistX, targetDistY, targetDistZ, creature, mapChannel, 0.0f, false, delta);
@@ -1168,6 +1182,34 @@ namespace Rasa.Managers
             }
         }
         
+        /// <summary>
+        /// Whether a creature should close in while this attack cools down: it has longer than
+        /// HoldForCooldownMs left, and the creature has an attack of shorter reach to go and use.
+        ///
+        /// Every attack in range used to pin its creature in place, cooling or not. That was
+        /// harmless while each creature had one attack, or a gun and a melee of about the same
+        /// cadence; it is not once a brute has a ranged special - a Kael with a twenty metre
+        /// tectonic strike would stand at twenty metres waiting for it forever and never smash.
+        /// A creature whose shortest-reach attack is this one keeps its ground as before, so a
+        /// ranged creature still stands off and shoots.
+        /// </summary>
+        public static bool ClosesInWhileCooling(Creature creature, CreatureAction action)
+        {
+            if (action.CooldownTimer <= HoldForCooldownMs)
+                return false;
+
+            foreach (var other in creature.Actions)
+            {
+                if (other == action || other.RangeMax <= 0 || AmoeboidVomit.IsVomit(other) || other.ActionId == ShieldDrone.HealAction)
+                    continue;
+
+                if (other.RangeMax < action.RangeMax)
+                    return true;
+            }
+
+            return false;
+        }
+
         public void SetActionFighting(Creature creature, ulong targetEntityId)
         {
             // Running home after a leash: nothing pulls it back into a fight on the way - not a

@@ -606,6 +606,9 @@ namespace Rasa.Managers
             missile.ActionArgId = action.ActionArgId;
             missile.IsAbility = false;
 
+            if (action.Actor is Creature)
+                missile.AreaDamage = damage;
+
             CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformWindupPacket(PerformType.ThreeArgs, missile.ActionId, missile.ActionArgId, missile.TargetEntityId));
 
             // Firing gives a cloaked shooter away, whoever they were shooting at.
@@ -694,6 +697,60 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A creature attack with an area (CreatureAreaAttacks): every other player it covers
+        /// takes the attack's damage as a hit of its own - own crit roll, then everything a
+        /// player's hit goes through in DoDamageToPlayer, knockback and stun included - and is
+        /// added to the missile's hits so the one recovery shows them all.
+        /// </summary>
+        private void CreatureAreaHits(MapChannel mapChannel, Missile missile)
+        {
+            if (!(missile.Source is Creature attacker) || missile.AreaDamage <= 0
+                || attacker.State == CharacterState.Dead || !IsOnMap(mapChannel, attacker))
+                return;
+
+            var area = CreatureAreaAttacks.AreaOf(missile.ActionId, missile.ActionArgId);
+
+            if (!area.IsArea)
+                return;
+
+            foreach (var player in CreatureAreaAttacks.PlayersCaught(mapChannel, attacker, area, missile.TargetActor))
+                ExtraPlayerHit(mapChannel, missile, attacker, player, missile.AreaDamage);
+        }
+
+        /// <summary>One more player hit by a creature's attack, resolved as a missile of its own and added to the missile's hits.</summary>
+        private void ExtraPlayerHit(MapChannel mapChannel, Missile missile, Creature attacker, Manifestation player, int damage)
+        {
+            var extra = new Missile
+            {
+                DamageA = damage,
+                DamageType = missile.DamageType,
+                ArmorBypassPercent = missile.ArmorBypassPercent,
+                Source = attacker,
+                TargetActor = player,
+                TargetEntityId = player.EntityId,
+                ActionId = missile.ActionId,
+                ActionArgId = missile.ActionArgId,
+                IsMelee = missile.IsMelee
+            };
+
+            var amount = extra.DamageA;
+            extra.IsCritical = CriticalHits.Resolve(attacker, player, missile.IsMelee, missile.CritChance, ref amount);
+            extra.DamageA = amount;
+
+            var hit = new HitData { EntityId = player.EntityId, FinalAmt = extra.DamageA, IsCritical = extra.IsCritical ? 1 : 0 };
+
+            extra.Args.HitEntities.Add(player.EntityId);
+            extra.Args.HitData.Add(hit);
+
+            DoDamageToPlayer(mapChannel, extra);
+
+            hit.FinalAmt = extra.DamageA;
+
+            missile.Args.HitEntities.Add(player.EntityId);
+            missile.Args.HitData.Add(hit);
+        }
+
+        /// <summary>
         /// Aims a cone weapon (ConeWeapons) as it is fired: every hostile creature within its reach
         /// and half-angle of the way the shooter faces. A cone weapon cannot lock a target ("you
         /// will not be able to lock onto a target while this type of weapon is equipped"), so
@@ -736,6 +793,7 @@ namespace Rasa.Managers
 
                 SplashAround(mapChannel, missile);
                 ConeHits(mapChannel, missile);
+                CreatureAreaHits(mapChannel, missile);
 
                 CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
                 return;
@@ -806,6 +864,7 @@ namespace Rasa.Managers
 
             SplashAround(mapChannel, missile);
             ConeHits(mapChannel, missile);
+            CreatureAreaHits(mapChannel, missile);
 
             switch (missile.ActionId)
             {

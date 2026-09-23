@@ -32,7 +32,8 @@ namespace Rasa.Managers
     ///   are the classes' own).
     /// - The weapon is a server-side Item of the creature weapon's class, created on the clients
     ///   around the player with the item and weapon data any other weapon is sent with
-    ///   (SendMorphWeapon) and destroyed when the morph ends. While morphed, every shot the
+    ///   (SendMorphWeapon) - and to a client meeting them later (ShowMorphWeaponTo) - and
+    ///   destroyed when the morph ends. While morphed, every shot the
     ///   player fires is fired with it (ManifestationManager.TryFireWeapon): its attack action,
     ///   damage type and damage, no ammunition and no heat.
     /// - "An equal level enemy": a creature weapon's damage is its level-50 figure (the Bane
@@ -264,28 +265,20 @@ namespace Rasa.Managers
 
         /// <summary>
         /// A client meets a polymorphed player after the morph began - they walked into range,
-        /// arrived on the map, or the player came out of a cloak. The player's entity data says
-        /// nothing of effects, and the recovery that announced the morph to everyone else has
-        /// come and gone, so this client would see the player as themselves. Sent straight after
-        /// the player's entity: the weapon entity first, since BaseMorphEffect.OnAnnounceAttach
-        /// looks it up, then the morph effect - and level 5's Hominis Machina effect - attached
-        /// announced, with the time that is left, which swaps the mesh as the recovery would have.
+        /// arrived on the map, or the player came out of a cloak: the weapon entity, which
+        /// BaseMorphEffect.OnAnnounceAttach looks up. Called by GameEffectManager.ShowEffectsTo
+        /// before it sends the effects, the morph among them, announced, with the time that is
+        /// left - which swaps the mesh as the recovery would have.
         /// </summary>
-        public static void ShowMorphTo(Client viewer, Manifestation player)
+        public static void ShowMorphWeaponTo(Client viewer, Manifestation player)
         {
             if (viewer == null || !(player?.MorphWeapon is MorphWeaponItem weapon))
                 return;
 
-            var morph = player.ActiveEffects.Values.FirstOrDefault(e => e.TypeId == PolymorphTypeId);
-
-            if (morph == null)
+            if (!player.ActiveEffects.Values.Any(e => e.TypeId == PolymorphTypeId))
                 return;
 
             SendMorphWeapon(viewer, weapon);
-            viewer.CallMethod(player.EntityId, GameEffectManager.AttachedPacket(morph, true));
-
-            foreach (var child in morph.Children.Where(c => c.Holder == player))
-                viewer.CallMethod(player.EntityId, GameEffectManager.AttachedPacket(child, true));
         }
 
         /// <summary>

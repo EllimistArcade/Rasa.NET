@@ -1488,8 +1488,8 @@ namespace Rasa.Managers
 
                 tempClient.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(player.EntityId, player.EntityClass, CreatePlayerEntityData(client)));
 
-                // Polymorphed: shown as the creature, not as themselves.
-                AbilityManager.ShowMorphTo(tempClient, player);
+                // What is on them - a buff, a DoT, a morph - went out before this client was here.
+                GameEffectManager.ShowEffectsTo(tempClient, player);
 
             }
         }
@@ -1516,8 +1516,8 @@ namespace Rasa.Managers
 
                 client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(tempClient.Player.EntityId, tempClient.Player.EntityClass, CreatePlayerEntityData(tempClient)));
 
-                // Polymorphed: shown as the creature, not as themselves.
-                AbilityManager.ShowMorphTo(client, tempClient.Player);
+                // What is on them - a buff, a DoT, a morph - went out before this client was here.
+                GameEffectManager.ShowEffectsTo(client, tempClient.Player);
             }
         }
 		

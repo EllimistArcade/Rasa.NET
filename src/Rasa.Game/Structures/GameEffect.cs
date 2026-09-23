@@ -65,6 +65,16 @@ namespace Rasa.Structures
         public bool AnnounceOnAttach { get; set; } = true;
 
         /// <summary>
+        /// Whether a client meeting the holder after the attach has the effect announced to it
+        /// (GameEffectManager.ShowEffectsTo). Most want it whatever AnnounceOnAttach says: an
+        /// effect attached quietly was announced by its ability's recovery, which a latecomer
+        /// never saw, and the announce is what starts its visuals - an aura's glow, a shield, a
+        /// morph's mesh. What an announce plays only on arrival - a summon's spawn flash, a
+        /// corpse rising - says no here.
+        /// </summary>
+        public bool AnnounceToNewcomers { get; set; } = true;
+
+        /// <summary>
         /// The client may ask for this effect to be removed (RequestDetachGameEffect) - a toggle
         /// like sprint, or any buff the player right-clicks away. Debuffs stay.
         /// </summary>

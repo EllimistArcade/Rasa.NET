@@ -381,11 +381,9 @@ namespace Rasa.Managers
             // give some weapon to creature's
             GiveWeapon(creature);
 
-            // A reanimated creature: its REANIMATED, for a client meeting it after it rose.
-            AbilityManager.ShowReanimatedTo(client, creature);
-
-            // A spotter: its SPOTTER_MINION, likewise.
-            AbilityManager.ShowSpotterTo(client, creature);
+            // What is on it - a DoT, a mark, a minion's or a risen corpse's effect, a turret's
+            // look - went out before this client was here.
+            GameEffectManager.ShowEffectsTo(client, creature);
         }
 
         public void CreatureInit()

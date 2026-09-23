@@ -105,9 +105,14 @@ namespace Rasa.Managers
         /// </summary>
         public void Attach(MapChannel mapChannel, Actor actor, GameEffect effect, params object[] attachArgs)
         {
-            // Cure P4 keeps debuffs off whoever it was cast on for its duration.
+            // Cure P4 keeps debuffs off whoever it was cast on for its duration - and says so:
+            // the client floats "Immune" over them (COMBAT_IMMUNE_ANNOUNCED).
             if (!effect.IsBuff && DebuffsBlocked(actor))
+            {
+                CellManager.Instance.CellCallMethod(mapChannel, actor,
+                    new GameEffectAttachFailedPacket(effect.TypeId, GameEffectAttachFailedPacket.FailReason.Immune, effect.SourceId));
                 return;
+            }
 
             // A skill's standing effects are one per skill and share a type (two heat bonuses
             // are two SKILL_LIMITED_COOL_RATE_MODIFIER_EFFECTs); the rest replace their own kind.
@@ -158,6 +163,52 @@ namespace Rasa.Managers
             // until this wears off.
             if (effect.Blinds && actor is Creature blinded)
                 BehaviorManager.Instance.StopFighting(blinded);
+        }
+
+        /// <summary>
+        /// A client has just been given an entity that already carries effects - it walked into
+        /// range, arrived on the map, or the entity came out of a cloak - and every attach went
+        /// out before it was there: without this a squad mate's Rage, a DoT on a mob, a turret's
+        /// look or a Target Painting were simply not there for anyone who turned up later. Sent
+        /// straight after the entity is created: a polymorphed player's weapon entity first,
+        /// since the morph's announce looks it up, then each effect in the order it went on, so
+        /// an aura comes before its children.
+        ///
+        /// One Recv_GameEffectAttached per effect rather than Recv_GameEffects (279), which does
+        /// the same attach for a whole list but announces every one of them unconditionally and
+        /// has no guard against an effect the client already holds. Announced as the effect
+        /// asks (AnnounceToNewcomers). A skill's standing effects only ever go to their own
+        /// player, and an effect whose time has run out is left for the worker to take off.
+        /// </summary>
+        public static void ShowEffectsTo(Client viewer, Actor actor)
+        {
+            if (viewer == null || actor == null)
+                return;
+
+            if (actor is Manifestation player)
+                AbilityManager.ShowMorphWeaponTo(viewer, player);
+
+            foreach (var attached in EffectsForNewcomer(actor, viewer.Player))
+                viewer.CallMethod(actor.EntityId, attached);
+        }
+
+        /// <summary>What ShowEffectsTo sends of the actor's effects to a client whose player is viewer, in order.</summary>
+        public static List<GameEffectAttachedPacket> EffectsForNewcomer(Actor actor, Actor viewer)
+        {
+            var packets = new List<GameEffectAttachedPacket>();
+
+            foreach (var effect in actor.ActiveEffects.Values.OrderBy(e => e.EffectId))
+            {
+                if (effect.IsExpired)
+                    continue;
+
+                if (effect.IsSkillPassive && viewer != actor)
+                    continue;
+
+                packets.Add(AttachedPacket(effect, effect.AnnounceToNewcomers));
+            }
+
+            return packets;
         }
 
         /// <summary>

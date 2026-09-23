@@ -264,6 +264,7 @@ namespace Rasa.Managers
 
             effect.ExpiresTick = Environment.TickCount64 + lifetimeMs;
             effect.AnnounceOnAttach = true;
+            effect.AnnounceToNewcomers = false;     // its start FX is the summon's arrival
             effect.AllowDetach = false;
             effect.OnExpired = (map, actor, e) => EndSpotter(spotter);
 
@@ -326,18 +327,6 @@ namespace Rasa.Managers
             };
 
             CellManager.Instance.CellCallMethod(mapChannel, creature, GameEffectManager.AttachedPacket(despawn, true));
-        }
-
-        /// <summary>For a client meeting the spotter after it came: its SPOTTER_MINION. Called from CreatureManager.CreateCreatureOnClient.</summary>
-        internal static void ShowSpotterTo(Client client, Creature creature)
-        {
-            Spotter spotter;
-
-            lock (SpottersLock)
-                spotter = Spotters.FirstOrDefault(s => s.Creature == creature);
-
-            if (spotter != null && spotter.RemoveAt == 0 && creature.ActiveEffects.ContainsKey(spotter.Effect.EffectId))
-                client.CallMethod(creature.EntityId, GameEffectManager.AttachedPacket(spotter.Effect, false));
         }
 
         /// <summary>Runs the spotters on this map: take away the spent, let go of the fallen and the dismissed.</summary>

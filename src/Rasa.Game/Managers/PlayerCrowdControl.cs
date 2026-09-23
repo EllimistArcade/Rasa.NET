@@ -7,6 +7,7 @@ namespace Rasa.Managers
     using Data;
     using Game;
     using Packets.ClientMethod.Server;
+    using Packets.MapChannel.Server;
     using Packets.Protocol;
     using Structures;
     using Models;
@@ -36,7 +37,8 @@ namespace Rasa.Managers
     /// melee or abilities until it ends.
     ///
     /// Graviton Armor: "Knockback / Stun Resist: X%" (+3% a pump per piece): the chance that a
-    /// stun or knockback does not land at all (GameEffectManager.KnockbackStunResistOf).
+    /// stun or knockback does not land at all (GameEffectManager.KnockbackStunResistOf), shown
+    /// as "Resisted" when it does not.
     /// </summary>
     public static class PlayerCrowdControl
     {
@@ -61,7 +63,10 @@ namespace Rasa.Managers
                 return false;
 
             if (Stuns.Roll(ResistPercent(player)))
+            {
+                Resisted(mapChannel, player, Stuns.StunTypeId, source);
                 return false;
+            }
 
             var stun = new GameEffect
             {
@@ -93,7 +98,10 @@ namespace Rasa.Managers
                 return false;
 
             if (Stuns.Roll(ResistPercent(player)))
+            {
+                Resisted(mapChannel, player, CrowdControl.KnockbackTypeId, source);
                 return false;
+            }
 
             var dir = CrowdControl.AwayFrom(source.Position, player.Position);
             var destination = CrowdControl.KnockbackDestination(mapChannel, player.Position, dir, distance);
@@ -134,6 +142,16 @@ namespace Rasa.Managers
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Graviton Armor shrugged it off: "Resisted" floats over the player for everyone around
+        /// (GameEffectAttachFailed, COMBAT_RESIST_ANNOUNCED), as it would over a creature.
+        /// </summary>
+        private static void Resisted(MapChannel mapChannel, Manifestation player, int typeId, Actor source)
+        {
+            CellManager.Instance.CellCallMethod(mapChannel, player,
+                new GameEffectAttachFailedPacket(typeId, GameEffectAttachFailedPacket.FailReason.Resist, source?.EntityId ?? 0));
         }
 
         /// <summary>How long a knockback holds its target: the flight at KnockbackSpeed, the getup, and any extra stun.</summary>

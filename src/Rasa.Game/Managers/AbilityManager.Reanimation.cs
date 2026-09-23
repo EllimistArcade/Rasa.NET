@@ -156,6 +156,7 @@ namespace Rasa.Managers
             effect.IsBuff = true;
             effect.AllowDetach = false;
             effect.AnnounceOnAttach = announce;
+            effect.AnnounceToNewcomers = false;     // the rising is for those who saw it
             effect.OnExpired = (map, actor, e) => EndReanimation(risen);
 
             GameEffectManager.Instance.Attach(mapChannel, risen, effect);
@@ -175,21 +176,6 @@ namespace Rasa.Managers
                 corpse.Controller.DeadTime = long.MaxValue / 2;
 
             return risen;
-        }
-
-        /// <summary>
-        /// For a client meeting a risen creature after it rose: its REANIMATED, which the attach
-        /// told only those who were there. Called from CreatureManager.CreateCreatureOnClient.
-        /// </summary>
-        internal static void ShowReanimatedTo(Client client, Creature creature)
-        {
-            Risen risen;
-
-            lock (RisenLock)
-                risen = RisenCreatures.FirstOrDefault(r => r.Creature == creature);
-
-            if (risen != null && risen.RemoveAt == 0 && creature.ActiveEffects.ContainsKey(risen.Effect.EffectId))
-                client.CallMethod(creature.EntityId, GameEffectManager.AttachedPacket(risen.Effect, false));
         }
 
         /// <summary>Its time is up, or its master has gone: it dies, its end plays, and it is taken away.</summary>

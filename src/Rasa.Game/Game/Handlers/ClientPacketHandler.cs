@@ -57,6 +57,18 @@
             ManifestationManager.Instance.AutoFireKeepAlive(Client, packet.KeepAliveDelay);
         }
 
+        /// <summary>
+        /// A client effect calling the server (BaseGameEffect.SendMethodCall). Nothing in the
+        /// client's Python ever does, and no effect here takes calls, so it is logged and
+        /// dropped - handled so that one arriving is read to its end rather than closing the
+        /// connection over a payload nobody could parse.
+        /// </summary>
+        [PacketHandler(GameOpcode.CallGameEffectMethod)]
+        private void CallGameEffectMethod(CallGameEffectMethodPacket packet)
+        {
+            Logger.WriteLog(LogType.Debug, $"{Client.Player?.Name} called {packet.MethodName} on effect {packet.EffectId}; no server effect takes calls.");
+        }
+
         [PacketHandler(GameOpcode.CancelLogoutRequest)]
         private void CancelLogoutRequest(CancelLogoutRequestPacket packet)
         {

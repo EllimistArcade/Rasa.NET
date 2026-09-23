@@ -105,7 +105,7 @@ namespace Rasa.Managers
             {
                 viewer.CallMethod(SysEntity.ClientMethodId,
                     new CreatePhysicalEntityPacket(player.EntityId, player.EntityClass, ManifestationManager.Instance.CreatePlayerEntityData(client)));
-                AbilityManager.ShowMorphTo(viewer, player);
+                GameEffectManager.ShowEffectsTo(viewer, player);
             }
         }
 

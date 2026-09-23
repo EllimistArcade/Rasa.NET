@@ -619,6 +619,41 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A creature's blow that has already been wound up - KaelRushingBlow's, whose windup is
+        /// the charge - resolved now, with no second windup sent: a melee hit on aimedAt if it is
+        /// given, and on every player within area of centre. It resolves as any missile does,
+        /// on the next tick, and its recovery goes out in the shape the action's class reads.
+        /// </summary>
+        public void CreatureStrike(MapChannel mapChannel, Creature attacker, CreatureAction action, Actor aimedAt, int damage, CreatureArea area, Vector3 centre)
+        {
+            if (mapChannel == null || attacker == null)
+                return;
+
+            var missile = new Missile
+            {
+                DamageA = damage,
+                DamageType = CreatureAttacks.DamageTypeOf(action),
+                Source = attacker,
+                IsMelee = true,
+                CritChance = CriticalHits.AttackerChance(attacker, true, 0),
+                ActionId = action.ActionId,
+                ActionArgId = action.ActionArgId,
+                AreaDamage = damage,
+                AreaOverride = area,
+                AreaCentre = centre,
+                TriggerTime = 0
+            };
+
+            if (aimedAt != null && aimedAt.State != CharacterState.Dead && aimedAt.State != CharacterState.Dying && IsOnMap(mapChannel, aimedAt))
+            {
+                missile.TargetActor = aimedAt;
+                missile.TargetEntityId = aimedAt.EntityId;
+            }
+
+            mapChannel.QueuedMissiles.Add(missile);
+        }
+
+        /// <summary>
         /// A launcher's splash (Splash): every other hostile creature within the missile's
         /// SplashRadius of where it landed takes SplashDamage as a hit of its own, and is added
         /// to the missile's hits so the one recovery shows them all.
@@ -708,12 +743,12 @@ namespace Rasa.Managers
                 || attacker.State == CharacterState.Dead || !IsOnMap(mapChannel, attacker))
                 return;
 
-            var area = CreatureAreaAttacks.AreaOf(missile.ActionId, missile.ActionArgId);
+            var area = missile.AreaOverride ?? CreatureAreaAttacks.AreaOf(missile.ActionId, missile.ActionArgId);
 
             if (!area.IsArea)
                 return;
 
-            foreach (var player in CreatureAreaAttacks.PlayersCaught(mapChannel, attacker, area, missile.TargetActor))
+            foreach (var player in CreatureAreaAttacks.PlayersCaught(mapChannel, attacker, area, missile.TargetActor, missile.AreaCentre))
                 ExtraPlayerHit(mapChannel, missile, attacker, player, missile.AreaDamage);
         }
 

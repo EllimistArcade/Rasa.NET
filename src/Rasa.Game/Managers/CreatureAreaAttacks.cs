@@ -45,6 +45,9 @@ namespace Rasa.Managers
 
         public bool IsArea => ConeHalfAngle > 0 || AroundSource > 0 || AroundTarget > 0;
 
+        /// <summary>Everything within radius of a point the attack names itself - where a charge's blow lands (KaelRushingBlow).</summary>
+        public static CreatureArea AroundPoint(float radius) => new CreatureArea(0, 0, 0, radius);
+
         /// <summary>The area an action's level gives, if it gives one.</summary>
         public static CreatureArea Of(ActionLevelInfo info)
         {
@@ -99,9 +102,10 @@ namespace Rasa.Managers
 
         /// <summary>
         /// The players on the map, other than the one it aimed at, that an attack from attacker
-        /// covers and that it may fight: alive, on the map, and inside the area.
+        /// covers and that it may fight: alive, on the map, and inside the area. centre, when
+        /// given, stands in for the target's position.
         /// </summary>
-        public static List<Manifestation> PlayersCaught(MapChannel mapChannel, Creature attacker, CreatureArea area, Actor aimedAt)
+        public static List<Manifestation> PlayersCaught(MapChannel mapChannel, Creature attacker, CreatureArea area, Actor aimedAt, Vector3? centre = null)
         {
             var caught = new List<Manifestation>();
 
@@ -109,7 +113,7 @@ namespace Rasa.Managers
                 return caught;
 
             var facing = AbilityManager.FacingOf(attacker);
-            var target = aimedAt?.Position;
+            var target = centre ?? aimedAt?.Position;
 
             foreach (var client in mapChannel.ClientList)
             {

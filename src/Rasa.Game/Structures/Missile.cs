@@ -44,6 +44,10 @@
         /// before their own crit roll - the attack's damage as launched.
         /// </summary>
         public int AreaDamage { get; set; }
+        /// <summary>A creature attack's area when the attack names it rather than its action data (KaelRushingBlow's EFFECT_RADIUS).</summary>
+        public Managers.CreatureArea? AreaOverride { get; set; }
+        /// <summary>Where AreaOverride is centred, in place of the target's position.</summary>
+        public System.Numerics.Vector3? AreaCentre { get; set; }
         public long TriggerTime { get; set; }       // amount of milliseconds left before the missile is triggered, is decreased on every tick
         public MissileArgs Args = new MissileArgs();
     }

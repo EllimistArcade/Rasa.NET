@@ -205,6 +205,9 @@ namespace Rasa.Managers
                     // the blows whose windup is up are resolved.
                     AbilityManager.Instance.ChargeWorker(mapChannel);
 
+                    // Kael rushing blow: the blows whose charge is over.
+                    KaelRushingBlow.Worker(mapChannel);
+
                     // Crab Mines: seeking, running, going off.
                     AbilityManager.Instance.CrabMineWorker(mapChannel);
 

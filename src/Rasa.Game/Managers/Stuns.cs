@@ -81,6 +81,7 @@ namespace Rasa.Managers
                     return (100, info.Get(AbilityProperty.DurationMs));
                 case "abilities.concussivewave":
                 case "abilities.rushingblow":
+                case "abilities.ai.kaelrushingblowability":
                     return (100, info.Get(AbilityProperty.Duration) * 1000);
                 default:
                     return (0, 0);

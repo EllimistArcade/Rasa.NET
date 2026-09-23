@@ -274,7 +274,8 @@ namespace Rasa.Managers
             // but it can still cross into another cell doing so.
             var knockedBack = StepKnockback(mapChannel, creature, delta);
 
-            if (knockedBack || Stuns.IsStunned(creature))
+            // Mid-charge (Kael rushing blow), it does nothing else until the blow lands.
+            if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature))
             {
                 needCellUpdate = CellChanged(creature, delta);
                 return;
@@ -712,8 +713,8 @@ namespace Rasa.Managers
                     // execute action and quit
                     var dmg = (int)(action.MinDamage + (new Random().Next() % (action.MaxDamage - action.MinDamage + 1)));
 
-                    // A Laser crit on it weakens its ranged attacks.
-                    if (action.ActionId != ActionId.WeaponMelee)
+                    // A Laser crit on it weakens its ranged attacks - a charge's blow is not one.
+                    if (action.ActionId != ActionId.WeaponMelee && !KaelRushingBlow.Is(action))
                         dmg = GameEffectManager.ApplyRangedDamage(creature, dmg);
 
                     // Not every creature action is an attack. The Amoeboid's vomit is TARGET_NONE
@@ -722,6 +723,18 @@ namespace Rasa.Managers
                     if (AmoeboidVomit.IsVomit(action))
                     {
                         AmoeboidVomit.Perform(mapChannel, creature, action);
+
+                        action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
+                        break;
+                    }
+
+                    // A Kael's rushing blow is a charge: its windup carries the Kael to its
+                    // target, and the blow lands when it gets there (KaelRushingBlow).
+                    if (KaelRushingBlow.Is(action))
+                    {
+                        creature.Controller.Path.Clear();
+                        KaelRushingBlow.Start(mapChannel, creature, action, targetActor, dmg);
+                        AbilityManager.OnCreatureActed(mapChannel, creature, true);
 
                         action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
                         break;

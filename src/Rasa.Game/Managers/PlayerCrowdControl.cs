@@ -188,7 +188,9 @@ namespace Rasa.Managers
 
             var (knockback, chance, ms) = OfCreatureAction(module, info);
 
-            if (knockback > 0)
+            // CHANCE_KNOCK_BACK, where the action gives one (Kael rushing blow: 30%), is the
+            // chance the knockback lands; one that does not can still stagger.
+            if (knockback > 0 && Stuns.Roll(info.Get(AbilityProperty.ChanceKnockBack, 100)))
                 Knockback(mapChannel, player, attacker, knockback);
             else if (ms > 0 && Stuns.Roll(chance))
                 Stun(mapChannel, player, attacker, ms);

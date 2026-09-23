@@ -122,6 +122,57 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A player carrying a creature's Explosive Nanites (CreatureEffectAttacks) has taken
+        /// damage: if the nanites are ready they explode on them - the rolled amount as the
+        /// creature's row gives it, of the argument's type, through the player's resistances -
+        /// shown through the effect's AnnounceDamage as a player's nanites on a creature are. The
+        /// ready time moves on first, so the explosion's own damage cannot set off another.
+        /// </summary>
+        internal static void OnPlayerNanites(MapChannel mapChannel, Manifestation player)
+        {
+            if (player == null || player.State == CharacterState.Dead || player.State == CharacterState.Dying)
+                return;
+
+            var now = Environment.TickCount64;
+
+            foreach (var nanites in player.ActiveEffects.Values.Where(e => e.OnDamagedCharges > 0 && e.OnDamagedMax > 0).ToList())
+            {
+                if (now < nanites.OnDamagedReadyAt || nanites.IsExpired)
+                    continue;
+
+                if (!(nanites.Source is Creature thrax) || thrax.MapContextId != mapChannel.MapInfo.MapContextId)
+                    continue;
+
+                nanites.OnDamagedReadyAt = now + nanites.OnDamagedIntervalMs;
+                nanites.OnDamagedCharges--;
+
+                int rolled;
+
+                lock (BombRandom)
+                    rolled = BombRandom.Next(nanites.OnDamagedMin, nanites.OnDamagedMax + 1);
+
+                var amount = GameEffectManager.ApplyResist(player, rolled, out var resisted, nanites.OnDamagedType);
+                var taken = ActorManager.Instance.Damage(mapChannel, player, amount, thrax, nanites.OnDamagedType);
+
+                var announce = new GameEffectAnnounceDamagePacket(nanites.EffectId);
+
+                announce.Hits.Add(new TickEntry
+                {
+                    EntityId = player.EntityId,
+                    Amount = amount,
+                    Resisted = resisted,
+                    DamageType = nanites.OnDamagedType,
+                    DeathBlow = false
+                });
+
+                CellManager.Instance.CellCallMethod(mapChannel, player, announce);
+
+                if (nanites.OnDamagedCharges <= 0 && player.ActiveEffects.ContainsKey(nanites.EffectId))
+                    GameEffectManager.Instance.DettachEffect(mapChannel, player, nanites);
+            }
+        }
+
+        /// <summary>
         /// Called when a creature has taken damage and is still standing: its Explosive Nanites, if
         /// any are ready, explode on it. The ready time is moved on before the explosion is dealt,
         /// so the explosion's own damage cannot set off another.

@@ -44,6 +44,8 @@
         /// before their own crit roll - the attack's damage as launched.
         /// </summary>
         public int AreaDamage { get; set; }
+        /// <summary>The creature_action row a creature's attack was made with: its damage is an effect's tick where the attack is a damage over time (CreatureEffectAttacks).</summary>
+        public CreatureAction CreatureAction { get; set; }
         /// <summary>A creature attack's area when the attack names it rather than its action data (KaelRushingBlow's EFFECT_RADIUS).</summary>
         public Managers.CreatureArea? AreaOverride { get; set; }
         /// <summary>Where AreaOverride is centred, in place of the target's position.</summary>

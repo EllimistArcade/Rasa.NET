@@ -713,6 +713,11 @@ namespace Rasa.Managers
                     // execute action and quit
                     var dmg = (int)(action.MinDamage + (new Random().Next() % (action.MaxDamage - action.MinDamage + 1)));
 
+                    // An attack that is a damage over time, or an effect alone, lands no hit: its
+                    // row's damage is the effect's (CreatureEffectAttacks).
+                    if (!CreatureEffectAttacks.Hits(CreatureEffectAttacks.KindOf(action.ActionId, action.ActionArgId)))
+                        dmg = 0;
+
                     // A Laser crit on it weakens its ranged attacks - a charge's blow is not one.
                     if (action.ActionId != ActionId.WeaponMelee && !KaelRushingBlow.Is(action))
                         dmg = GameEffectManager.ApplyRangedDamage(creature, dmg);
@@ -743,7 +748,7 @@ namespace Rasa.Managers
                     var actionData = new ActionData(creature, action.ActionId, action.ActionArgId, creature.Controller.ActionFighting.TargetEntityId, 0);
                     // do damage, of the type the attack's weapon deals
                     MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, damageType: CreatureAttacks.DamageTypeOf(action),
-                        melee: action.ActionId == ActionId.WeaponMelee);
+                        melee: action.ActionId == ActionId.WeaponMelee, creatureAction: action);
 
                     // Feedback on it burns it for acting: this is the hostile action the server has.
                     AbilityManager.OnCreatureActed(mapChannel, creature, true);

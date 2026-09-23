@@ -99,6 +99,10 @@ namespace Rasa.Managers
             if (damage > 0)
                 Stealth.Break(mapChannel, player);
 
+            // A Thrax's Explosive Nanites go off on the damage its holder takes.
+            if (damage > 0)
+                OnPlayerNanites(mapChannel, player);
+
             var bomb = player.ActiveEffects.Values.FirstOrDefault(e => e.TypeId == SelfDestructBombTypeId && e.ReturnTo.HasValue && !e.IsExpired);
 
             if (bomb == null)

@@ -363,9 +363,14 @@ namespace Rasa.Managers
             if (actor is Manifestation victim && armorDecrease + healthDecrease > 0)
                 AbilityManager.OnPlayerDamaged(mapChannel, victim, armorDecrease + healthDecrease);
 
-            // A creature attack that knocks back or stuns does so to a player as well.
+            // A creature attack that knocks back or stuns does so to a player as well, and one
+            // that carries a game effect puts it on them (CreatureEffectAttacks) - before the
+            // recovery goes out, which is what announces it.
             if (missile.Source is Creature striker && actor is Manifestation struck)
+            {
                 PlayerCrowdControl.CreatureActionHit(mapChannel, striker, struck, missile.ActionId, missile.ActionArgId);
+                CreatureEffectAttacks.OnHit(mapChannel, striker, struck, missile);
+            }
         }
 
         /// <summary>
@@ -512,10 +517,11 @@ namespace Rasa.Managers
         /// <param name="splashRadius">Metres around the target a launcher's splash reaches (Splash); 0 for none.</param>
         /// <param name="coneHalfAngle">Degrees either side of the shooter's facing a cone weapon hits (ConeWeapons); 0 for a single target.</param>
         /// <param name="knockbackStunMs">How much longer a creature the knockback lands on stays down (Hand to Hand).</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0, int knockbackStunMs = 0)
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0, int knockbackStunMs = 0, CreatureAction creatureAction = null)
         {
             var missile = new Missile
             {
+                CreatureAction = creatureAction,
                 DamageA = damage,
                 DamageType = damageType,
                 ArmorBypassPercent = Math.Max(0, Math.Min(100, armorBypassPercent)),
@@ -639,6 +645,7 @@ namespace Rasa.Managers
                 ActionId = action.ActionId,
                 ActionArgId = action.ActionArgId,
                 AreaDamage = damage,
+                CreatureAction = action,
                 AreaOverride = area,
                 AreaCentre = centre,
                 TriggerTime = 0
@@ -739,8 +746,12 @@ namespace Rasa.Managers
         /// </summary>
         private void CreatureAreaHits(MapChannel mapChannel, Missile missile)
         {
-            if (!(missile.Source is Creature attacker) || missile.AreaDamage <= 0
-                || attacker.State == CharacterState.Dead || !IsOnMap(mapChannel, attacker))
+            if (!(missile.Source is Creature attacker) || attacker.State == CharacterState.Dead || !IsOnMap(mapChannel, attacker))
+                return;
+
+            // An attack that is its effect alone (the Atta pheromone, the Miasma's gas cloud) does
+            // no damage and still reaches everyone in its area.
+            if (missile.AreaDamage <= 0 && CreatureEffectAttacks.KindOf(missile.ActionId, missile.ActionArgId) == CreatureEffectAttacks.Kind.None)
                 return;
 
             var area = missile.AreaOverride ?? CreatureAreaAttacks.AreaOf(missile.ActionId, missile.ActionArgId);
@@ -765,7 +776,8 @@ namespace Rasa.Managers
                 TargetEntityId = player.EntityId,
                 ActionId = missile.ActionId,
                 ActionArgId = missile.ActionArgId,
-                IsMelee = missile.IsMelee
+                IsMelee = missile.IsMelee,
+                CreatureAction = missile.CreatureAction
             };
 
             var amount = extra.DamageA;

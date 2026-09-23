@@ -98,11 +98,14 @@ namespace Rasa.Structures
         /// <summary>The creature's combat actions a polymorphed player has in their drawer, and may perform (AbilityManager.Polymorph).</summary>
         public System.Collections.Generic.List<(Data.ActionId ActionId, uint Level)> MorphAbilities { get; set; } = new System.Collections.Generic.List<(Data.ActionId, uint)>();
 
-        /// <summary>Polymorph: the target category the player counts as while morphed ("including their faction"); null for their own.</summary>
-        public Data.TargetCategory? MorphCategory { get; set; }
-
-        /// <summary>What the player counts as to creatures: FRIENDLY, unless Polymorph has made them otherwise.</summary>
-        public Data.TargetCategory CombatCategory => MorphCategory ?? Data.TargetCategory.Friendly;
+        /// <summary>
+        /// What the player counts as to creatures: FRIENDLY, whatever they look like. Polymorph
+        /// used to make a morphed player their disguise's side, which read well against the
+        /// tooltip's "including their faction" but played badly: the aggro scan passed over
+        /// them, so a morph in the middle of a fight was a way out of it and a morphed player
+        /// could walk through a Bane camp untouched.
+        /// </summary>
+        public Data.TargetCategory CombatCategory => Data.TargetCategory.Friendly;
 
         public void PlaceAt(Vector3 position)
         {

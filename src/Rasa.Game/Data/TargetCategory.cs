@@ -31,17 +31,17 @@ namespace Rasa.Data
     /// What a target category means to a fight, on the server's side of it:
     ///
     /// - HOSTILE and FRIENDLY are at war: each goes looking for the other (the aggro scan), and a
-    ///   player - FRIENDLY unless Polymorph has made them otherwise - is attacked by HOSTILE
-    ///   creatures;
+    ///   player - always FRIENDLY, whatever Polymorph has made them look like - is attacked by
+    ///   HOSTILE creatures;
     /// - NEUTRAL goes looking for nobody and nobody goes looking for it, but anyone may attack it
     ///   - players, their abilities, creatures on either side - and it fights back whoever does;
     /// - OBJECT, DECORATION, DECORATIONPROXY and IGNORE take no part: never attacked, never
     ///   attacking, never noticed.
     ///
-    /// A player is FRIENDLY to creatures unless Polymorph has made them otherwise
-    /// (Manifestation.CombatCategory), and is held to <see cref="MayFightPlayer"/> rather than
-    /// <see cref="MayFight"/>: a creature of the player's own morphed side still answers a player
-    /// who attacks it, as it always did - only a FRIENDLY creature never fights a FRIENDLY player.
+    /// A player is FRIENDLY to creatures (Manifestation.CombatCategory) and is held to
+    /// <see cref="MayFightPlayer"/> rather than <see cref="MayFight"/>, which differ in one
+    /// place: a FRIENDLY creature never fights a FRIENDLY player. Polymorph does not change
+    /// this - the disguise is a look, not a side, so a fight a player is in survives it.
     /// </summary>
     public static class TargetCategories
     {

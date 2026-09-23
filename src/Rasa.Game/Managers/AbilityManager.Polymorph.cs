@@ -39,9 +39,11 @@ namespace Rasa.Managers
     ///   pistol's 2809 sits beside the level 50 player pistols), so it is scaled down to the
     ///   player's level on the curve player weapons follow, doubling every 8 levels
     ///   (ScaleToLevel) - 40 at level 1 for the Bane pistol, against 55 for a level 1 pistol.
-    /// - "Including their faction": the player counts as that target category to creatures
-    ///   (Manifestation.MorphCategory, CombatCategory). HOSTILE creatures do not go for a player
-    ///   morphed HOSTILE, FRIENDLY ones do; either answers a player who attacks it.
+    /// - "Including their faction" is the look and nothing else. A morphed player is still
+    ///   FRIENDLY to creatures (Manifestation.CombatCategory): the ones hunting them keep
+    ///   hunting them, the hate they have earned stands, and a morph in the middle of a fight is
+    ///   not a way out of it. MorphVariant.TargetCategory is what the disguise is, for the record
+    ///   and for the client's own colours, not a side the server puts the player on.
     /// - The drawer holds the creature's combat actions the pump's tooltip names, at their
     ///   player-facing levels (MorphVariant.Abilities, AbilityManager.MorphAbilities): Kick; Mini
     ///   Turret and Repair; Revitalize and Noxious Burst; Smash and Ground Pound. The revives -
@@ -150,7 +152,6 @@ namespace Rasa.Managers
             var weapon = MorphWeaponFor(variant);
 
             player.MorphWeapon = weapon;
-            player.MorphCategory = variant.TargetCategory;
             player.MorphAbilities = variant.Abilities.ToList();
             player.WeaponReady = true;
 
@@ -320,7 +321,6 @@ namespace Rasa.Managers
             var weapon = player.MorphWeapon;
 
             player.MorphWeapon = null;
-            player.MorphCategory = null;
             player.MorphAbilities = new List<(ActionId, uint)>();
 
             if (mapChannel == null)

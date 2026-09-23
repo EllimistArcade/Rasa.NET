@@ -120,8 +120,8 @@ namespace Rasa.Managers
                 foreach (var client in cell.ClientList)
                 {
                     // Cell lists can hold a client whose character is already gone. A player is
-                    // FRIENDLY - sought by HOSTILE creatures only - unless Polymorph has made them
-                    // something else.
+                    // FRIENDLY - sought by HOSTILE creatures only - whatever Polymorph has made
+                    // them look like.
                     if (client.Player == null || !TargetCategories.Seeks(creature.TargetCategory, client.Player.CombatCategory))
                         continue;
 

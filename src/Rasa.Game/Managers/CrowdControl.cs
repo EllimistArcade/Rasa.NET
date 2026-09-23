@@ -128,7 +128,8 @@ namespace Rasa.Managers
             var flightMs = (int)(travelled / KnockbackSpeed * 1000f);
             var downMs = flightMs + GetupMs + Math.Max(0, extraStunMs);
 
-            if (travelled > 0.1f)
+            // An emplacement is knocked down where it stands, not off its mount.
+            if (travelled > 0.1f && !Emplacements.Is(target))
             {
                 target.KnockbackTo = destination;
                 target.KnockbackDirection = dir;
@@ -171,6 +172,10 @@ namespace Rasa.Managers
                 return false;
 
             if (!target.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
+                return false;
+
+            // Nothing drags an emplacement off its mount.
+            if (Emplacements.Is(target))
                 return false;
 
             var (destination, speed) = PullPath(mapChannel, target.Position, puller.Position, flailMs);

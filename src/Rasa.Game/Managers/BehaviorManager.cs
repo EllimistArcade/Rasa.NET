@@ -294,7 +294,9 @@ namespace Rasa.Managers
                 // get the creature
                 var tCreature = tCell.CreatureList[randomCreatureIndex];
                 // is it a different alive creature?
-                if (creature != tCreature && tCreature.Attributes[Attributes.Health].Current > 0)
+                // An emplacement is bolted down: it neither pushes nor is pushed.
+                if (creature != tCreature && tCreature.Attributes[Attributes.Health].Current > 0
+                    && !Emplacements.Is(creature) && !Emplacements.Is(tCreature))
                 {
                     var difX = creature.Position.X - tCreature.Position.X;
                     var difY = creature.Position.Y - tCreature.Position.Y;
@@ -770,6 +772,16 @@ namespace Rasa.Managers
                 // and never leaves the ground it is covering.
                 if (ShieldDrone.HoldsGround(creature))
                     return;
+
+                // An emplacement shoots from its mount or not at all: a target out of its reach or
+                // its sight is off its table, and it turns to the next it hates, or stands down.
+                if (Emplacements.Is(creature))
+                {
+                    if (!Threat.Retarget(creature))
+                        GiveUp(creature);
+
+                    return;
+                }
 
                 if (targetDistSqr <= 3.0f * 3.0f && !sightBlocked)
                     return;// near enough, dont move

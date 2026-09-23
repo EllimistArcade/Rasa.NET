@@ -38,6 +38,13 @@ namespace Rasa.Managers
         /// <summary>How close a hostile pool's area may come to a friendly NPC, a hospital or a waypoint.</summary>
         public const float SafeClearance = 15f;
 
+        /// <summary>
+        /// How close a hostile pool's ground may come to a turret: a creature's scan
+        /// (Creature.AggroRange). Nearer, the turret and the camp find each other and fight for
+        /// as long as the server runs.
+        /// </summary>
+        public const float TurretScan = 18f;
+
         public static SpawnPoolManager Instance
         {
             get
@@ -260,7 +267,10 @@ namespace Rasa.Managers
             var pool = creature.SpawnPool;
             var mapChannel = MapChannelManager.Instance.FindByContextId(pool.MapContextId);
 
-            CreatureManager.Instance.SetLocation(creature, SpawnPoint(mapChannel, pool, count), pool.Rotation, pool.MapContextId);
+            // An emplacement stands on its mount, which is exactly where its pool is.
+            var position = Emplacements.Is(creature) ? pool.Position : SpawnPoint(mapChannel, pool, count);
+
+            CreatureManager.Instance.SetLocation(creature, position, pool.Rotation, pool.MapContextId);
         }
 
         /// <summary>
@@ -308,7 +318,9 @@ namespace Rasa.Managers
         /// <summary>
         /// Every automatic pool of hostile creatures whose area comes within SafeClearance of a
         /// friendly NPC's pool, a hospital or a waypoint pad: a player reviving or arriving there
-        /// would stand in a fight. Logged and recorded for the map; nothing is changed. Run once
+        /// would stand in a fight. And every one whose area comes within TurretScan of a turret
+        /// (an emplacement's pool, which is not safe ground): the two would fight for good.
+        /// Logged and recorded for the map; nothing is changed. Run once
         /// the creatures, the pools and the teleporters are all loaded.
         /// </summary>
         public void ValidatePools()
@@ -323,9 +335,16 @@ namespace Rasa.Managers
                 list.Add((position, what));
             }
 
+            // A turret is friendly, but no hospital: its ground is where the fighting is.
+            var turrets = new List<SpawnPool>();
+
             foreach (var pool in LoadedSpawnPools.Values)
-                if (pool.SpawnSlot.Exists(s => Side(s.CreatureId) == TargetCategory.Friendly))
+            {
+                if (pool.SpawnSlot.Count > 0 && pool.SpawnSlot.TrueForAll(s => IsEmplacement(s.CreatureId)))
+                    turrets.Add(pool);
+                else if (pool.SpawnSlot.Exists(s => Side(s.CreatureId) == TargetCategory.Friendly))
                     Add(pool.MapContextId, pool.Position, $"the NPCs of pool {pool.DbId}");
+            }
 
             foreach (var teleporter in DynamicObjectManager.Instance.Teleporters.Values)
                 if (teleporter.ObjectData is WaypointInfo info && (info.WaypointType == WaypointType.Hospital || info.WaypointType == WaypointType.Waypoint))
@@ -340,7 +359,29 @@ namespace Rasa.Managers
                     || !pool.SpawnSlot.TrueForAll(s => Side(s.CreatureId) == TargetCategory.Hostile))
                     continue;
 
-                if (!safe.TryGetValue(pool.MapContextId, out var points))
+                // A turret that can see the camp from its mount: the two fight for as long as the
+                // server runs, and the camp is never there for a player.
+                var fought = false;
+
+                foreach (var turret in turrets)
+                {
+                    if (turret.MapContextId != pool.MapContextId || turret.Mode != ModeAutomatic)
+                        continue;
+
+                    var reach = Vector2.Distance(new Vector2(turret.Position.X, turret.Position.Z), new Vector2(pool.Position.X, pool.Position.Z)) - pool.Radius;
+
+                    if (reach >= TurretScan)
+                        continue;
+
+                    var fight = $"spawnpool {pool.DbId}: its creatures can stand {Math.Max(0, reach):0} m from the turret of pool {turret.DbId}, inside its scan; they will fight for good.";
+                    Logger.WriteLog(LogType.Error, fight);
+                    MapErrorManager.Instance.Record(pool.MapContextId, fight);
+                    bad++;
+                    fought = true;
+                    break;
+                }
+
+                if (fought || !safe.TryGetValue(pool.MapContextId, out var points))
                     continue;
 
                 foreach (var (position, what) in points)
@@ -358,8 +399,11 @@ namespace Rasa.Managers
                 }
             }
 
-            Logger.WriteLog(LogType.Initialize, $"SpawnPools checked against safe ground: {bad} too close.");
+            Logger.WriteLog(LogType.Initialize, $"SpawnPools checked against safe ground and turrets: {bad} too close.");
         }
+
+        private static bool IsEmplacement(uint creatureId) =>
+            CreatureManager.Instance.LoadedCreatures.TryGetValue(creatureId, out var creature) && Emplacements.Classes.Contains(creature.EntityClass);
 
         private static TargetCategory Side(uint creatureId) =>
             CreatureManager.Instance.LoadedCreatures.TryGetValue(creatureId, out var creature) ? creature.TargetCategory : TargetCategory.Hostile;

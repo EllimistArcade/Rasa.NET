@@ -76,8 +76,15 @@ namespace Rasa.Packets.MapChannel.Server.PerformRecovery
                     case RecoveryShape.DamageArcs:
                         pw.WriteTuple(2);
                         WriteRawInfo(pw, hit);
-                        pw.WriteTuple(1);           // onHitData = (arcData,): no arcs
-                        pw.WriteList(0);
+                        pw.WriteTuple(1);           // onHitData = (arcData,): [(entityId, rawInfo), ...]
+                        pw.WriteList(hit.Arcs.Count);
+
+                        foreach (var arc in hit.Arcs)
+                        {
+                            pw.WriteTuple(2);
+                            pw.WriteULong(arc.EntityId);
+                            DamageInfoWriter.WriteRawInfo(pw, arc.DamageType, arc.Amount, arc.Resisted, arc.IsCritical, arc.DeathBlow);
+                        }
                         break;
                     case RecoveryShape.EntityRawInfo:
                         pw.WriteTuple(2);

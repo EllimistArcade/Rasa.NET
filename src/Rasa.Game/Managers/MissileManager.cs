@@ -909,6 +909,10 @@ namespace Rasa.Managers
             if (targetType == EntityType.Creature && missile.TargetActor.Attributes[Attributes.Health].Current <= 0)
                 hitData.DeathBlow = 1;
 
+            // A creature's lightning: its extra damage and its arc, carried in this hit.
+            if (targetType == EntityType.Creature || targetType == EntityType.Character)
+                CreatureLightning.Extras(mapChannel, missile, hitData);
+
             SplashAround(mapChannel, missile);
             ConeHits(mapChannel, missile);
             CreatureAreaHits(mapChannel, missile);

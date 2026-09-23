@@ -33,5 +33,7 @@ namespace Rasa.Structures
         public List<uint> TargetEffectIds { get; set; } // ToDo
         public List<uint> SourceEffectIds { get; set; } // ToDo
         public List<object> OnHitData { get; set; }           // ToDo
+        /// <summary>A creature's lightning: the arcs and extra damage this hit set off, the arcData its onHitData carries (CreatureLightning).</summary>
+        public List<Packets.MapChannel.Server.TickEntry> Arcs { get; } = new List<Packets.MapChannel.Server.TickEntry>();
     }
 }

@@ -615,6 +615,17 @@ namespace Rasa.Managers
                     if (action.ActionId != ActionId.WeaponMelee)
                         dmg = GameEffectManager.ApplyRangedDamage(creature, dmg);
 
+                    // Not every creature action is an attack. The Amoeboid's vomit is TARGET_NONE
+                    // with a range of 0 and regurgitates another Amoeboid - a missile aimed at
+                    // whoever it is fighting is the wrong thing entirely.
+                    if (AmoeboidVomit.IsVomit(action))
+                    {
+                        AmoeboidVomit.Perform(mapChannel, creature, action);
+
+                        action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
+                        break;
+                    }
+
                     var actionData = new ActionData(creature, action.ActionId, action.ActionArgId, creature.Controller.ActionFighting.TargetEntityId, 0);
                     // do damage, of the type the attack's weapon deals
                     MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, damageType: CreatureAttacks.DamageTypeOf(action),

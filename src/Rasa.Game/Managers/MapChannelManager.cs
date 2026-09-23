@@ -279,6 +279,9 @@ namespace Rasa.Managers
 
                         // Shield Drones: the shield raised, held over whoever is under it, and its heal.
                         ShieldDrone.Worker(mapChannel);
+
+                        // Amoeboids: the regurgitated children whose time is up.
+                        AmoeboidVomit.Worker(mapChannel);
                     }
 
                     // a second's health, armour, power and chi for everyone here

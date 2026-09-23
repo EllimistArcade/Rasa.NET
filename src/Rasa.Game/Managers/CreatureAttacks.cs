@@ -1,6 +1,10 @@
+using System.Collections.Generic;
+
 namespace Rasa.Managers
 {
     using Data;
+    using Packets;
+    using Packets.MapChannel.Server.PerformRecovery;
     using Structures;
 
     /// <summary>
@@ -34,6 +38,58 @@ namespace Rasa.Managers
             action.ResolvedDamageType = resolved;
 
             return resolved;
+        }
+
+        /// <summary>The player modules creature actions use whose class is DamageBase: hitdata (rawInfo, onHitData).</summary>
+        private static readonly HashSet<string> DamageBaseModules = new HashSet<string>
+        {
+            "abilities.knockback", "abilities.stun", "abilities.tectonicstrike", "abilities.shrapnel",
+            "abilities.deathdamage", "abilities.rushingblow"
+        };
+
+        public const string LightningModule = "abilities.lightning";
+        public const string KaelRushingBlowModule = "abilities.ai.kaelrushingblowability";
+        public const string LinkerHandBlastModule = "abilities.ai.linkerhandblastability";
+
+        /// <summary>
+        /// The hitdata shape an action's client class unpacks, by its module (RecoveryShape).
+        /// No module, or a weapon's, is the weapon shape; a creature class under abilities.ai
+        /// that does not say otherwise indexes a bare rawInfo, as does a class with no DoAbility
+        /// of its own, which reads nothing.
+        /// </summary>
+        public static RecoveryShape ShapeOfModule(string module)
+        {
+            if (string.IsNullOrEmpty(module) || module.StartsWith("weapons."))
+                return RecoveryShape.Weapon;
+
+            if (module == LightningModule)
+                return RecoveryShape.DamageArcs;
+
+            if (DamageBaseModules.Contains(module))
+                return RecoveryShape.Damage;
+
+            if (module == KaelRushingBlowModule)
+                return RecoveryShape.EntityRawInfo;
+
+            if (module == LinkerHandBlastModule)
+                return RecoveryShape.Drain;
+
+            return RecoveryShape.RawInfo;
+        }
+
+        /// <summary>The recovery for a missile: a creature's ability in its class's shape, anything else as a weapon attack.</summary>
+        public static ServerPythonPacket RecoveryFor(Missile missile)
+        {
+            if (missile.Source is Creature && AbilityManager.Instance != null
+                && AbilityManager.Instance.TryGetAction(missile.ActionId, missile.ActionArgId, out var module, out _))
+            {
+                var shape = ShapeOfModule(module);
+
+                if (shape != RecoveryShape.Weapon)
+                    return new CreatureAbilityRecovery(missile, shape);
+            }
+
+            return new WeaponAttackRecovery(missile);
         }
 
         private static DamageType Resolve(CreatureAction action)

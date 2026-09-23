@@ -795,7 +795,7 @@ namespace Rasa.Managers
                 ConeHits(mapChannel, missile);
                 CreatureAreaHits(mapChannel, missile);
 
-                CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
+                CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
                 return;
             }
 
@@ -875,19 +875,19 @@ namespace Rasa.Managers
                 // packet is the same shape. It fell through to the default here, which did the
                 // right thing but logged every swing as an unsupported action.
                 case ActionId.WeaponMelee:
-                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
+                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
                     break;
 
                 // A creature's own ability - the Forean's lightning, the Boargar's stun and
                 // charge, the Amoeboid's slime, the Mox's energy attack, the Shield Drone's
-                // strike. The recovery is the same shape as a weapon's and not a special case:
-                // BaseActorAbility and BaseWeaponAttack both extend TargetedAction, whose
-                // DoAction(actor, hits, misses, missdata, hitdata) is what this packet writes.
-                // They came through the default arm below and worked, while logging every swing
-                // as unsupported - which is how an attack that was drawing nothing at all looked
-                // exactly like one that was fine.
+                // strike. BaseActorAbility and BaseWeaponAttack both extend TargetedAction, whose
+                // DoAction(actor, hits, misses, missdata, hitdata) this packet feeds, but what each
+                // hitdata entry holds is the class's own business: CreatureAttacks.RecoveryFor
+                // writes it in the shape the action's class unpacks. They came through the default
+                // arm below while logging every swing as unsupported - which is how an attack that
+                // was drawing nothing at all looked exactly like one that was fine.
                 case var _ when AbilityManager.Instance.TryGetLevel(missile.ActionId, missile.ActionArgId, out _):
-                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
+                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
                     break;
                 //else if (missile->actionId == 203)
                 //    missile_ActionHandler_CR_FOREAN_LIGHTNING(mapChannel, missile);
@@ -897,7 +897,7 @@ namespace Rasa.Managers
                 //    missile_ActionRecoveryHandler_ThraxKick(mapChannel, missile);
                 default:
                     Logger.WriteLog(LogType.Debug, $"MissileLaunch: unsupported missile actionId {missile.ActionId} - using default: WeaponAttackRecovery");
-                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, new WeaponAttackRecovery(missile));
+                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
                     break;
             }
         }

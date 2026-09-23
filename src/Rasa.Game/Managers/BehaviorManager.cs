@@ -13,23 +13,41 @@ namespace Rasa.Managers
     public class BehaviorManager
     {
         /// <summary>
-        /// Radius around home a stroll may end in. The C++ server used 20; it was raised to 40 while
-        /// destinations were random offsets that mostly failed the distance check, so creatures
-        /// hardly moved. With navmesh destinations every draw succeeds, and 40 m strolls at the
-        /// database's 5 m/s "walk" had whole camps sprinting about.
-        /// </summary>
-        public const byte WanderDistance = 20;
-
-        /// <summary>
         /// Wander pace, metres per second. creature.walk_speed is 5 for every row in the database -
         /// a jog, and the client shows it as one. Strolling creatures are capped at a walk; chases
         /// still use run_speed.
         /// </summary>
         public const float WanderWalkSpeed = 1.6f;
 
-        /// <summary>Idle time between strolls: RestTimeMin plus up to RestTimeSpread, drawn per stop so a camp does not move in step.</summary>
-        private const long RestTimeMin = 12000;
-        private const long RestTimeSpread = 28000;
+        /// <summary>
+        /// How long a creature stands before its next stroll, counted from when it stopped - after
+        /// a stroll, a fight or a leash alike. A spawned creature's first wait is drawn from anywhere
+        /// in the interval (<see cref="StartWandering"/>), so a camp that came up together does not
+        /// set off together; after that, strolls of different lengths keep them apart. Not in the
+        /// client.
+        /// </summary>
+        public const long WanderIntervalMs = 45000;
+
+        /// <summary>The furthest a stroll goes from where the creature stands, across the ground.</summary>
+        public const float WanderStepDistance = 10f;
+
+        /// <summary>The least room a stroll's end leaves to every other creature, and to wherever another is already walking.</summary>
+        public const float WanderSpacing = 4f;
+
+        /// <summary>The least a stroll moves the creature, so the spot it picks is not the one it is standing on.</summary>
+        public const float WanderMinStep = 2f;
+
+        /// <summary>
+        /// The spawn zone of a creature whose pool is a point (radius 0) or that has no pool - a GM
+        /// spawn - is this far around its spawn point. A pool with a radius is its own zone.
+        /// </summary>
+        public const float WanderZoneFallbackRadius = 10f;
+
+        /// <summary>How many points a stroll draws before it gives up until the next interval.</summary>
+        private const int WanderAttempts = 16;
+
+        /// <summary>A stroll that has not arrived in this long - walking into a wall off the navmesh - ends where the creature is.</summary>
+        private const long WanderMoveTimeoutMs = 20000;
         public const byte PathLengthLimit = 72;
 
         private const byte PathModeOneShot  = 0; // creature will walk along the path once
@@ -325,14 +343,18 @@ namespace Rasa.Managers
                         return;
                     }
 
-                if (creature.Controller.ActionWander.State == WanderIdle)
-                {
-                    if (creature.Controller.ActionWander.RestDuration <= 0)
-                        creature.Controller.ActionWander.RestDuration = RestTimeMin + new Random().Next((int)RestTimeSpread);
+                var wander = creature.Controller.ActionWander;
 
-                    //--- idle for a while before the next stroll
-                    if (creature.LastRestTime > creature.Controller.ActionWander.RestDuration)
+                if (wander.State == WanderIdle)
+                {
+                    wander.IdleMs += delta;
+
+                    //--- stands for WanderIntervalMs after it stops, then strolls
+                    if (wander.IdleMs >= WanderIntervalMs)
                     {
+                        // Whether or not it finds somewhere to go, the next try is a full interval off.
+                        wander.IdleMs = 0;
+
                         // does creature have a path?
                         if (creature.Controller.AiPathFollowing.GeneralPath != null)
                         {
@@ -348,29 +370,40 @@ namespace Rasa.Managers
                         if (ShieldDrone.HoldsGround(creature))
                             return;
 
-                        // set destination
-                        creature.Controller.ActionWander.WanderDestination = GetDestination(mapChannel, creature);
+                        var destination = PickStroll(mapChannel, creature);
 
-                        // next step approaching
-                        creature.Controller.ActionWander.State = WanderMoving;
+                        // Nowhere in its zone with room enough: it stays where it is.
+                        if (!destination.HasValue)
+                            return;
+
+                        wander.WanderDestination = destination.Value;
+                        wander.State = WanderMoving;
+                        wander.MovingMs = 0;
+                        creature.Controller.Path.Clear();
+                        creature.Controller.PathIndex = 0;
                         creature.LastRestTime = 0;
                     }
                 }
 
-                if (creature.Controller.ActionWander.State == WanderMoving)
+                if (wander.State == WanderMoving)
                 {
+                    wander.MovingMs += delta;
+
                     // following path (short path)
                     if (creature.Controller.Path.Count == 0)
-                        BuildPath(mapChannel, creature, creature.Controller.ActionWander.WanderDestination);
+                        BuildPath(mapChannel, creature, wander.WanderDestination);
 
                     // Frightened: it runs, rather than strolls.
-                    var wanderSpeed = creature.Controller.ActionWander.Fleeing ? creature.RunSpeed : Math.Min(creature.WalkSpeed, WanderWalkSpeed);
+                    var wanderSpeed = wander.Fleeing ? creature.RunSpeed : Math.Min(creature.WalkSpeed, WanderWalkSpeed);
 
-                    if (FollowPath(mapChannel, creature, wanderSpeed, delta))
+                    if (FollowPath(mapChannel, creature, wanderSpeed, delta) || wander.MovingMs >= WanderMoveTimeoutMs)
                     {
-                        creature.Controller.ActionWander.Fleeing = false;
-                        creature.Controller.ActionWander.State = WanderIdle;
-                        creature.Controller.ActionWander.RestDuration = 0;
+                        // There, or as near as it is going to get: it stops, and the interval
+                        // starts again from now.
+                        StopWalking(creature);
+                        wander.Fleeing = false;
+                        wander.State = WanderIdle;
+                        wander.IdleMs = 0;
                         creature.LastRestTime = 0;
                         return;
                     }
@@ -769,28 +802,131 @@ namespace Rasa.Managers
             }//---fighting
         }
 
-        /// <summary>
-        /// A wander destination around the creature's home, far enough from where it stands to be
-        /// worth walking to. On a map with a navmesh the point is drawn from the walkable surface
-        /// around home, so it is never inside a rock or off a cliff. Every candidate sits within
-        /// WanderDistance of home, so a creature that ended a chase further from home than that can
-        /// never draw one - the loop used to run forever, on the MainLoop thread. It gives up after
-        /// a fixed number of tries and walks home instead.
-        /// </summary>
-        private Vector3 GetDestination(MapChannel mapChannel, Creature creature)
-        {
-            for (var attempt = 0; attempt < 8; attempt++)
-            {
-                var dest = NavMeshManager.RandomPointAround(mapChannel, creature.HomePos.Position, WanderDistance)
-                           ?? creature.HomePos.Position + GetRandomVector();
-                var distance = GetDistanceSqr(creature.Position, dest);
+        #region Wander
 
-                if (distance > WanderDistance / 3 && distance < WanderDistance)
-                    return dest;
+        /// <summary>
+        /// Where a stroll goes: a point within <see cref="WanderStepDistance"/> of where the
+        /// creature stands and at least <see cref="WanderMinStep"/> from it, inside its spawn zone
+        /// (<see cref="WanderZoneOf"/>), and at least <see cref="WanderSpacing"/> from every other
+        /// living creature around and from wherever another is already walking to - so a camp
+        /// spreads over its ground instead of bunching. Drawn from the walkable surface where the
+        /// map has a navmesh, so never inside a rock or off a cliff; from the disc, on the ground,
+        /// where it has none. <see cref="WanderAttempts"/> draws, then nothing - it stays put until
+        /// the next interval. A creature that has ended up outside its zone - a chase that did not
+        /// leash, a knockback - and finds nothing goes home instead.
+        /// </summary>
+        public static Vector3? PickStroll(MapChannel mapChannel, Creature creature)
+        {
+            var (centre, radius) = WanderZoneOf(creature);
+            var taken = SpotsTakenAround(mapChannel, creature);
+
+            for (var attempt = 0; attempt < WanderAttempts; attempt++)
+            {
+                var candidate = NavMeshManager.RandomPointAround(mapChannel, creature.Position, WanderStepDistance)
+                                ?? NavMeshManager.SnapToGround(mapChannel, creature.Position + SpawnPoolManager.InDisc(WanderStepDistance));
+
+                if (IsGoodStroll(candidate, creature.Position, centre, radius, taken))
+                    return candidate;
             }
 
-            return creature.HomePos.Position;
+            return AcrossGround(creature.Position, centre) > radius ? creature.HomePos.Position : (Vector3?)null;
         }
+
+        /// <summary>Whether a stroll from <paramref name="from"/> may end at <paramref name="candidate"/>; distances across the ground.</summary>
+        public static bool IsGoodStroll(Vector3 candidate, Vector3 from, Vector3 zoneCentre, float zoneRadius, IEnumerable<Vector3> taken)
+        {
+            var step = AcrossGround(candidate, from);
+
+            if (step < WanderMinStep || step > WanderStepDistance)
+                return false;
+
+            if (AcrossGround(candidate, zoneCentre) > zoneRadius)
+                return false;
+
+            foreach (var spot in taken)
+                if (AcrossGround(candidate, spot) < WanderSpacing)
+                    return false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// A creature's spawn zone: its pool's area when the pool has a radius (a camp, a nest),
+        /// otherwise <see cref="WanderZoneFallbackRadius"/> around the point it spawned on.
+        /// </summary>
+        public static (Vector3 Centre, float Radius) WanderZoneOf(Creature creature)
+        {
+            var pool = creature.SpawnPool;
+
+            if (pool != null && pool.Radius > 0 && pool.MapContextId == creature.MapContextId)
+                return (pool.Position, pool.Radius);
+
+            return (creature.HomePos.Position, WanderZoneFallbackRadius);
+        }
+
+        /// <summary>Where every other living creature around stands, and where each one strolling is headed.</summary>
+        private static List<Vector3> SpotsTakenAround(MapChannel mapChannel, Creature creature)
+        {
+            var spots = new List<Vector3>();
+
+            if (mapChannel == null)
+                return spots;
+
+            foreach (var cell in CellManager.CellsIn(mapChannel, creature.Cells))
+                foreach (var other in cell.CreatureList)
+                {
+                    if (other == creature || other.State == CharacterState.Dead || other.State == CharacterState.Dying)
+                        continue;
+
+                    if (!other.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
+                        continue;
+
+                    spots.Add(other.Position);
+
+                    if (other.Controller?.CurrentAction == BehaviorActionWander && other.Controller.ActionWander.State == WanderMoving)
+                        spots.Add(other.Controller.ActionWander.WanderDestination);
+                }
+
+            return spots;
+        }
+
+        private static float AcrossGround(Vector3 a, Vector3 b)
+        {
+            var dx = a.X - b.X;
+            var dz = a.Z - b.Z;
+
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
+
+        /// <summary>
+        /// Tells the clients the creature has stopped where it is. The last step of a walk goes out
+        /// with the walking speed, and the clients carry an entity on at the speed they were last
+        /// given - left there, it would drift past the spot for its whole wait.
+        /// </summary>
+        private static void StopWalking(Creature creature)
+        {
+            CellManager.Instance.CellMoveObject(creature, new Movement(creature.Position, 0f, 0x08, new Vector2(creature.LastYaw, 0f)));
+        }
+
+        /// <summary>
+        /// Puts a creature to wandering: standing, with the interval to its first stroll starting
+        /// now - or, for one just spawned (<paramref name="staggered"/>), already partly run, by a
+        /// random amount, so that a camp that came up together does not set off together.
+        /// </summary>
+        public static void StartWandering(Creature creature, bool staggered)
+        {
+            var controller = creature.Controller;
+
+            controller.CurrentAction = BehaviorActionWander;
+            controller.ActionWander.State = WanderIdle;
+            controller.ActionWander.Fleeing = false;
+            controller.ActionWander.MovingMs = 0;
+            controller.ActionWander.IdleMs = staggered ? new Random().Next((int)WanderIntervalMs) : 0;
+            controller.Path.Clear();
+            controller.PathIndex = 0;
+        }
+
+        #endregion
 
         /// <summary>
         /// Sets the creature's path to <paramref name="destination"/>: the navmesh corners when the
@@ -935,17 +1071,6 @@ namespace Rasa.Managers
             return Math.Sqrt(dx * dx + dy * dy + dz * dz);
         }
 
-        private Vector3 GetRandomVector()
-        {
-            var rnd1 = new Random().Next(1, WanderDistance);
-            var rnd2 = new Random().Next(1, WanderDistance);
-            var rndX = rnd1 * Math.Cos(Math.PI * 2 * rnd1 / rnd2);
-            var rndY = rnd2 * Math.Sin(Math.PI * 2 * rnd1 / rnd2);
-            var rndVector = new Vector3((float)rndX, 0.0f, (float)rndY);
-
-            return rndVector;
-        }
-        
         public void MapChannelThink(MapChannel mapChannel, long delta)
         {
             // Accumulated per map. This used to be one field on the singleton shared by every
@@ -1367,13 +1492,10 @@ namespace Rasa.Managers
             return creature.HomePos.Position;
         }
 
+        /// <summary>Back to wandering after something else - a fight, a leash, a path - with the full interval to go before it strolls.</summary>
         private void SetActionWander(Creature creature)
         {
-            creature.Controller.CurrentAction = BehaviorActionWander;
-            creature.Controller.ActionWander.State = WanderIdle;
-            creature.Controller.ActionWander.Fleeing = false;
-            creature.Controller.Path.Clear();
-            creature.Controller.PathIndex = 0;
+            StartWandering(creature, false);
         }
 
         /// <summary>

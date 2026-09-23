@@ -301,8 +301,7 @@ namespace Rasa.Managers
                 creature.Attributes.Add(Attributes.Regen, new ActorAttributes(Attributes.Regen, 0, 0, 0, 0, 0));
             }
 
-            creature.Controller.CurrentAction = BehaviorManager.BehaviorActionWander;
-            creature.Controller.ActionWander.State = BehaviorManager.WanderIdle; //wanderstate: calc new position
+            BehaviorManager.StartWandering(creature, true);
 
             if (spawnPool != null)
                 SpawnPoolManager.Instance.IncreaseAliveCreatureCount(spawnPool);

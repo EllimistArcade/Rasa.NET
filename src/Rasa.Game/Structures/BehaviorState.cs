@@ -88,8 +88,11 @@ namespace Rasa.Structures
         public byte State { get; set; }
         public Vector3 WanderDestination = new Vector3();
 
-        /// <summary>How long this idle spell lasts before the next stroll; drawn anew each time the creature stops.</summary>
-        public long RestDuration { get; set; }
+        /// <summary>How long it has stood since it last stopped; at BehaviorManager.WanderIntervalMs it strolls again.</summary>
+        public long IdleMs { get; set; }
+
+        /// <summary>How long the current stroll has taken; one that runs over BehaviorManager's timeout ends where it is.</summary>
+        public long MovingMs { get; set; }
 
         /// <summary>Running away (Mind Control's Frighten) rather than strolling: the walk is at run speed.</summary>
         public bool Fleeing { get; set; }

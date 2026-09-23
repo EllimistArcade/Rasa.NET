@@ -208,6 +208,9 @@ namespace Rasa.Managers
                     // Kael rushing blow: the blows whose charge is over.
                     KaelRushingBlow.Worker(mapChannel);
 
+                    // Creature bombs, death blasts and self-destructs whose time has come.
+                    CreatureBombs.Worker(mapChannel);
+
                     // Crab Mines: seeking, running, going off.
                     AbilityManager.Instance.CrabMineWorker(mapChannel);
 

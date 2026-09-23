@@ -173,6 +173,10 @@ namespace Rasa.Managers
             // Nor does a grudge.
             creature.Hate.Clear();
 
+            // A creature that explodes when it dies does so now (CreatureBombs): a Warden's
+            // blast, a Howler's or a Predator's bomb.
+            CreatureBombs.OnDeath(mapChannel, creature);
+
             // tell spawnpool if set
             if (creature.SpawnPool != null)
             {

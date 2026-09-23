@@ -36,6 +36,9 @@ namespace Rasa.Managers
     ///    argument's DAMAGE_TYPE, USE_COUNT times at most, USE_DROPOFF seconds apart
     ///    (AbilityManager.OnPlayerNanites).
     ///
+    ///  - Ground blast, no hit (LinkerGroundBlastAbility): a bomb on the player that goes off on
+    ///    everyone around them (CreatureBombs.GroundBlast).
+    ///
     /// Effects the client class names are attached quietly: the recovery that follows lists the
     /// player as hit, and TargetedAction.OnServerResolution announces the class's
     /// targetGameEffect on every hit - the attach FX, the icon, and for the web and the net the
@@ -46,7 +49,7 @@ namespace Rasa.Managers
     /// </summary>
     public static class CreatureEffectAttacks
     {
-        public enum Kind { None, DamageOverTime, Hold, Blind, ResistDown, Polarity, Nanites }
+        public enum Kind { None, DamageOverTime, Hold, Blind, ResistDown, Polarity, Nanites, GroundBlast }
 
         public const int DecayTypeId = 82;                      // DECAY
         public const int AcidSpitTypeId = 379;                  // ATTA_HARVESTER_ACID_SPIT
@@ -82,6 +85,8 @@ namespace Rasa.Managers
                     return Kind.Polarity;
                 case "abilities.explodingnanites":
                     return Kind.Nanites;
+                case "abilities.ai.linkergroundblastability":
+                    return Kind.GroundBlast;
                 default:
                     return Kind.None;
             }
@@ -118,6 +123,13 @@ namespace Rasa.Managers
 
             if (kind == Kind.None)
                 return;
+
+            // A Linker's ground blast is a bomb on the player, going off on everyone near them.
+            if (kind == Kind.GroundBlast)
+            {
+                CreatureBombs.GroundBlast(mapChannel, attacker, player, missile.CreatureAction, info);
+                return;
+            }
 
             var effect = Build(mapChannel, attacker, missile, module, kind, info);
 

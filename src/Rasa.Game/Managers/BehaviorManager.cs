@@ -274,8 +274,9 @@ namespace Rasa.Managers
             // but it can still cross into another cell doing so.
             var knockedBack = StepKnockback(mapChannel, creature, delta);
 
-            // Mid-charge (Kael rushing blow), it does nothing else until the blow lands.
-            if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature))
+            // Mid-charge (Kael rushing blow), or winding up to blow itself up (a Fithik), it does
+            // nothing else until that is done.
+            if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature) || CreatureBombs.IsSelfDestructing(creature))
             {
                 needCellUpdate = CellChanged(creature, delta);
                 return;
@@ -676,6 +677,15 @@ namespace Rasa.Managers
                     return;
                 }
                 creature.LastAgression = 0; // update aggression time if we found our target
+
+                // Brought low, a Fithik blows itself up on whoever is around it (CreatureBombs).
+                var selfDestruct = creature.Actions.FirstOrDefault(CreatureBombs.IsSelfDestruct);
+
+                if (selfDestruct != null && CreatureBombs.ShouldSelfDestruct(creature.Attributes[Attributes.Health].Current, creature.Attributes[Attributes.Health].CurrentMax))
+                {
+                    CreatureBombs.StartSelfDestruct(mapChannel, creature, selfDestruct);
+                    return;
+                }
 
                 var needToMove = true;
 

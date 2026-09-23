@@ -96,6 +96,9 @@ namespace Rasa.Structures
 
         /// <summary>Running away (Mind Control's Frighten) rather than strolling: the walk is at run speed.</summary>
         public bool Fleeing { get; set; }
+
+        /// <summary>Walking to a corpse its habit sent it to (CreatureHabits): it runs, and does the habit when it gets there.</summary>
+        public bool Errand { get; set; }
     }
     
     public class AiPathFollowing

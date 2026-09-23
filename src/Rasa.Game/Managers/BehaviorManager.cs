@@ -277,7 +277,7 @@ namespace Rasa.Managers
             // Mid-charge (Kael rushing blow), or winding up to blow itself up (a Fithik), it does
             // nothing else until that is done.
             if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature) || CreatureBombs.IsSelfDestructing(creature)
-                || CreatureSupport.IsCasting(creature))
+                || CreatureSupport.IsCasting(creature) || CreatureHabits.IsBusy(creature))
             {
                 needCellUpdate = CellChanged(creature, delta);
                 return;
@@ -361,6 +361,23 @@ namespace Rasa.Managers
                 {
                     wander.IdleMs += delta;
 
+                    // A Filcher sees loot to steal, a hurt Xanx a dead one to eat; a Predator
+                    // scans where it stands (CreatureHabits). An errand does not wait for the
+                    // stroll's interval.
+                    var errand = CreatureHabits.WhereTo(mapChannel, creature);
+
+                    if (errand.HasValue)
+                    {
+                        wander.WanderDestination = errand.Value;
+                        wander.State = WanderMoving;
+                        wander.MovingMs = 0;
+                        wander.IdleMs = 0;
+                        wander.Errand = true;
+                        creature.Controller.Path.Clear();
+                        creature.Controller.PathIndex = 0;
+                        creature.LastRestTime = 0;
+                    }
+
                     //--- stands for WanderIntervalMs after it stops, then strolls
                     if (wander.IdleMs >= WanderIntervalMs)
                     {
@@ -406,7 +423,7 @@ namespace Rasa.Managers
                         BuildPath(mapChannel, creature, wander.WanderDestination);
 
                     // Frightened: it runs, rather than strolls.
-                    var wanderSpeed = wander.Fleeing ? creature.RunSpeed : Math.Min(creature.WalkSpeed, WanderWalkSpeed);
+                    var wanderSpeed = wander.Fleeing || wander.Errand ? creature.RunSpeed : Math.Min(creature.WalkSpeed, WanderWalkSpeed);
 
                     if (FollowPath(mapChannel, creature, wanderSpeed, delta) || wander.MovingMs >= WanderMoveTimeoutMs)
                     {
@@ -414,6 +431,13 @@ namespace Rasa.Managers
                         // starts again from now.
                         StopWalking(creature);
                         wander.Fleeing = false;
+
+                        if (wander.Errand)
+                        {
+                            wander.Errand = false;
+                            CreatureHabits.Arrived(mapChannel, creature);
+                        }
+
                         wander.State = WanderIdle;
                         wander.IdleMs = 0;
                         creature.LastRestTime = 0;
@@ -693,6 +717,10 @@ namespace Rasa.Managers
                 if (CreatureSupport.TryStart(mapChannel, creature))
                     return;
 
+                // A Xanx brought low eats a dead Xanx it is standing by (CreatureHabits).
+                if (CreatureHabits.TryInFight(mapChannel, creature))
+                    return;
+
                 var needToMove = true;
 
                 // An attack in range that it could not use for want of a clear line: it has to go
@@ -701,8 +729,9 @@ namespace Rasa.Managers
 
                 foreach (var action in creature.Actions)
                 {
-                    // Heals and revives are not aimed at the enemy (CreatureSupport.TryStart).
-                    if (CreatureSupport.Is(action))
+                    // Heals and revives are not aimed at the enemy (CreatureSupport.TryStart), nor
+                    // are the habits (CreatureHabits).
+                    if (CreatureSupport.Is(action) || CreatureHabits.Is(action))
                         continue;
 
                     // check if we can execute action
@@ -998,6 +1027,7 @@ namespace Rasa.Managers
             controller.CurrentAction = BehaviorActionWander;
             controller.ActionWander.State = WanderIdle;
             controller.ActionWander.Fleeing = false;
+            controller.ActionWander.Errand = false;
             controller.ActionWander.MovingMs = 0;
             controller.ActionWander.IdleMs = staggered ? new Random().Next((int)WanderIntervalMs) : 0;
             controller.Path.Clear();
@@ -1264,7 +1294,7 @@ namespace Rasa.Managers
 
             foreach (var other in creature.Actions)
             {
-                if (other == action || other.RangeMax <= 0 || AmoeboidVomit.IsVomit(other) || other.ActionId == ShieldDrone.HealAction || CreatureSupport.Is(other))
+                if (other == action || other.RangeMax <= 0 || AmoeboidVomit.IsVomit(other) || other.ActionId == ShieldDrone.HealAction || CreatureSupport.Is(other) || CreatureHabits.Is(other))
                     continue;
 
                 if (other.RangeMax < action.RangeMax)

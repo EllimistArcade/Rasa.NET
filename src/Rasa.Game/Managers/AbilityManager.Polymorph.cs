@@ -31,7 +31,8 @@ namespace Rasa.Managers
     ///   weapon class that creature fires, both from the client's entity classes (the mesh ids
     ///   are the classes' own).
     /// - The weapon is a server-side Item of the creature weapon's class, created on the clients
-    ///   around the player and destroyed when the morph ends. While morphed, every shot the
+    ///   around the player with the item and weapon data any other weapon is sent with
+    ///   (SendMorphWeapon) and destroyed when the morph ends. While morphed, every shot the
     ///   player fires is fired with it (ManifestationManager.TryFireWeapon): its attack action,
     ///   damage type and damage, no ammunition and no heat.
     /// - "An equal level enemy": a creature weapon's damage is its level-50 figure (the Bane
@@ -70,6 +71,16 @@ namespace Rasa.Managers
             public uint CreatureClassId;
             public int MeshId;
             public uint WeaponClassId;
+
+            /// <summary>
+            /// The item template of that weapon class in the client's itemTemplateItemClass.
+            /// The client names an item from its template (Item.GetName -> GetItemName ->
+            /// GetItemTemplateName), not from the entity class it was created with, so a weapon
+            /// sent without one is called "Missing translation for
+            /// physicalentityclassnamelanguage ID None" in the weapon drawer.
+            /// </summary>
+            public uint WeaponTemplateId;
+
             public TargetCategory TargetCategory;
 
             /// <summary>The creature's combat actions in the drawer: (action, level).</summary>
@@ -80,23 +91,23 @@ namespace Rasa.Managers
         public static readonly Dictionary<int, MorphVariant> MorphVariants = new Dictionary<int, MorphVariant>
         {
             // Pump 1: Thrax Pistol Soldier - Bane_Thrax_Soldier_Pistol, firing Weapon_Creature_Bane_Pistol (1/1, laser).
-            [1863] = new MorphVariant { Name = "Thrax Pistol Soldier", CreatureClassId = 3762, MeshId = 30407, WeaponClassId = 3782, TargetCategory = TargetCategory.Hostile,
+            [1863] = new MorphVariant { Name = "Thrax Pistol Soldier", CreatureClassId = 3762, MeshId = 30407, WeaponClassId = 3782, WeaponTemplateId = 55, TargetCategory = TargetCategory.Hostile,
                              Abilities = new[] { (ActionId.CrThraxKick, 5u) } },
             // Pump 2: Thrax Technician - Bane_Thrax_Technician, Weapon_Creature_Thrax_Technician (1/296, EMP).
-            [1868] = new MorphVariant { Name = "Thrax Technician", CreatureClassId = 7043, MeshId = 18368, WeaponClassId = 20689, TargetCategory = TargetCategory.Hostile,
+            [1868] = new MorphVariant { Name = "Thrax Technician", CreatureClassId = 7043, MeshId = 18368, WeaponClassId = 20689, WeaponTemplateId = 11494, TargetCategory = TargetCategory.Hostile,
                              Abilities = new[] { (ActionId.CrTechnicianTurret, 3u), (ActionId.CrTechnicianHeal, 5u) } },
             // Pump 3: Bane Caretaker - Bane_Caretaker; the only caretaker weapon class is the holographic copy's (1/190, physical).
-            [1858] = new MorphVariant { Name = "Bane Caretaker", CreatureClassId = 9244, MeshId = 21376, WeaponClassId = 21835, TargetCategory = TargetCategory.Hostile,
+            [1858] = new MorphVariant { Name = "Bane Caretaker", CreatureClassId = 9244, MeshId = 21376, WeaponClassId = 21835, WeaponTemplateId = 44831, TargetCategory = TargetCategory.Hostile,
                              Abilities = new[] { (ActionId.CrCaretakerHeal, 5u), (ActionId.CrCaretakerAttack, 5u) } },
             // Pump 4: Kael - Bane_Kael_Standard, Weapon_Creature_Kael (melee 174/44, physical).
-            [1864] = new MorphVariant { Name = "Kael", CreatureClassId = 4046, MeshId = 14434, WeaponClassId = 3952, TargetCategory = TargetCategory.Hostile,
+            [1864] = new MorphVariant { Name = "Kael", CreatureClassId = 4046, MeshId = 14434, WeaponClassId = 3952, WeaponTemplateId = 75, TargetCategory = TargetCategory.Hostile,
                              Abilities = new[] { (ActionId.CrKaelSmash, 5u), (ActionId.CrKaelGroundPound, 5u) } },
             // Pump 5: Hominis Machina - Bane_Hominis_Machina, Weapon_Creature_Hominis_Machina (1/97, laser).
-            [1869] = new MorphVariant { Name = "Hominis Machina", CreatureClassId = 3868, MeshId = 15868, WeaponClassId = 4365, TargetCategory = TargetCategory.Hostile },
+            [1869] = new MorphVariant { Name = "Hominis Machina", CreatureClassId = 3868, MeshId = 15868, WeaponClassId = 4365, WeaponTemplateId = 118, TargetCategory = TargetCategory.Hostile },
             // PAU Angel activator - PAU_Vehicle_ANGEL, Weapon_PAU_ANGEL_LeechGun_Physical (constant fire 179/8).
-            [4733] = new MorphVariant { Name = "PAU Angel", CreatureClassId = 30079, MeshId = 50218, WeaponClassId = 30652, TargetCategory = TargetCategory.Friendly },
+            [4733] = new MorphVariant { Name = "PAU Angel", CreatureClassId = 30079, MeshId = 50218, WeaponClassId = 30652, WeaponTemplateId = 131962, TargetCategory = TargetCategory.Friendly },
             // PAU Vulcan activator - PAU_Vehicle_VULCAN, Weapon_PAU_Vulcan_GrenadeLauncher_Fire (141/19, fire).
-            [4969] = new MorphVariant { Name = "PAU Vulcan", CreatureClassId = 30554, MeshId = 51314, WeaponClassId = 30651, TargetCategory = TargetCategory.Friendly },
+            [4969] = new MorphVariant { Name = "PAU Vulcan", CreatureClassId = 30554, MeshId = 51314, WeaponClassId = 30651, WeaponTemplateId = 131963, TargetCategory = TargetCategory.Friendly },
         };
 
         /// <summary>
@@ -144,7 +155,9 @@ namespace Rasa.Managers
             player.WeaponReady = true;
 
             // The weapon entity has to exist on every client that will announce the morph.
-            SendAround(mapChannel, player, (ulong)SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(weapon.EntityId, (EntityClasses)variant.WeaponClassId));
+            foreach (var cell in CellManager.CellsIn(mapChannel, player.Cells))
+                foreach (var viewer in cell.ClientList)
+                    SendMorphWeapon(viewer, weapon);
 
             var effect = NewEffect(mapChannel, player, info, PolymorphTypeId, info.Get(AbilityProperty.Duration, 120));
 
@@ -177,26 +190,75 @@ namespace Rasa.Managers
 
         /// <summary>
         /// The weapon a morphed player fires: an Item of the creature weapon's class that no
-        /// inventory holds, with no ammunition, no heat, and the attack action's own timing as
-        /// its refire.
+        /// inventory holds, on that class's item template, with no ammunition, no heat, and the
+        /// attack action's own timing as its refire. Whole, because a client will not hold a
+        /// weapon whose condition is nothing (Equipable.CanActorEquip) - a morphed player
+        /// carrying one fires their bare hands instead (Manifestation.GetWeapon).
         /// </summary>
         private MorphWeaponItem MorphWeaponFor(MorphVariant variant)
         {
-            var weaponClass = EntityClassManager.Instance.LoadedEntityClasses.TryGetValue((EntityClasses)variant.WeaponClassId, out var entityClass)
-                ? entityClass.WeaponClassInfo
+            var entityClass = EntityClassManager.Instance.LoadedEntityClasses.TryGetValue((EntityClasses)variant.WeaponClassId, out var loaded)
+                ? loaded
                 : null;
 
+            var weaponClass = entityClass?.WeaponClassInfo;
             var refire = 1000u;
 
             if (weaponClass != null && TryGetLevel(weaponClass.WeaponAttackActionId, weaponClass.WeaponAttackArgId, out var level))
                 refire = (uint)Math.Max(500, level.WindupMs + level.RecoveryMs + level.ReuseMs);
 
-            var template = new ItemTemplate(new ItemTemplateItemClassEntry { ItemTemplateId = 0, ItemClass = variant.WeaponClassId })
+            var template = new ItemTemplate(new ItemTemplateItemClassEntry { ItemTemplateId = variant.WeaponTemplateId, ItemClass = variant.WeaponClassId })
             {
                 WeaponInfo = new WeaponInfo(new ItemTemplateWeaponEntry { AimRate = 1, Refire = refire, Windup = 0, Recovery = 0 })
             };
 
-            return new MorphWeaponItem { ItemTemplate = template, ItemTemplateId = 0, StackSize = 1, WeaponClassId = variant.WeaponClassId };
+            var hitPoints = entityClass?.ItemClassInfo?.MaxHitPoints ?? 0;
+
+            return new MorphWeaponItem
+            {
+                ItemTemplate = template,
+                ItemTemplateId = variant.WeaponTemplateId,
+                StackSize = 1,
+                CurrentHitPoints = hitPoints > 0 ? hitPoints : 1,
+                WeaponClassId = variant.WeaponClassId
+            };
+        }
+
+        /// <summary>
+        /// The morph weapon as a client reads a weapon: the entity, then the item and weapon data
+        /// every other weapon in the game is sent with (ItemManager.SendItemDataToClient).
+        ///
+        /// The entity alone was not enough. The client's Weapon augmentation leaves the instance
+        /// values Recv_WeaponInfo carries unset - recoilAmount among them - so the first shot
+        /// died in BaseWeaponAttack.LocalDoAction reading one that was never there, and a
+        /// morphed player could not fire at all. The name is the same story the other way round:
+        /// an item is named from its template, so a weapon sent without one was called "Missing
+        /// translation for physicalentityclassnamelanguage ID None" in the weapon drawer.
+        /// </summary>
+        private static void SendMorphWeapon(Client viewer, MorphWeaponItem weapon)
+        {
+            if (viewer == null || weapon == null)
+                return;
+
+            viewer.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(weapon.EntityId, (EntityClasses)weapon.WeaponClassId));
+
+            var classInfo = EntityClassManager.Instance.LoadedEntityClasses.TryGetValue((EntityClasses)weapon.WeaponClassId, out var loaded)
+                ? loaded
+                : null;
+
+            if (classInfo?.ItemClassInfo == null)
+                return;
+
+            viewer.CallMethod(weapon.EntityId, new ItemInfoPacket(weapon, classInfo));
+            viewer.CallMethod(weapon.EntityId, new SetConsumablePacket(classInfo.ItemClassInfo.IsConsumableFlag));
+
+            if (classInfo.WeaponClassInfo != null)
+            {
+                viewer.CallMethod(weapon.EntityId, new WeaponInfoPacket(weapon, classInfo));
+                viewer.CallMethod(weapon.EntityId, new WeaponAmmoInfoPacket(weapon.CurrentAmmo));
+            }
+
+            viewer.CallMethod(weapon.EntityId, new SetStackCountPacket(weapon.StackSize));
         }
 
         /// <summary>
@@ -218,7 +280,7 @@ namespace Rasa.Managers
             if (morph == null)
                 return;
 
-            viewer.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(weapon.EntityId, (EntityClasses)weapon.WeaponClassId));
+            SendMorphWeapon(viewer, weapon);
             viewer.CallMethod(player.EntityId, GameEffectManager.AttachedPacket(morph, true));
 
             foreach (var child in morph.Children.Where(c => c.Holder == player))

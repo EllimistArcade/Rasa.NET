@@ -338,6 +338,7 @@ namespace Rasa.Game
             RegionManager.Instance.RegionInit();
             EmitterManager.Instance.EmitterInit();
             MapMarkerManager.Instance.MapMarkerInit();
+            SpawnPoolManager.Instance.ValidatePools();
             RecipeManager.Instance.RecipeInit();
             AbilityManager.Instance.AbilityInit();
             ManifestationManager.Instance.LoadSkillClasses();

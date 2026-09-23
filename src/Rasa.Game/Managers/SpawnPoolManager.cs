@@ -17,6 +17,27 @@ namespace Rasa.Managers
 
         public readonly Dictionary<uint, SpawnPool> LoadedSpawnPools = new Dictionary<uint, SpawnPool>();
 
+        /// <summary>spawnpool.mode: the pool spawns on its own timer. Every pool before mode was used.</summary>
+        public const short ModeAutomatic = 0;
+
+        /// <summary>
+        /// spawnpool.mode: the pool is a control point's garrison. At a control point the Bane
+        /// camp is the control point itself, and the hospital, token banker and vendors the
+        /// client labels "(Control Point)" are what stands there once AFS has taken it; the two
+        /// never stand together. The server has no control point ownership yet and the AFS side
+        /// is what it seeds, so these pools are dormant: the garrison of a point AFS holds.
+        /// </summary>
+        public const short ModeControlPoint = 1;
+
+        /// <summary>
+        /// spawnpool.mode: spawned only when something asks for it - a script, a GM. Also where a
+        /// mined pool goes that stood on a place players revive at and could not be moved blind.
+        /// </summary>
+        public const short ModeScripted = 2;
+
+        /// <summary>How close a hostile pool's area may come to a friendly NPC, a hospital or a waypoint.</summary>
+        public const float SafeClearance = 15f;
+
         public static SpawnPoolManager Instance
         {
             get
@@ -140,6 +161,9 @@ namespace Rasa.Managers
                 if (spawnPool.MapContextId != mapChannel.MapInfo.MapContextId)
                     continue; // spawnpool is not for this map
 
+                if (spawnPool.Mode != ModeAutomatic)
+                    continue; // a control point's garrison or a scripted pool: not on a timer
+
                 var totalCreaturesActive = spawnPool.AliveCreatures + spawnPool.QueuedCreatures;
 
                 if (totalCreaturesActive > 0)
@@ -246,6 +270,13 @@ namespace Rasa.Managers
         /// ground there is. A pool without one is the old point: two units of scatter when more
         /// than one creature shares it, then snapped to the ground so members on a slope neither
         /// hang in the air nor start in it.
+        ///
+        /// A mined area's centre is the middle of the props it was built from, and its height
+        /// their average: it can be inside a pillbox, or a few metres above or below the floor,
+        /// where the navmesh's point query (4 m across, 8 m up and down) finds nothing. Then the
+        /// nearest walkable point to the centre, within the pool's own radius, stands in for it -
+        /// or, for a centre whose height is a map label's guess, the nearest walkable point in
+        /// the column above and below it.
         /// </summary>
         internal static Vector3 SpawnPoint(MapChannel mapChannel, SpawnPool pool, int count)
         {
@@ -254,6 +285,11 @@ namespace Rasa.Managers
             if (pool.Radius > 0)
             {
                 var walkable = NavMeshManager.RandomPointAround(mapChannel, pos, pool.Radius);
+
+                if (!walkable.HasValue
+                    && (NavMeshManager.NearestWalkable(mapChannel, pos, Math.Max(32f, pool.Radius))
+                        ?? NavMeshManager.NearestInColumn(mapChannel, pos)) is Vector3 anchor)
+                    walkable = NavMeshManager.RandomPointAround(mapChannel, anchor, pool.Radius) ?? anchor;
 
                 if (walkable.HasValue)
                     return walkable.Value;
@@ -268,6 +304,65 @@ namespace Rasa.Managers
 
             return NavMeshManager.SnapToGround(mapChannel, pos);
         }
+
+        /// <summary>
+        /// Every automatic pool of hostile creatures whose area comes within SafeClearance of a
+        /// friendly NPC's pool, a hospital or a waypoint pad: a player reviving or arriving there
+        /// would stand in a fight. Logged and recorded for the map; nothing is changed. Run once
+        /// the creatures, the pools and the teleporters are all loaded.
+        /// </summary>
+        public void ValidatePools()
+        {
+            var safe = new Dictionary<uint, List<(Vector3 Position, string What)>>();
+
+            void Add(uint map, Vector3 position, string what)
+            {
+                if (!safe.TryGetValue(map, out var list))
+                    safe[map] = list = new List<(Vector3, string)>();
+
+                list.Add((position, what));
+            }
+
+            foreach (var pool in LoadedSpawnPools.Values)
+                if (pool.SpawnSlot.Exists(s => Side(s.CreatureId) == TargetCategory.Friendly))
+                    Add(pool.MapContextId, pool.Position, $"the NPCs of pool {pool.DbId}");
+
+            foreach (var teleporter in DynamicObjectManager.Instance.Teleporters.Values)
+                if (teleporter.ObjectData is WaypointInfo info && (info.WaypointType == WaypointType.Hospital || info.WaypointType == WaypointType.Waypoint))
+                    Add(teleporter.MapContextId, teleporter.Position, $"{info.WaypointType} {info.WaypointId}");
+
+            var bad = 0;
+
+            foreach (var pool in LoadedSpawnPools.Values)
+            {
+                // Not on a timer, never brings anything (min and max 0), or not all hostile.
+                if (pool.Mode != ModeAutomatic || !pool.SpawnSlot.Exists(s => s.CountMax > 0)
+                    || !pool.SpawnSlot.TrueForAll(s => Side(s.CreatureId) == TargetCategory.Hostile))
+                    continue;
+
+                if (!safe.TryGetValue(pool.MapContextId, out var points))
+                    continue;
+
+                foreach (var (position, what) in points)
+                {
+                    var gap = Vector2.Distance(new Vector2(position.X, position.Z), new Vector2(pool.Position.X, pool.Position.Z)) - pool.Radius;
+
+                    if (gap >= SafeClearance)
+                        continue;
+
+                    bad++;
+                    var message = $"spawnpool {pool.DbId}: its creatures can stand {Math.Max(0, gap):0} m from {what}, which should be safe ground.";
+                    Logger.WriteLog(LogType.Error, message);
+                    MapErrorManager.Instance.Record(pool.MapContextId, message);
+                    break;
+                }
+            }
+
+            Logger.WriteLog(LogType.Initialize, $"SpawnPools checked against safe ground: {bad} too close.");
+        }
+
+        private static TargetCategory Side(uint creatureId) =>
+            CreatureManager.Instance.LoadedCreatures.TryGetValue(creatureId, out var creature) ? creature.TargetCategory : TargetCategory.Hostile;
 
         /// <summary>A point uniformly inside a disc of this radius, on the ground plane.</summary>
         internal static Vector3 InDisc(float radius)

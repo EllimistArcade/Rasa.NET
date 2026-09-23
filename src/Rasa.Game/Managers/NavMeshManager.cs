@@ -162,6 +162,15 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// The walkable point nearest to the position anywhere within <paramref name="height"/>
+        /// above or below it: for a position whose height is a guess. Null without a navmesh.
+        /// </summary>
+        public static Vector3? NearestInColumn(MapChannel mapChannel, Vector3 position, float height = 200f)
+        {
+            return mapChannel?.NavMesh?.NearestInColumn(position, height);
+        }
+
+        /// <summary>
         /// Somewhere walkable to put a player who is stuck. Tries the point itself first, which
         /// answers for anyone wedged against geometry; a player buried deeper than the query's
         /// own search extents is looked for from further out, in rings, and the candidate nearest

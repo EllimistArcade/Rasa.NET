@@ -122,6 +122,8 @@ namespace Rasa.Managers
             RegisterCommand(".help", GmLevel.Observer, HelpGmCommand);
             RegisterCommand(".links", GmLevel.Observer, LinksCommand);
             RegisterCommand(".regions", GmLevel.Observer, RegionsCommand);
+            RegisterCommand(".emitters", GmLevel.Observer, EmittersCommand);
+            RegisterCommand(".fxpackages", GmLevel.Observer, FxPackagesCommand);
             RegisterCommand(".navmesh", GmLevel.Observer, NavMeshCommand);
             RegisterCommand(".near", GmLevel.Observer, NearCommand);
             RegisterCommand(".npcinfo", GmLevel.Observer, NpcInfoCommand);
@@ -148,6 +150,7 @@ namespace Rasa.Managers
             RegisterCommand(".linkhere", GmLevel.GameMaster, LinkHereCommand);
             RegisterCommand(".kraftwerks", GmLevel.GameMaster, KraftwerksCommand);
             RegisterCommand(".region", GmLevel.GameMaster, RegionCommand);
+            RegisterCommand(".emitter", GmLevel.GameMaster, EmitterCommand);
             RegisterCommand(".notify", GmLevel.GameMaster, NotifyCommand);
             RegisterCommand(".msg", GmLevel.GameMaster, MessageCommand);
             RegisterCommand(".removeobj", GmLevel.GameMaster, RemoveObjectCommand);
@@ -1993,6 +1996,154 @@ namespace Rasa.Managers
                 ? $"Updated {target.Describe()}"
                 : $"Region volume #{id} could not be saved; see the server log.");
         }
+
+        #region FX emitters
+
+        /// <summary>The FX emitters on this map, nearest first.</summary>
+        private void EmittersCommand(string[] parts)
+        {
+            var player = _client.Player;
+            var emitters = EmitterManager.Instance.OnMap(player.MapContextId, player.Position);
+
+            if (emitters.Count == 0)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"No FX emitters on map {player.MapContextId}.");
+                return;
+            }
+
+            CommunicatorManager.Instance.SystemMessage(_client, $"{emitters.Count} FX emitter(s) on map {player.MapContextId}, nearest first:");
+
+            foreach (var emitter in emitters.Take(15))
+                CommunicatorManager.Instance.SystemMessage(_client, $"{Vector3.Distance(emitter.Position, player.Position):0} m: {emitter.Describe()}");
+
+            if (emitters.Count > 15)
+                CommunicatorManager.Instance.SystemMessage(_client, $"... and {emitters.Count - 15} more.");
+        }
+
+        /// <summary>The client's FX packages whose names contain every word given.</summary>
+        private void FxPackagesCommand(string[] parts)
+        {
+            if (parts.Length < 2)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"usage: .fxpackages word [word ...] - searches the client's {FxPackages.Names.Count} FX packages by name");
+                return;
+            }
+
+            var found = FxPackages.Search(parts.Skip(1));
+
+            if (found.Count == 0)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "No FX package matches.");
+                return;
+            }
+
+            CommunicatorManager.Instance.SystemMessage(_client, $"{found.Count} FX package(s):");
+
+            foreach (var (id, name) in found.Take(25))
+                CommunicatorManager.Instance.SystemMessage(_client, $"{id} {name}");
+
+            if (found.Count > 25)
+                CommunicatorManager.Instance.SystemMessage(_client, $"... and {found.Count - 25} more; add a word to narrow it.");
+        }
+
+        private const string EmitterUsage = "usage: .emitter here package [off] [comment] | id on | id off | id package package | id here | id goto | id comment text | id delete - a package is a name from .fxpackages or its id";
+
+        /// <summary>Places and edits FX emitters; see EmitterManager. Everything but goto is saved to map_emitter.</summary>
+        private void EmitterCommand(string[] parts)
+        {
+            var client = _client;
+            var player = client.Player;
+
+            if (parts.Length < 3)
+            {
+                CommunicatorManager.Instance.SystemMessage(client, EmitterUsage);
+                return;
+            }
+
+            if (parts[1] == "here")
+            {
+                if (!FxPackages.TryResolve(parts[2], out var packageId))
+                {
+                    CommunicatorManager.Instance.SystemMessage(client, $"{parts[2]} is not one of the client's FX packages; .fxpackages finds them.");
+                    return;
+                }
+
+                var on = !(parts.Length > 3 && parts[3] == "off");
+                var created = EmitterManager.Instance.Add(new MapEmitter
+                {
+                    MapContextId = player.MapContextId,
+                    Position = player.Position,
+                    Rotation = player.Rotation,
+                    PackageId = packageId,
+                    OnByDefault = on,
+                    IsOn = on,
+                    Comment = ClampComment(string.Join(' ', parts.Skip(on ? 3 : 4)))
+                });
+
+                CommunicatorManager.Instance.SystemMessage(client, created == null
+                    ? "The emitter could not be created; see the server log."
+                    : $"Created {created.Describe()}");
+                return;
+            }
+
+            if (!uint.TryParse(parts[1], out var id) || !EmitterManager.Instance.TryGet(id, out var emitter))
+            {
+                CommunicatorManager.Instance.SystemMessage(client, EmitterUsage);
+                return;
+            }
+
+            switch (parts[2])
+            {
+                case "on":
+                    EmitterManager.Instance.TurnOn(emitter);
+                    emitter.OnByDefault = true;
+                    break;
+
+                case "off":
+                    EmitterManager.Instance.TurnOff(emitter);
+                    emitter.OnByDefault = false;
+                    break;
+
+                case "package" when parts.Length > 3:
+                    if (!FxPackages.TryResolve(parts[3], out var packageId))
+                    {
+                        CommunicatorManager.Instance.SystemMessage(client, $"{parts[3]} is not one of the client's FX packages; .fxpackages finds them.");
+                        return;
+                    }
+
+                    EmitterManager.Instance.SetPackage(emitter, packageId);
+                    break;
+
+                case "here":
+                    EmitterManager.Instance.MoveTo(emitter, player.MapContextId, player.Position, player.Rotation);
+                    break;
+
+                case "goto":
+                    if (!MapChannelManager.Instance.ChangeMap(client, emitter.MapContextId, emitter.Position, (float)emitter.Rotation))
+                        CommunicatorManager.Instance.SystemMessage(client, $"Map {emitter.MapContextId} is not loaded, or you cannot teleport right now.");
+                    return;
+
+                case "comment":
+                    emitter.Comment = ClampComment(string.Join(' ', parts.Skip(3)));
+                    break;
+
+                case "delete":
+                    CommunicatorManager.Instance.SystemMessage(client, EmitterManager.Instance.Delete(emitter)
+                        ? $"Deleted FX emitter #{id}."
+                        : $"FX emitter #{id} could not be deleted; see the server log.");
+                    return;
+
+                default:
+                    CommunicatorManager.Instance.SystemMessage(client, EmitterUsage);
+                    return;
+            }
+
+            CommunicatorManager.Instance.SystemMessage(client, EmitterManager.Instance.Save(emitter)
+                ? $"Updated {emitter.Describe()}"
+                : $"FX emitter #{id} could not be saved; see the server log.");
+        }
+
+        #endregion
 
         private static string ClampComment(string comment)
         {

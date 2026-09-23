@@ -30,6 +30,7 @@ namespace Rasa.Repositories.UnitOfWork
         public IKraftwerksRepository Kraftwerks => _parent.Kraftwerks;
         public IMapRegionRepository MapRegions => _parent.MapRegions;
         public IMapMarkerRepository MapMarkers => _parent.MapMarkers;
+        public IMapEmitterRepository MapEmitters => _parent.MapEmitters;
         public IRecipeRepository Recipes => _parent.Recipes;
 
         public INpcMissionRepository NpcMissions => _parent.NpcMissions;

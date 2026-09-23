@@ -359,6 +359,13 @@ namespace Rasa.Managers
             if (classInfo == null)
                 return;
 
+            // An FX emitter is no usable - it has no Recv_UsableInfo to take the state below.
+            if (dynamicObject.DynamicObjectType == DynamicObjectType.Emitter)
+            {
+                client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(dynamicObject.EntityId, dynamicObject.EntityClassId, EmitterManager.EntityData(dynamicObject, classInfo)));
+                return;
+            }
+
             var entityData = new List<PythonPacket>
             {
                 // PhysicalEntity

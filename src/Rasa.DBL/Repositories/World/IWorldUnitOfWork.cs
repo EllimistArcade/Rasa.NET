@@ -15,6 +15,7 @@
         IKraftwerksRepository Kraftwerks { get; }
         IMapRegionRepository MapRegions { get; }
         IMapMarkerRepository MapMarkers { get; }
+        IMapEmitterRepository MapEmitters { get; }
         IRecipeRepository Recipes { get; }
         INpcMissionRepository NpcMissions { get; }
         INpcMissionRewardRepository NpcMissionRewards { get; }

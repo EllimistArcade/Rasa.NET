@@ -919,6 +919,51 @@ namespace Rasa.Migrations.MySqlWorld
                     b.ToTable("logos");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.World.MapEmitterEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)")
+                        .HasColumnName("comment");
+
+                    b.Property<byte>("IsOn")
+                        .HasColumnType("tinyint unsigned")
+                        .HasColumnName("is_on");
+
+                    b.Property<uint>("MapContextId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("map_context_id");
+
+                    b.Property<uint>("PackageId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("package_id");
+
+                    b.Property<double>("PosX")
+                        .HasColumnType("double")
+                        .HasColumnName("pos_x");
+
+                    b.Property<double>("PosY")
+                        .HasColumnType("double")
+                        .HasColumnName("pos_y");
+
+                    b.Property<double>("PosZ")
+                        .HasColumnType("double")
+                        .HasColumnName("pos_z");
+
+                    b.Property<double>("Rotation")
+                        .HasColumnType("double")
+                        .HasColumnName("rotation");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("map_emitter");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.MapInfoEntry", b =>
                 {
                     b.Property<uint>("Id")

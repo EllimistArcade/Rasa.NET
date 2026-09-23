@@ -336,6 +336,7 @@ namespace Rasa.Game
             MapTriggerManager.Instance.MapTriggerInit();
             MapLinkManager.Instance.MapLinkInit();
             RegionManager.Instance.RegionInit();
+            EmitterManager.Instance.EmitterInit();
             MapMarkerManager.Instance.MapMarkerInit();
             RecipeManager.Instance.RecipeInit();
             AbilityManager.Instance.AbilityInit();

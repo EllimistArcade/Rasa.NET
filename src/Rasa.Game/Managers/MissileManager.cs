@@ -134,6 +134,15 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Running home after a leash: untouchable until it is there, or dragging a creature to
+            // the end of its leash would make it a free kill. "Immune" floats over it.
+            if (BehaviorManager.IsReturning(creature))
+            {
+                missile.DamageA = 0;
+                ActorManager.AnnounceImmune(mapChannel, creature, missile.Source);
+                return;
+            }
+
             // Shooting something is being in a fight, not only being shot at - otherwise a player
             // who opens fire and wins never enters combat at all.
             EnterCombat(missile.Source);

@@ -48,6 +48,29 @@ namespace Rasa.Managers
         /// </summary>
         public const byte BehaviorActionFollow = 5;
 
+        /// <summary>
+        /// Chased too far from home and running back to it (<see cref="Leash"/>): it takes no
+        /// damage and picks no fight on the way, and arrives whole.
+        /// </summary>
+        public const byte BehaviorActionReturning = 6;
+
+        /// <summary>
+        /// How far a creature with no master follows a fight from its home before it gives up and
+        /// goes back (<see cref="Leash"/>): its own distance, across the ground. The target's
+        /// does not matter - a sniper at home shooting someone forty metres off is not chasing.
+        /// Not in the client; 60 m is what the leash here has always been.
+        /// </summary>
+        public const float MaxChaseDistance = 60f;
+
+        /// <summary>How close to home a returning creature has to get to count as there.</summary>
+        private const float HomeReachedDistance = 2f;
+
+        /// <summary>The least time a returning creature is given before it is put home regardless.</summary>
+        private const long ReturnTimeoutMinMs = 10000;
+
+        /// <summary>How often a creature re-tests whether it can see what it is shooting at.</summary>
+        private const long SightRecheckMs = 500;
+
         public const byte WanderIdle = 0;
         public const byte WanderMoving = 1;
 
@@ -285,6 +308,13 @@ namespace Rasa.Managers
             if (CellChanged(creature, delta))
                 needCellUpdate = true;
 
+            // Running home after a chase that went too far: nothing else until it is there.
+            if (creature.Controller.CurrentAction == BehaviorActionReturning)
+            {
+                ReturnHome(mapChannel, creature, delta);
+                return;
+            }
+
             if (creature.Controller.CurrentAction == BehaviorActionWander)
             {
                 // scan for enemy
@@ -518,10 +548,12 @@ namespace Rasa.Managers
 
                 // get position of target
                 var targetPosition = new Vector3();
+                Actor targetActor = null;
 
                 if (target == EntityType.Character)
                 {
                     var player = EntityManager.Instance.GetPlayer(creature.Controller.ActionFighting.TargetEntityId);
+                    targetActor = player;
 
                     // if target dead, on to the next it hates, or back to wandering
                     if (player.Attributes[Attributes.Health].Current <= 0 || player.State == CharacterState.Dead)
@@ -554,6 +586,7 @@ namespace Rasa.Managers
                 else if (target == EntityType.Creature)
                 {
                     var targetCreature = EntityManager.Instance.GetCreature(creature.Controller.ActionFighting.TargetEntityId);
+                    targetActor = targetCreature;
 
                     if (targetCreature.Attributes[Attributes.Health].Current <= 0 || targetCreature.State == CharacterState.Dead || targetCreature.State == CharacterState.Dying)
                     {
@@ -576,29 +609,50 @@ namespace Rasa.Managers
                 var targetDistY = (targetPosition.Y - creature.Position.Y);
                 var targetDistZ = (targetPosition.Z - creature.Position.Z);
                 var targetDistSqr = (targetDistX * targetDistX + targetDistY * targetDistY + targetDistZ * targetDistZ);
-                // stop tracking target after target exceeds a certain distance to home pos
-                // Note: For patrolling creatures the homePos is the last arrived path node 
-                var home = LeashCentre(creature);
-                var homeLocDistX = (home.X - targetPosition.X);
-                var homeLocDistZ = (home.Z - targetPosition.Z);
-                var homeLocDist = homeLocDistX * homeLocDistX + homeLocDistZ * homeLocDistZ;
-
-                if (homeLocDist >= 60.0f * 60.0f)
+                if (creature.MasterEntityId != 0)
                 {
-                    // Leashed: dragged too far from home, it goes back and forgets the fight.
-                    creature.LastRestTime = 0; // forces AI to immediately calculate new wander position
-                    GiveUp(creature);
+                    // A minion is leashed to its master, by where its target is: a fight that
+                    // has gone that far from them is dropped, and it goes back to them.
+                    var master = LeashCentre(creature);
+                    var masterDistX = master.X - targetPosition.X;
+                    var masterDistZ = master.Z - targetPosition.Z;
+
+                    if (masterDistX * masterDistX + masterDistZ * masterDistZ >= MaxChaseDistance * MaxChaseDistance)
+                    {
+                        creature.LastRestTime = 0;
+                        GiveUp(creature);
+                        return;
+                    }
+                }
+                else if (ChasedTooFar(creature))
+                {
+                    // Dragged too far from home: it runs back, forgetting the fight, and is whole
+                    // again when it gets there. For a patrolling creature home is the last path
+                    // node it reached.
+                    Leash(mapChannel, creature);
                     return;
                 }
                 creature.LastAgression = 0; // update aggression time if we found our target
 
                 var needToMove = true;
 
+                // An attack in range that it could not use for want of a clear line: it has to go
+                // round whatever is in the way, not stand at the edge of its range.
+                var sightBlocked = false;
+
                 foreach (var action in creature.Actions)
                 {
                     // check if we can execute action
                     if (targetDistSqr < action.RangeMin * action.RangeMin || targetDistSqr >= action.RangeMax * action.RangeMax)
                         continue;
+
+                    // A shot needs to see its target; a blow at arm's length does not, and nor
+                    // does an Amoeboid bringing up another one, which is aimed at nobody.
+                    if (action.ActionId != ActionId.WeaponMelee && !AmoeboidVomit.IsVomit(action) && !HasLineOfSight(mapChannel, creature, targetActor))
+                    {
+                        sightBlocked = true;
+                        continue;
+                    }
 
                     needToMove = false;
 
@@ -652,7 +706,7 @@ namespace Rasa.Managers
                 if (ShieldDrone.HoldsGround(creature))
                     return;
 
-                if (targetDistSqr <= 3.0f * 3.0f)
+                if (targetDistSqr <= 3.0f * 3.0f && !sightBlocked)
                     return;// near enough, dont move
 
                 // After checking for melee and ranged attacks without success, chase.
@@ -671,7 +725,13 @@ namespace Rasa.Managers
 
                     var pathTarget = new Vector3();
 
-                    if (targetDistSqr < 0.1f)
+                    if (sightBlocked)
+                    {
+                        // Something between them: the navmesh route to the target itself goes
+                        // round it, where a point short of the target on this side would not.
+                        pathTarget = targetPosition;
+                    }
+                    else if (targetDistSqr < 0.1f)
                     {
                         // if too near, move out of enemy by running to random point somewhere x units around the creature
                         var angle = (new Random().Next() / 32767.0f) * 6.28318f; // random angle
@@ -985,6 +1045,11 @@ namespace Rasa.Managers
         
         public void SetActionFighting(Creature creature, ulong targetEntityId)
         {
+            // Running home after a leash: nothing pulls it back into a fight on the way - not a
+            // hit, not an assist, not the scan.
+            if (IsReturning(creature))
+                return;
+
             // A passive minion does not fight, and this is the one place worth saying so: it
             // covers both the aggro scan and being shot at (MissileManager calls straight in
             // here), so there is no second path where passive quietly stops meaning passive.
@@ -1091,6 +1156,165 @@ namespace Rasa.Managers
             creature.Hate.Clear();
             StopFighting(creature);
         }
+
+        #region Leash
+
+        /// <summary>Whether the creature is running home after a leash: it takes no damage and starts no fight.</summary>
+        public static bool IsReturning(Creature creature)
+        {
+            return creature?.Controller?.CurrentAction == BehaviorActionReturning;
+        }
+
+        /// <summary>Whether a creature with no master has followed a fight further from home than <see cref="MaxChaseDistance"/>, across the ground.</summary>
+        public static bool ChasedTooFar(Creature creature)
+        {
+            var home = creature.HomePos.Position;
+            var dx = creature.Position.X - home.X;
+            var dz = creature.Position.Z - home.Z;
+
+            return dx * dx + dz * dz > MaxChaseDistance * MaxChaseDistance;
+        }
+
+        /// <summary>
+        /// The creature has chased too far: it forgets everyone, sheds what its attackers put on
+        /// it - a DoT would otherwise go on killing it all the way home - drops out of its combat
+        /// stance and runs back. It is put home regardless when it has taken twice as long as a
+        /// straight run would, and never less than <see cref="ReturnTimeoutMinMs"/>.
+        /// </summary>
+        public void Leash(MapChannel mapChannel, Creature creature)
+        {
+            var controller = creature.Controller;
+
+            creature.Hate.Clear();
+
+            if (mapChannel != null)
+            {
+                foreach (var effect in creature.ActiveEffects.Values.Where(e => !e.IsBuff && !e.IsSkillPassive).ToList())
+                    GameEffectManager.Instance.DettachEffect(mapChannel, creature, effect);
+
+                CellManager.Instance.CellCallMethod(mapChannel, creature, new RequestVisualCombatModePacket(false));
+            }
+
+            var distance = Vector3.Distance(creature.Position, creature.HomePos.Position);
+
+            controller.CurrentAction = BehaviorActionReturning;
+            controller.ActionFighting.TargetEntityId = 0;
+            controller.ActionReturning.Elapsed = 0;
+            controller.ActionReturning.TimeoutMs = ReturnTimeoutFor(distance, creature.RunSpeed);
+            controller.Path.Clear();
+            controller.PathIndex = 0;
+
+            if (mapChannel != null)
+                BuildPath(mapChannel, creature, creature.HomePos.Position);
+        }
+
+        /// <summary>How long a creature gets to run <paramref name="distance"/> metres home before it is put there: twice the straight run, at least <see cref="ReturnTimeoutMinMs"/>.</summary>
+        public static long ReturnTimeoutFor(float distance, float runSpeed)
+        {
+            return Math.Max(ReturnTimeoutMinMs, (long)(distance / Math.Max(1f, runSpeed) * 2000f));
+        }
+
+        /// <summary>
+        /// One think of the run home: along the path at run speed, and whole again on arrival -
+        /// the end of the path, within <see cref="HomeReachedDistance"/> of home, or put there
+        /// when the time is up.
+        /// </summary>
+        private void ReturnHome(MapChannel mapChannel, Creature creature, long delta)
+        {
+            var controller = creature.Controller;
+            var home = creature.HomePos.Position;
+
+            controller.ActionReturning.Elapsed += delta;
+
+            var dx = creature.Position.X - home.X;
+            var dz = creature.Position.Z - home.Z;
+            var arrived = dx * dx + dz * dz <= HomeReachedDistance * HomeReachedDistance;
+
+            if (!arrived && controller.ActionReturning.Elapsed >= controller.ActionReturning.TimeoutMs)
+            {
+                // Stuck, or off the navmesh with no way round: put it there.
+                creature.Position = NavMeshManager.SnapToGround(mapChannel, home);
+                CellManager.Instance.CellMoveObject(creature, new Movement(creature.Position, 0f, 0x08, new Vector2(creature.LastYaw, 0f)));
+                arrived = true;
+            }
+
+            if (!arrived)
+            {
+                if (controller.Path.Count == 0)
+                    BuildPath(mapChannel, creature, home);
+
+                // The whole of a path built to home is as near home as the navmesh goes.
+                if (!FollowPath(mapChannel, creature, creature.RunSpeed, delta))
+                    return;
+            }
+
+            Restore(mapChannel, creature);
+
+            creature.Hate.Clear();
+            creature.LastRestTime = 0;
+            creature.LastAgression = 0;
+            SetActionWander(creature);
+        }
+
+        /// <summary>Health and armour back to their maximum, told to everyone around.</summary>
+        public static void Restore(MapChannel mapChannel, Creature creature)
+        {
+            if (creature.Attributes.TryGetValue(Attributes.Health, out var health))
+            {
+                health.Current = health.CurrentMax;
+
+                if (mapChannel != null)
+                    CellManager.Instance.CellCallMethod(mapChannel, creature, new Packets.MapChannel.Server.UpdateHealthPacket(health, creature.EntityId));
+            }
+
+            if (creature.Attributes.TryGetValue(Attributes.Armor, out var armor))
+            {
+                armor.Current = armor.CurrentMax;
+
+                if (mapChannel != null)
+                    CellManager.Instance.CellCallMethod(mapChannel, creature, new Packets.MapChannel.Server.UpdateArmorPacket(GameEffectManager.WithRegen(creature, armor), creature.EntityId));
+            }
+        }
+
+        #endregion
+
+        #region Line of sight
+
+        /// <summary>
+        /// Whether the creature can see the target to shoot at it: any of the points on the
+        /// target that cover is judged by (Cover.SamplePoints) in the clear from the creature's
+        /// eyes, against the map's collision meshes and terrain. The same test cover uses, so a
+        /// creature shoots at a target half behind a wall - the wall takes its share of the hit -
+        /// and not at one wholly behind it. With no cover file for the map, everything is in
+        /// sight, as it always was. Tested at most every <see cref="SightRecheckMs"/> per target.
+        /// </summary>
+        private static bool HasLineOfSight(MapChannel mapChannel, Creature creature, Actor target)
+        {
+            if (target == null || mapChannel?.Cover == null)
+                return true;
+
+            var fighting = creature.Controller.ActionFighting;
+
+            if (fighting.SightTargetId == target.EntityId && fighting.SightRecheckIn > 0)
+                return fighting.SightClear;
+
+            fighting.SightTargetId = target.EntityId;
+            fighting.SightRecheckIn = SightRecheckMs;
+            fighting.SightClear = Sees(mapChannel.Cover, creature, target);
+
+            return fighting.SightClear;
+        }
+
+        /// <summary>Whether any of the target's sample points is in the clear from the creature's eyes.</summary>
+        public static bool Sees(Navigation.CoverMesh cover, Creature creature, Actor target)
+        {
+            if (cover == null)
+                return true;
+
+            return Cover.Visible(cover, Cover.EyeOf(creature), Cover.SamplePoints(target, creature.Position)) > 0;
+        }
+
+        #endregion
         
         private void SetActionPathFollowing(Creature creature)
         {
@@ -1222,6 +1446,7 @@ namespace Rasa.Managers
             creature.LastAgression += delta;
             creature.LastRestTime += delta + new Random().Next(1, 100);
             creature.Controller.TimerPathUpdateLock -= delta;
+            creature.Controller.ActionFighting.SightRecheckIn -= delta;
 
             // update cooldown timer of all actions
             foreach (var action in creature.Actions)

@@ -182,6 +182,16 @@ namespace Rasa.Managers
             return applied;
         }
 
+        /// <summary>"Immune" over the target for everyone around (GameEffectAttachFailed, COMBAT_IMMUNE_ANNOUNCED): a hit it does not take.</summary>
+        public static void AnnounceImmune(MapChannel mapChannel, Actor target, Actor source)
+        {
+            if (mapChannel == null || target == null)
+                return;
+
+            CellManager.Instance.CellCallMethod(mapChannel, target,
+                new GameEffectAttachFailedPacket(0, GameEffectAttachFailedPacket.FailReason.Immune, source?.EntityId ?? 0));
+        }
+
         /// <summary>
         /// Takes health from an actor, armour first: damage eats the armour bar until it is
         /// empty and the rest comes off health. Returns what was actually taken off health and
@@ -200,6 +210,13 @@ namespace Rasa.Managers
 
             if (!target.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
                 return 0;
+
+            // A creature running home after a leash takes nothing (BehaviorManager.Leash).
+            if (target is Creature returning && BehaviorManager.IsReturning(returning))
+            {
+                AnnounceImmune(mapChannel, target, source);
+                return 0;
+            }
 
             var armorTaken = 0;
 

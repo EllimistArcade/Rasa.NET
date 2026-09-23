@@ -107,7 +107,9 @@ namespace Rasa.Managers
         {
             // Cure P4 keeps debuffs off whoever it was cast on for its duration - and says so:
             // the client floats "Immune" over them (COMBAT_IMMUNE_ANNOUNCED).
-            if (!effect.IsBuff && DebuffsBlocked(actor))
+            // So does a creature running home after a leash (BehaviorManager.Leash): a slow would
+            // keep it from getting there, a DoT would hurt what it is immune to.
+            if (!effect.IsBuff && (DebuffsBlocked(actor) || actor is Creature returning && BehaviorManager.IsReturning(returning)))
             {
                 CellManager.Instance.CellCallMethod(mapChannel, actor,
                     new GameEffectAttachFailedPacket(effect.TypeId, GameEffectAttachFailedPacket.FailReason.Immune, effect.SourceId));

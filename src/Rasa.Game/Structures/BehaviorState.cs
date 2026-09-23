@@ -19,6 +19,7 @@ namespace Rasa.Structures
         public ActionFighting ActionFighting = new ActionFighting();
         public ActionWander ActionWander = new ActionWander();
         public ActionFollow ActionFollow = new ActionFollow();
+        public ActionReturning ActionReturning = new ActionReturning();
         //public long[] ActionLockTime { get; set; }
     }
 
@@ -26,6 +27,26 @@ namespace Rasa.Structures
     {
         public Vector3 LockedTargetPosition = new Vector3();    // the creature position we are pathing to
         public ulong TargetEntityId { get; set; }
+
+        /// <summary>Whom the last line-of-sight test was against, and whether it was clear (BehaviorManager.HasLineOfSight).</summary>
+        public ulong SightTargetId { get; set; }
+        public bool SightClear { get; set; }
+
+        /// <summary>Milliseconds until the line of sight is tested again.</summary>
+        public long SightRecheckIn { get; set; }
+    }
+
+    /// <summary>
+    /// A creature that chased too far from home and is running back to it (BehaviorManager.Leash):
+    /// it takes no damage and picks no fight on the way, and is whole again when it arrives.
+    /// </summary>
+    public class ActionReturning
+    {
+        /// <summary>How long it has been running back.</summary>
+        public long Elapsed { get; set; }
+
+        /// <summary>When it is put home however far it got - off the navmesh, stuck on a rock.</summary>
+        public long TimeoutMs { get; set; }
     }
 
     /// <summary>

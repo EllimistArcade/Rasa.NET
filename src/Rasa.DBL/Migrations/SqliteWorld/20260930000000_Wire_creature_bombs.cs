@@ -8,7 +8,7 @@ namespace Rasa.Migrations.SqliteWorld
     using Structures.World;
 
     /// <summary>
-    /// Gives spawning creatures their explosions (CreatureBombs): creature_action rows 59001-59016
+    /// Gives spawning creatures their explosions (CreatureBombs): creature_action rows 60001-60016
     /// and the slots that point at them.
     ///
     ///  - Warden bots (Crucible, Incline, Thunderhead): CR_WARDEN_BOT_DEATH 480/1
@@ -39,8 +39,8 @@ namespace Rasa.Migrations.SqliteWorld
     [UsedImplicitly]
     public partial class Wire_creature_bombs : Migration
     {
-        private const uint IdMin = 59001;
-        private const uint IdMax = 59999;
+        private const uint IdMin = 60001;
+        private const uint IdMax = 60999;
 
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -48,22 +48,22 @@ namespace Rasa.Migrations.SqliteWorld
 
             new CreatureBombPreloader().Preload(migrationBuilder);
 
-            migrationBuilder.Sql($"update {creatures} set action3 = 59001 where id = 531023;");   // Warden Bot Crucible
-            migrationBuilder.Sql($"update {creatures} set action3 = 59002 where id = 531044;");   // Warden Bot Incline
-            migrationBuilder.Sql($"update {creatures} set action3 = 59003 where id = 540001;");   // Warden Bot Thunderhead
-            migrationBuilder.Sql($"update {creatures} set action3 = 59004 where id = 540008;");   // Howler Palisades
-            migrationBuilder.Sql($"update {creatures} set action3 = 59005 where id = 540009;");   // Howler Pools
-            migrationBuilder.Sql($"update {creatures} set action2 = 59006 where id = 520022;");   // Predator boss 520022
-            migrationBuilder.Sql($"update {creatures} set action2 = 59007 where id = 520057;");   // Predator boss 520057
-            migrationBuilder.Sql($"update {creatures} set action2 = 59008 where id = 1;");   // Bane Fithik
-            migrationBuilder.Sql($"update {creatures} set action3 = 59009 where id = 531022;");   // Fithik Crucible
-            migrationBuilder.Sql($"update {creatures} set action3 = 59010 where id = 531068;");   // Fithik Palisades
-            migrationBuilder.Sql($"update {creatures} set action3 = 59011 where id = 540006;");   // Fithik Palisades
-            migrationBuilder.Sql($"update {creatures} set action3 = 59012 where id = 540018;");   // Fithik Ashen Desert
-            migrationBuilder.Sql($"update {creatures} set action3 = 59013 where id = 540027;");   // Fithik Plains
-            migrationBuilder.Sql($"update {creatures} set action3 = 59014 where id = 531007;");   // Linker Abyss
-            migrationBuilder.Sql($"update {creatures} set action3 = 59015 where id = 531014;");   // Linker Ashen Desert
-            migrationBuilder.Sql($"update {creatures} set action2 = 59016 where id = 78;");   // Atropos (Linker boss)
+            migrationBuilder.Sql($"update {creatures} set action3 = 60001 where id = 531023;");   // Warden Bot Crucible
+            migrationBuilder.Sql($"update {creatures} set action3 = 60002 where id = 531044;");   // Warden Bot Incline
+            migrationBuilder.Sql($"update {creatures} set action3 = 60003 where id = 540001;");   // Warden Bot Thunderhead
+            migrationBuilder.Sql($"update {creatures} set action3 = 60004 where id = 540008;");   // Howler Palisades
+            migrationBuilder.Sql($"update {creatures} set action3 = 60005 where id = 540009;");   // Howler Pools
+            migrationBuilder.Sql($"update {creatures} set action2 = 60006 where id = 520022;");   // Predator boss 520022
+            migrationBuilder.Sql($"update {creatures} set action2 = 60007 where id = 520057;");   // Predator boss 520057
+            migrationBuilder.Sql($"update {creatures} set action2 = 60008 where id = 1;");   // Bane Fithik
+            migrationBuilder.Sql($"update {creatures} set action3 = 60009 where id = 531022;");   // Fithik Crucible
+            migrationBuilder.Sql($"update {creatures} set action3 = 60010 where id = 531068;");   // Fithik Palisades
+            migrationBuilder.Sql($"update {creatures} set action3 = 60011 where id = 540006;");   // Fithik Palisades
+            migrationBuilder.Sql($"update {creatures} set action3 = 60012 where id = 540018;");   // Fithik Ashen Desert
+            migrationBuilder.Sql($"update {creatures} set action3 = 60013 where id = 540027;");   // Fithik Plains
+            migrationBuilder.Sql($"update {creatures} set action3 = 60014 where id = 531007;");   // Linker Abyss
+            migrationBuilder.Sql($"update {creatures} set action3 = 60015 where id = 531014;");   // Linker Ashen Desert
+            migrationBuilder.Sql($"update {creatures} set action2 = 60016 where id = 78;");   // Atropos (Linker boss)
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
@@ -71,22 +71,22 @@ namespace Rasa.Migrations.SqliteWorld
             var actions = CreatureActionEntry.TableName;
             var creatures = CreatureEntry.TableName;
 
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531023 and action3 = 59001;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531044 and action3 = 59002;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540001 and action3 = 59003;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540008 and action3 = 59004;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540009 and action3 = 59005;");
-            migrationBuilder.Sql($"update {creatures} set action2 = 0 where id = 520022 and action2 = 59006;");
-            migrationBuilder.Sql($"update {creatures} set action2 = 0 where id = 520057 and action2 = 59007;");
-            migrationBuilder.Sql($"update {creatures} set action2 = 0 where id = 1 and action2 = 59008;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531022 and action3 = 59009;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531068 and action3 = 59010;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540006 and action3 = 59011;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540018 and action3 = 59012;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540027 and action3 = 59013;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531007 and action3 = 59014;");
-            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531014 and action3 = 59015;");
-            migrationBuilder.Sql($"update {creatures} set action2 = 0 where id = 78 and action2 = 59016;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531023 and action3 = 60001;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531044 and action3 = 60002;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540001 and action3 = 60003;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540008 and action3 = 60004;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540009 and action3 = 60005;");
+            migrationBuilder.Sql($"update {creatures} set action2 = 0 where id = 520022 and action2 = 60006;");
+            migrationBuilder.Sql($"update {creatures} set action2 = 0 where id = 520057 and action2 = 60007;");
+            migrationBuilder.Sql($"update {creatures} set action2 = 0 where id = 1 and action2 = 60008;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531022 and action3 = 60009;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531068 and action3 = 60010;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540006 and action3 = 60011;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540018 and action3 = 60012;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 540027 and action3 = 60013;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531007 and action3 = 60014;");
+            migrationBuilder.Sql($"update {creatures} set action3 = 0 where id = 531014 and action3 = 60015;");
+            migrationBuilder.Sql($"update {creatures} set action2 = 0 where id = 78 and action2 = 60016;");
 
             migrationBuilder.Sql($"delete from {actions} where id between {IdMin} and {IdMax};");
         }

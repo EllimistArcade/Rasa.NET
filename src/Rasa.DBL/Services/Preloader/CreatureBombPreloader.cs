@@ -21,22 +21,22 @@ namespace Rasa.Services.Preloader
 
         protected override IEnumerable<object[]> GetRows()
         {
-            yield return new object[] { 59001, "Warden Bot Crucible warden_bot_death", 480, 1, 0.0, 0.0, 0, 0, 714, 951, 4 };
-            yield return new object[] { 59002, "Warden Bot Incline warden_bot_death", 480, 1, 0.0, 0.0, 0, 0, 463, 617, 4 };
-            yield return new object[] { 59003, "Warden Bot Thunderhead warden_bot_death", 480, 1, 0.0, 0.0, 0, 0, 600, 800, 4 };
-            yield return new object[] { 59004, "Howler Palisades howler_death", 514, 1, 0.0, 0.0, 0, 0, 841, 1009, 13 };
-            yield return new object[] { 59005, "Howler Pools howler_death", 514, 1, 0.0, 0.0, 0, 0, 1542, 1851, 13 };
-            yield return new object[] { 59006, "Predator boss 520022 predator_death", 407, 1, 0.0, 0.0, 0, 0, 872, 1309, 1 };
-            yield return new object[] { 59007, "Predator boss 520057 predator_death", 407, 1, 0.0, 0.0, 0, 0, 476, 714, 1 };
-            yield return new object[] { 59008, "Bane Fithik fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 66, 80, 1 };
-            yield return new object[] { 59009, "Fithik Crucible fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 1640, 1963, 1 };
-            yield return new object[] { 59010, "Fithik Palisades fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 316, 378, 1 };
-            yield return new object[] { 59011, "Fithik Palisades fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 316, 378, 1 };
-            yield return new object[] { 59012, "Fithik Ashen Desert fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 1265, 1514, 1 };
-            yield return new object[] { 59013, "Fithik Plains fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 894, 1070, 1 };
-            yield return new object[] { 59014, "Linker Abyss linker_groundblast", 264, 1, 1.0, 40.0, 5000, 2633, 349, 523, 1 };
-            yield return new object[] { 59015, "Linker Ashen Desert linker_groundblast", 264, 1, 1.0, 40.0, 5000, 2633, 293, 440, 1 };
-            yield return new object[] { 59016, "Atropos (Linker boss) linker_groundblast", 264, 2, 1.0, 40.0, 5000, 2633, 67, 101, 1 };
+            yield return new object[] { 60001, "Warden Bot Crucible warden_bot_death", 480, 1, 0.0, 0.0, 0, 0, 714, 951, 4 };
+            yield return new object[] { 60002, "Warden Bot Incline warden_bot_death", 480, 1, 0.0, 0.0, 0, 0, 463, 617, 4 };
+            yield return new object[] { 60003, "Warden Bot Thunderhead warden_bot_death", 480, 1, 0.0, 0.0, 0, 0, 600, 800, 4 };
+            yield return new object[] { 60004, "Howler Palisades howler_death", 514, 1, 0.0, 0.0, 0, 0, 841, 1009, 13 };
+            yield return new object[] { 60005, "Howler Pools howler_death", 514, 1, 0.0, 0.0, 0, 0, 1542, 1851, 13 };
+            yield return new object[] { 60006, "Predator boss 520022 predator_death", 407, 1, 0.0, 0.0, 0, 0, 872, 1309, 1 };
+            yield return new object[] { 60007, "Predator boss 520057 predator_death", 407, 1, 0.0, 0.0, 0, 0, 476, 714, 1 };
+            yield return new object[] { 60008, "Bane Fithik fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 66, 80, 1 };
+            yield return new object[] { 60009, "Fithik Crucible fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 1640, 1963, 1 };
+            yield return new object[] { 60010, "Fithik Palisades fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 316, 378, 1 };
+            yield return new object[] { 60011, "Fithik Palisades fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 316, 378, 1 };
+            yield return new object[] { 60012, "Fithik Ashen Desert fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 1265, 1514, 1 };
+            yield return new object[] { 60013, "Fithik Plains fithik_self_destruct", 180, 1, 0.0, 0.0, 0, 4333, 894, 1070, 1 };
+            yield return new object[] { 60014, "Linker Abyss linker_groundblast", 264, 1, 1.0, 40.0, 5000, 2633, 349, 523, 1 };
+            yield return new object[] { 60015, "Linker Ashen Desert linker_groundblast", 264, 1, 1.0, 40.0, 5000, 2633, 293, 440, 1 };
+            yield return new object[] { 60016, "Atropos (Linker boss) linker_groundblast", 264, 2, 1.0, 40.0, 5000, 2633, 67, 101, 1 };
         }
     }
 }

@@ -10,6 +10,11 @@ namespace Rasa.Structures
 
         public Vector3 Position { get; set; }
         public double Rotation { get; set; }
+
+        /// <summary>
+        /// How far from Position its creatures may stand. Zero: the old two units of scatter.
+        /// </summary>
+        public float Radius { get; set; }
         public List<SpawnPoolSlot> SpawnSlot { get; set; }
         // different spawn points
         //public int LocationCount { get; set; }

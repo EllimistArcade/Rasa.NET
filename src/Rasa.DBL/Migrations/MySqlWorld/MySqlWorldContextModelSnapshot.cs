@@ -1438,6 +1438,10 @@ namespace Rasa.Migrations.MySqlWorld
                         .HasColumnType("double")
                         .HasColumnName("rotation");
 
+                    b.Property<double>("Radius")
+                        .HasColumnType("double")
+                        .HasColumnName("radius");
+
                     b.HasKey("Id");
 
                     b.ToTable("spawnpool");

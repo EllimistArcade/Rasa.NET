@@ -117,6 +117,7 @@ namespace Rasa.Managers
                     DbId = data.Id,
                     Position = data.Position,
                     Rotation = (float)data.Rotation,
+                    Radius = (float)data.Radius,
                     Mode = data.Mode,
                     RespawnTime = data.RespawnTime * 100,  //convert to ms
                     // to spawn all cretures at server start, we set UpdateTimer to RespawnTime
@@ -232,19 +233,50 @@ namespace Rasa.Managers
 
         internal void RandomizePosition(Creature creature, int count)
         {
-            var pos = creature.SpawnPool.Position;
+            var pool = creature.SpawnPool;
+            var mapChannel = MapChannelManager.Instance.FindByContextId(pool.MapContextId);
 
-            if (count != 1)
+            CreatureManager.Instance.SetLocation(creature, SpawnPoint(mapChannel, pool, count), pool.Rotation, pool.MapContextId);
+        }
+
+        /// <summary>
+        /// Where one of the pool's creatures stands. A pool with a radius is an area - a camp,
+        /// a nest - and its creatures are spread across it: a walkable point anywhere inside the
+        /// radius when the map has a navmesh, otherwise a point in the disc snapped to whatever
+        /// ground there is. A pool without one is the old point: two units of scatter when more
+        /// than one creature shares it, then snapped to the ground so members on a slope neither
+        /// hang in the air nor start in it.
+        /// </summary>
+        internal static Vector3 SpawnPoint(MapChannel mapChannel, SpawnPool pool, int count)
+        {
+            var pos = pool.Position;
+
+            if (pool.Radius > 0)
+            {
+                var walkable = NavMeshManager.RandomPointAround(mapChannel, pos, pool.Radius);
+
+                if (walkable.HasValue)
+                    return walkable.Value;
+
+                pos += InDisc(pool.Radius);
+            }
+            else if (count != 1)
             {
                 pos.X += new Random().Next() % 5 - 2;
                 pos.Z += new Random().Next() % 5 - 2;
             }
 
-            // Spawn pools were placed by hand; on a slope the offset members would hang in the
-            // air or start in the ground. With a navmesh they stand on it.
-            pos = NavMeshManager.SnapToGround(MapChannelManager.Instance.FindByContextId(creature.SpawnPool.MapContextId), pos);
+            return NavMeshManager.SnapToGround(mapChannel, pos);
+        }
 
-            CreatureManager.Instance.SetLocation(creature, pos, creature.SpawnPool.Rotation, creature.SpawnPool.MapContextId);
+        /// <summary>A point uniformly inside a disc of this radius, on the ground plane.</summary>
+        internal static Vector3 InDisc(float radius)
+        {
+            var random = new Random();
+            var angle = random.NextDouble() * Math.PI * 2;
+            var distance = radius * Math.Sqrt(random.NextDouble());
+
+            return new Vector3((float)(Math.Cos(angle) * distance), 0, (float)(Math.Sin(angle) * distance));
         }
     }
 }

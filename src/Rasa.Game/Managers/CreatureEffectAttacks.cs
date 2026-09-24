@@ -41,6 +41,10 @@ namespace Rasa.Managers
     ///    missile has a cone in its data (CONE_RADIUS 45, FOV_LIMIT 45) as well as the blast's
     ///    EFFECT_RADIUS; the cone is where it may aim, and the blast is what spreads it, so the
     ///    missile hits the one it was fired at (MissileManager.CreatureAreaHits).
+    ///  - Hit and drain (LinkerHandBlastAbility): the row's damage as a hit, POWER_AMOUNT_MIN..MAX
+    ///    of the player's power taken - scaled as the row scales DAMAGE_AMOUNT - and the Linker
+    ///    healed for the damage the hit did. The class's DoAbility floats both from the hitdata
+    ///    (rawInfo, powerAmount, healAmount); the heal amount is ours, the data giving none.
     ///  - Hit and burn (StriderEyeAbility, StriderLaserBeamAbility): the row's damage as a hit,
     ///    and a damage-over-time on every player within EFFECT_RADIUS of the one hit, that one
     ///    included: EFFECT_DAMAGE_MIN..MAX every EFFECT_INTERVAL_MS for EFFECT_DURATION_MS. The
@@ -62,7 +66,7 @@ namespace Rasa.Managers
     /// </summary>
     public static class CreatureEffectAttacks
     {
-        public enum Kind { None, DamageOverTime, Hold, Blind, ResistDown, Polarity, Nanites, GroundBlast, Burn }
+        public enum Kind { None, DamageOverTime, Hold, Blind, ResistDown, Polarity, Nanites, GroundBlast, Burn, Drain }
 
         public const int DecayTypeId = 82;                      // DECAY
         public const int AcidSpitTypeId = 379;                  // ATTA_HARVESTER_ACID_SPIT
@@ -113,6 +117,8 @@ namespace Rasa.Managers
                 case StriderEyeModule:
                 case StriderLaserBeamModule:
                     return Kind.Burn;
+                case CreatureAttacks.LinkerHandBlastModule:
+                    return Kind.Drain;
                 default:
                     return Kind.None;
             }
@@ -131,7 +137,7 @@ namespace Rasa.Managers
         /// its tick's, and the resistance, polarity and nanite attacks do no damage of their own;
         /// their classes have no DoAbility to show one.
         /// </summary>
-        public static bool Hits(Kind kind) => kind == Kind.None || kind == Kind.Hold || kind == Kind.Blind || kind == Kind.Burn;
+        public static bool Hits(Kind kind) => kind == Kind.None || kind == Kind.Hold || kind == Kind.Blind || kind == Kind.Burn || kind == Kind.Drain;
 
         /// <summary>A player a creature's attack has hit: the attack's effect, if it carries one.</summary>
         public static void OnHit(MapChannel mapChannel, Creature attacker, Manifestation player, Missile missile)
@@ -158,6 +164,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A Linker's hand blast: the player's power, and the Linker's health back.
+            if (kind == Kind.Drain)
+            {
+                Drain(mapChannel, attacker, player, missile, info);
+                return;
+            }
+
             // A Strider's eye or laser: the explosion on the player hit, and a burn on everyone
             // around them.
             if (kind == Kind.Burn)
@@ -170,6 +183,59 @@ namespace Rasa.Managers
 
             if (effect != null)
                 GameEffectManager.Instance.Attach(mapChannel, player, effect);
+        }
+
+        /// <summary>
+        /// The power a drain takes: POWER_AMOUNT_MIN..MAX scaled by what the row makes of
+        /// DAMAGE_AMOUNT (the row's damage over the argument's), rolled with unit in [0, 1).
+        /// </summary>
+        public static int PowerOf(int rowMin, ActionLevelInfo info, double unit)
+        {
+            if (info == null)
+                return 0;
+
+            var min = info.Get(AbilityProperty.PowerAmountMin);
+            var max = Math.Max(min, info.Get(AbilityProperty.PowerAmountMax, min));
+            var baseMin = info.Get(AbilityProperty.DamageAmountMin);
+            var scale = baseMin > 0 && rowMin > 0 ? (double)rowMin / baseMin : 1.0;
+
+            var rolled = min + (int)Math.Floor(Math.Max(0, Math.Min(0.999999, unit)) * (max - min + 1));
+
+            return Math.Max(0, (int)Math.Round(rolled * scale));
+        }
+
+        private static void Drain(MapChannel mapChannel, Creature linker, Manifestation player, Missile missile, ActionLevelInfo info)
+        {
+            var hit = missile.Args.HitData.FirstOrDefault(h => h.EntityId == player.EntityId);
+            var dealt = Math.Max(0, missile.DamageA);     // what landed, after resistance and shields
+            double unit;
+
+            lock (Random)
+                unit = Random.NextDouble();
+
+            var drained = 0;
+
+            if (player.Attributes.TryGetValue(Attributes.Power, out var power))
+            {
+                drained = Math.Min(power.Current, PowerOf((int)(missile.CreatureAction?.MinDamage ?? 0), info, unit));
+
+                if (drained > 0)
+                {
+                    power.Current -= drained;
+                    mapChannel.ClientList.FirstOrDefault(c => c?.Player == player)?
+                        .CallMethod(player.EntityId, new UpdatePowerPacket(GameEffectManager.WithRegen(player, power), 0));
+                }
+            }
+
+            var healed = dealt > 0 && linker.State != CharacterState.Dead && linker.State != CharacterState.Dying
+                ? ActorManager.Instance.Heal(linker, dealt, linker.EntityId)
+                : 0;
+
+            if (hit != null)
+            {
+                hit.PowerDrained = drained;
+                hit.Healed = healed;
+            }
         }
 
         private static void Burn(MapChannel mapChannel, Creature attacker, Manifestation player, Missile missile, string module, ActionLevelInfo info)

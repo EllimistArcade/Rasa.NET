@@ -94,8 +94,8 @@ namespace Rasa.Packets.MapChannel.Server.PerformRecovery
                     case RecoveryShape.Drain:
                         pw.WriteTuple(3);
                         WriteRawInfo(pw, hit);
-                        pw.WriteInt(0);             // powerAmount
-                        pw.WriteInt(0);             // healAmount
+                        pw.WriteInt(hit.PowerDrained);  // powerAmount, floated off the player hit
+                        pw.WriteInt(hit.Healed);        // healAmount, summed and floated on the Linker
                         break;
                     default:
                         pw.WriteTuple(3);

@@ -29,15 +29,46 @@ namespace Rasa.Managers
     ///    harvester reach, about 64 m) that are not already fighting join the harvester's fight,
     ///    nearest first. Once a fight (WarcryRearmMs): it is a call for help,
     ///    not a way to pull a whole field.
+    ///  - Channel (LinkerChannelAbility, CR_LINKER_CHANNEL 410): the strategy guide - "One of the
+    ///    Linker's more dangerous abilities is its ability to draw energy from other nearby
+    ///    Linkers, doubling or tripling the power of their attacks!" A Linker winds up its
+    ///    channel (5.7 s, the class's own animation and FX, TARGET_FRIENDLY) at another Linker in
+    ///    the same fight within the argument's range; when it is done that Linker's attacks do
+    ///    ChannelBoostPercent more for ChannelBoostMs - double with one Linker feeding it, triple
+    ///    with two (MaxChannelers). The class shows nothing on the one fed (its DoAbility is
+    ///    empty) and has no effect of its own, so the boost is the server's alone (ServerOnly).
+    ///    How long it lasts is ours; the argument's DAMAGE_AMOUNT (10-20) is not used.
     ///
     /// Each is used only when it would do something - not while its effect is still on, not a
-    /// warcry with nobody to hear it - and otherwise the fighting loop goes on to the next action.
+    /// warcry with nobody to hear it, not a channel with no Linker to feed - and otherwise the
+    /// fighting loop goes on to the next action.
     /// </summary>
     public static class CreatureBuffs
     {
         public const ActionId ThraxRage = (ActionId)454;
         public const ActionId ThraxScourge = (ActionId)455;
         public const ActionId HarvesterWarcry = (ActionId)477;
+        public const ActionId LinkerChannel = (ActionId)410;
+
+        /// <summary>The guide's "doubling or tripling": what each Linker feeding another adds to its attacks, and how many may.</summary>
+        public const int ChannelBoostPercent = 100;
+        public const int MaxChannelers = 2;
+
+        /// <summary>Ours: how long a channel's boost lasts.</summary>
+        public const long ChannelBoostMs = 20000;
+
+        private sealed class Channeling
+        {
+            public MapChannel MapChannel;
+            public Creature Channeler;
+            public Creature Fed;
+            public CreatureAction Action;
+            public long LandsAt;
+        }
+
+        private static readonly List<Channeling> Channels = new List<Channeling>();
+        private static readonly Dictionary<Creature, Dictionary<Creature, long>> Links = new Dictionary<Creature, Dictionary<Creature, long>>();
+        private static readonly object ChannelLock = new object();
 
         public const int RageTypeId = 235;          // RAGE
         public const int RageSourceTypeId = 236;    // RAGESOURCE
@@ -50,7 +81,8 @@ namespace Rasa.Managers
         private static readonly object WarcryLock = new object();
 
         public static bool Is(CreatureAction action) =>
-            action != null && (action.ActionId == ThraxRage || action.ActionId == ThraxScourge || action.ActionId == HarvesterWarcry);
+            action != null && (action.ActionId == ThraxRage || action.ActionId == ThraxScourge || action.ActionId == HarvesterWarcry
+                || action.ActionId == LinkerChannel);
 
         /// <summary>Uses the action if it would do something now; whether it did.</summary>
         public static bool Perform(MapChannel mapChannel, Creature creature, CreatureAction action, Actor target)
@@ -67,6 +99,8 @@ namespace Rasa.Managers
                     return Scourge(mapChannel, creature, action, info);
                 case HarvesterWarcry:
                     return Warcry(mapChannel, creature, action, info, target);
+                case LinkerChannel:
+                    return Channel(mapChannel, creature, action, info);
                 default:
                     return false;
             }
@@ -187,6 +221,158 @@ namespace Rasa.Managers
             Show(mapChannel, creature, action, heard);
 
             return true;
+        }
+
+        /// <summary>How many Linkers are feeding this one now.</summary>
+        public static int ChannelersOf(Creature fed)
+        {
+            var now = Environment.TickCount64;
+
+            lock (ChannelLock)
+                return Links.TryGetValue(fed, out var links) ? links.Count(l => l.Value > now) : 0;
+        }
+
+        /// <summary>What a Linker fed by this many does more: ChannelBoostPercent each, MaxChannelers at most.</summary>
+        public static int ChannelBoostFor(int channelers) => Math.Max(0, Math.Min(MaxChannelers, channelers)) * ChannelBoostPercent;
+
+        private static bool Channel(MapChannel mapChannel, Creature linker, CreatureAction action, ActionLevelInfo info)
+        {
+            var now = Environment.TickCount64;
+            var range = Math.Max(1, info.MaxRange);
+
+            bool Feeding(Creature fed)
+            {
+                lock (ChannelLock)
+                    return Links.TryGetValue(fed, out var links) && links.TryGetValue(linker, out var until) && until > now
+                        || Channels.Any(c => c.Channeler == linker || c.Fed == fed && c.Channeler == linker);
+            }
+
+            var fed = AlliesWithin(mapChannel, linker, linker.Position, range)
+                .Where(a => a.EntityClass == linker.EntityClass
+                    && a.Controller.CurrentAction == BehaviorManager.BehaviorActionFighting
+                    && ChannelersOf(a) < MaxChannelers && !Feeding(a))
+                .OrderBy(a => Vector3.DistanceSquared(a.Position, linker.Position))
+                .FirstOrDefault();
+
+            if (fed == null)
+                return false;
+
+            var windupMs = CreatureWindups.WindupMsOf(action, info);
+
+            linker.Controller.WindupUntil = now + windupMs;
+            linker.Controller.Path.Clear();
+            BehaviorManager.Instance.StopMoving(linker);
+
+            CellManager.Instance.CellCallMethod(mapChannel, linker,
+                new PerformWindupPacket(PerformType.ThreeArgs, action.ActionId, action.ActionArgId, fed.EntityId));
+
+            lock (ChannelLock)
+                Channels.Add(new Channeling { MapChannel = mapChannel, Channeler = linker, Fed = fed, Action = action, LandsAt = now + windupMs });
+
+            return true;
+        }
+
+        /// <summary>The channels whose windup is done feed their Linker; the boosts that have run out end. Run every map tick.</summary>
+        public static void Worker(MapChannel mapChannel)
+        {
+            var now = Environment.TickCount64;
+            List<Channeling> due;
+            List<Creature> fedHere;
+
+            lock (ChannelLock)
+            {
+                due = Channels.Where(c => c.MapChannel == mapChannel && now >= c.LandsAt).ToList();
+
+                foreach (var channel in due)
+                    Channels.Remove(channel);
+
+                fedHere = Links.Keys.Where(k => k.MapContextId == mapChannel.MapInfo.MapContextId).ToList();
+            }
+
+            foreach (var channel in due)
+            {
+                var linker = channel.Channeler;
+                var fed = channel.Fed;
+
+                // Killed, stunned or knocked out of it, or nothing left to feed: it comes to nothing.
+                if (!Standing(linker) || Stuns.IsStunned(linker) || !Standing(fed))
+                    continue;
+
+                var recovery = new AbilityRecoveryPacket(channel.Action.ActionId, channel.Action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None);
+                recovery.Hits.Add(new AbilityHit { EntityId = fed.EntityId });
+                CellManager.Instance.CellCallMethod(mapChannel, linker, recovery);
+
+                lock (ChannelLock)
+                {
+                    if (!Links.TryGetValue(fed, out var links))
+                        Links[fed] = links = new Dictionary<Creature, long>();
+
+                    links[linker] = now + ChannelBoostMs;
+                }
+
+                if (!fedHere.Contains(fed))
+                    fedHere.Add(fed);
+            }
+
+            foreach (var fed in fedHere)
+                Refresh(mapChannel, fed, now);
+        }
+
+        private static bool Standing(Creature creature) =>
+            creature != null && creature.State != CharacterState.Dead && creature.State != CharacterState.Dying
+            && creature.Attributes.TryGetValue(Attributes.Health, out var health) && health.Current > 0;
+
+        /// <summary>The boost on a fed Linker brought up to date with who is feeding it: gone when nobody is.</summary>
+        private static void Refresh(MapChannel mapChannel, Creature fed, long now)
+        {
+            int count;
+            long until;
+
+            lock (ChannelLock)
+            {
+                if (!Links.TryGetValue(fed, out var links))
+                    return;
+
+                foreach (var gone in links.Where(l => l.Value <= now || !Standing(l.Key)).Select(l => l.Key).ToList())
+                    links.Remove(gone);
+
+                count = links.Count;
+                until = count > 0 ? links.Values.Max() : 0;
+
+                if (count == 0 || !Standing(fed))
+                    Links.Remove(fed);
+            }
+
+            var boost = fed.ActiveEffects.Values.FirstOrDefault(e => e.ServerOnly && e.ActionId == LinkerChannel);
+
+            if (count == 0 || !Standing(fed))
+            {
+                if (boost != null)
+                    GameEffectManager.Instance.DettachEffect(mapChannel, fed, boost);
+
+                return;
+            }
+
+            if (boost == null)
+            {
+                boost = new GameEffect
+                {
+                    TypeId = 0,
+                    EffectId = GameEffectManager.Instance.NextEffectId(mapChannel),
+                    EffectLevel = 1,
+                    ActionId = LinkerChannel,
+                    SourceId = fed.EntityId,
+                    Source = fed,
+                    SourceLevel = (int)fed.Level,
+                    IsBuff = true,
+                    ServerOnly = true
+                };
+
+                GameEffectManager.Instance.Attach(mapChannel, fed, boost);
+            }
+
+            boost.DamageDealtPercent = ChannelBoostFor(count);
+            boost.ExpiresTick = until;
         }
 
         /// <summary>

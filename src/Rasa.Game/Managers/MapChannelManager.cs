@@ -217,6 +217,9 @@ namespace Rasa.Managers
                     // Summoned turrets and pets whose time is up; grubs out of their cocoons.
                     CreatureSummons.Worker(mapChannel);
 
+                    // Linkers' channels whose windup is done, and the boosts that have run out.
+                    CreatureBuffs.Worker(mapChannel);
+
                     // Crab Mines: seeking, running, going off.
                     AbilityManager.Instance.CrabMineWorker(mapChannel);
 

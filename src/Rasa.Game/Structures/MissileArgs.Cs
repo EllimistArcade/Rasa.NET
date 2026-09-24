@@ -35,5 +35,9 @@ namespace Rasa.Structures
         public List<object> OnHitData { get; set; }           // ToDo
         /// <summary>A creature's lightning: the arcs and extra damage this hit set off, the arcData its onHitData carries (CreatureLightning).</summary>
         public List<Packets.MapChannel.Server.TickEntry> Arcs { get; } = new List<Packets.MapChannel.Server.TickEntry>();
+
+        /// <summary>A Linker's hand blast: the power it took off the player hit, and what it healed itself for (the Drain recovery shape).</summary>
+        public int PowerDrained { get; set; }
+        public int Healed { get; set; }
     }
 }

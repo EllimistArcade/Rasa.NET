@@ -1326,6 +1326,51 @@ namespace Rasa.Migrations.SqliteWorld
                     b.ToTable("recipe_input");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.World.SpawnPoolArrivalEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)")
+                        .HasColumnName("comment");
+
+                    b.Property<ulong>("EntityId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("entity_id");
+
+                    b.Property<byte>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<uint>("PoolId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("pool_id");
+
+                    b.Property<double>("PosX")
+                        .HasColumnType("REAL")
+                        .HasColumnName("pos_x");
+
+                    b.Property<double>("PosY")
+                        .HasColumnType("REAL")
+                        .HasColumnName("pos_y");
+
+                    b.Property<double>("PosZ")
+                        .HasColumnType("REAL")
+                        .HasColumnName("pos_z");
+
+                    b.Property<double>("Rotation")
+                        .HasColumnType("REAL")
+                        .HasColumnName("rotation");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("spawnpool_arrival");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.SpawnPoolEntry", b =>
                 {
                     b.Property<uint>("Id")

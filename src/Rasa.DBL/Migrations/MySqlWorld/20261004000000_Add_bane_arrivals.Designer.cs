@@ -2,15 +2,17 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Rasa.Context.World;
 
 namespace Rasa.Migrations.MySqlWorld
 {
     [DbContext(typeof(MySqlWorldContext))]
-    partial class MySqlWorldContextModelSnapshot : ModelSnapshot
+    [Migration("20261004000000_Add_bane_arrivals")]
+    partial class Add_bane_arrivals
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -917,51 +919,6 @@ namespace Rasa.Migrations.MySqlWorld
                     b.HasKey("Id");
 
                     b.ToTable("logos");
-                });
-
-            modelBuilder.Entity("Rasa.Structures.World.MapEmitterEntry", b =>
-                {
-                    b.Property<uint>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int unsigned")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Comment")
-                        .IsRequired()
-                        .HasColumnType("varchar(96)")
-                        .HasColumnName("comment");
-
-                    b.Property<byte>("IsOn")
-                        .HasColumnType("tinyint unsigned")
-                        .HasColumnName("is_on");
-
-                    b.Property<uint>("MapContextId")
-                        .HasColumnType("int unsigned")
-                        .HasColumnName("map_context_id");
-
-                    b.Property<uint>("PackageId")
-                        .HasColumnType("int unsigned")
-                        .HasColumnName("package_id");
-
-                    b.Property<double>("PosX")
-                        .HasColumnType("double")
-                        .HasColumnName("pos_x");
-
-                    b.Property<double>("PosY")
-                        .HasColumnType("double")
-                        .HasColumnName("pos_y");
-
-                    b.Property<double>("PosZ")
-                        .HasColumnType("double")
-                        .HasColumnName("pos_z");
-
-                    b.Property<double>("Rotation")
-                        .HasColumnType("double")
-                        .HasColumnName("rotation");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("map_emitter");
                 });
 
             modelBuilder.Entity("Rasa.Structures.World.MapInfoEntry", b =>

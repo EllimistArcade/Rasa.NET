@@ -442,11 +442,15 @@ namespace Rasa.Managers
                     if (creature.Controller.Path.Count == 0)
                         BuildPath(mapChannel, creature, wander.WanderDestination);
 
-                    // Frightened: it runs, rather than strolls.
-                    var wanderSpeed = wander.Fleeing || wander.Errand ? creature.RunSpeed : Math.Min(creature.WalkSpeed, WanderWalkSpeed);
+                    // Frightened, or on an errand: it runs, rather than strolls. Off a dropship or
+                    // through a teleporter: it marches in.
+                    var wanderSpeed = wander.Fleeing || wander.Errand ? creature.RunSpeed : wander.Arriving ? creature.WalkSpeed : Math.Min(creature.WalkSpeed, WanderWalkSpeed);
+                    var timeout = wander.Arriving ? wander.ArrivalTimeoutMs : WanderMoveTimeoutMs;
 
-                    if (FollowPath(mapChannel, creature, wanderSpeed, delta) || wander.MovingMs >= WanderMoveTimeoutMs)
+                    if (FollowPath(mapChannel, creature, wanderSpeed, delta) || wander.MovingMs >= timeout)
                     {
+                        wander.Arriving = false;
+
                         // There, or as near as it is going to get: it stops, and the interval
                         // starts again from now.
                         StopWalking(creature);
@@ -1058,10 +1062,38 @@ namespace Rasa.Managers
             controller.ActionWander.State = WanderIdle;
             controller.ActionWander.Fleeing = false;
             controller.ActionWander.Errand = false;
+            controller.ActionWander.Arriving = false;
             controller.ActionWander.MovingMs = 0;
             controller.ActionWander.IdleMs = staggered ? new Random().Next((int)WanderIntervalMs) : 0;
             controller.Path.Clear();
             controller.PathIndex = 0;
+        }
+
+        /// <summary>
+        /// A creature that has just arrived - off a dropship on a pad, through a teleporter - walks
+        /// to <paramref name="destination"/> on its pool's ground, which is its home from now on:
+        /// at its walk speed, with time enough for the distance. It notices a fight on the way as
+        /// a wandering creature does.
+        /// </summary>
+        public void WalkIn(Creature creature, Vector3 destination)
+        {
+            if (creature.Controller == null)
+                return;
+
+            StartWandering(creature, false);
+
+            creature.HomePos.Position = destination;
+
+            if (creature.WalkSpeed < 0.01f)
+                return;
+
+            var wander = creature.Controller.ActionWander;
+
+            wander.WanderDestination = destination;
+            wander.State = WanderMoving;
+            wander.MovingMs = 0;
+            wander.Arriving = true;
+            wander.ArrivalTimeoutMs = ReturnTimeoutFor(Vector3.Distance(creature.Position, destination), creature.WalkSpeed);
         }
 
         #endregion

@@ -8,6 +8,7 @@ namespace Rasa.Managers
     using Game;
     using Repositories.UnitOfWork;
     using Structures;
+    using Structures.World;
 
     public class SpawnPoolManager
     {
@@ -156,11 +157,27 @@ namespace Rasa.Managers
                 LoadedSpawnPools.Add(data.Id, spawnPool);
             }
 
-            Logger.WriteLog(LogType.Initialize, $"Loaded {LoadedSpawnPools.Count} SpawnPools");
+            var arrivals = 0;
+
+            foreach (var arrival in unitOfWork.SpawnPoolArrivals.GetArrivals())
+            {
+                if (!LoadedSpawnPools.TryGetValue(arrival.PoolId, out var pool))
+                {
+                    Logger.WriteLog(LogType.Error, $"spawnpool_arrival {arrival.Id} names spawnpool {arrival.PoolId}, which is not loaded.");
+                    continue;
+                }
+
+                pool.Arrivals.Add(arrival);
+                arrivals++;
+            }
+
+            Logger.WriteLog(LogType.Initialize, $"Loaded {LoadedSpawnPools.Count} SpawnPools, {arrivals} arrival points");
         }
 
         public void SpawnPoolWorker(MapChannel mapChannel, long timePassed)
         {
+            BaneArrivals.TeleportWorker(mapChannel, timePassed);
+
             foreach (var key in LoadedSpawnPools)
             {
                 var spawnPool = key.Value;
@@ -187,7 +204,30 @@ namespace Rasa.Managers
                 if (creatureList.Count == 0)
                     continue; // nothing to spawn
 
-                if (spawnPool.AnimType == 0)    // animType==0; spawn without animation
+                // An arrival point: through a teleporter, or off a dropship on a pad or in a bay.
+                var arrival = BaneArrivals.Pick(spawnPool);
+
+                spawnPool.HasSpawned = true;
+
+                if (arrival?.Kind == SpawnPoolArrivalEntry.KindTeleporter)
+                    BaneArrivals.BeginTeleport(mapChannel, spawnPool, arrival, creatureList.Count);
+                else if (arrival?.Kind == SpawnPoolArrivalEntry.KindDropship)
+                {
+                    IncreaseQueueCount(spawnPool);
+                    IncreaseQueuedCreatureCount(spawnPool, creatureList.Count);
+
+                    var dropship = new Dropship(TargetCategory.Hostile, DropshipType.Spawner, spawnPool)
+                    {
+                        Position = arrival.Position,
+                        Rotation = arrival.Rotation,
+                        Arrival = arrival
+                    };
+
+                    CellManager.Instance.AddToWorld(mapChannel, dropship);
+
+                    DynamicObjectManager.Instance.Dropships.Add(dropship.EntityId, dropship);
+                }
+                else if (spawnPool.AnimType == 0)    // animType==0; spawn without animation
                 {
                     IncreaseQueuedCreatureCount(spawnPool, creatureList.Count);
 
@@ -225,7 +265,8 @@ namespace Rasa.Managers
             }
         }
 
-        internal void SpawnCreatures(SpawnPool spawnPool,List<Creature> creatureList)
+        /// <param name="arrival">Where they arrive, when they come by an arrival point: they step out there and walk to the pool's ground.</param>
+        internal void SpawnCreatures(SpawnPool spawnPool, List<Creature> creatureList, SpawnPoolArrivalEntry arrival = null)
         {
             var mapChannel = MapChannelManager.Instance.FindByContextId(spawnPool.MapContextId);
 
@@ -236,9 +277,19 @@ namespace Rasa.Managers
                 if (creature == null)
                     continue;
 
-                RandomizePosition(creature, creatureList.Count);
+                if (arrival == null)
+                {
+                    RandomizePosition(creature, creatureList.Count);
+
+                    CellManager.Instance.AddToWorld(mapChannel, creature);
+                    continue;
+                }
+
+                CreatureManager.Instance.SetLocation(creature, BaneArrivals.StepOut(mapChannel, arrival), arrival.Rotation, spawnPool.MapContextId);
 
                 CellManager.Instance.AddToWorld(mapChannel, creature);
+
+                BehaviorManager.Instance.WalkIn(creature, SpawnPoint(mapChannel, spawnPool, creatureList.Count));
             }
         }
 

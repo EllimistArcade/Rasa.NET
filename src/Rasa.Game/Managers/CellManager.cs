@@ -498,6 +498,23 @@ namespace Rasa.Managers
                     client.CallMethod(obj.EntityId, packet);
         }
 
+        /// <summary>
+        /// A method call on an entity the server does not hold - one the client builds itself from
+        /// the .map (a teleporter, a switch) - to everyone in range of where it stands.
+        /// </summary>
+        internal void CellCallMethod(MapChannel mapChannel, Vector3 position, ulong entityId, PythonPacket packet)
+        {
+            if (mapChannel == null)
+                return;
+
+            var cellPosX = (uint)(position.X / CellSize + CellBias);
+            var cellPosZ = (uint)(position.Z / CellSize + CellBias);
+
+            foreach (var cell in CellsIn(mapChannel, CreateCellMatrix(mapChannel, cellPosX, cellPosZ)))
+                foreach (var client in cell.ClientList)
+                    client.CallMethod(entityId, packet);
+        }
+
         internal void CellCallMethod(Creature creature, PythonPacket packet)
         {
             // calculate initial cell(x, z)

@@ -14,6 +14,9 @@ namespace Rasa.Structures
         public SpawnPool SpawnPool { get; set; }
         public DropshipType DropshipType { get; set; }
 
+        /// <summary>The pad or bay a spawner dropship comes down on, when its pool has one; its creatures step off there.</summary>
+        public World.SpawnPoolArrivalEntry Arrival { get; set; }
+
         /// <summary>Departure or arrival; meaningful for a teleporter dropship, see <see cref="DropshipRole"/>.</summary>
         public DropshipRole Role { get; set; }
 

@@ -552,7 +552,7 @@ namespace Rasa.Managers
                             var creatureList = SpawnPoolManager.Instance.CreateListOfCreatures(dropship.SpawnPool);
 
                             // spawn creatures
-                            SpawnPoolManager.Instance.SpawnCreatures(dropship.SpawnPool, creatureList);
+                            SpawnPoolManager.Instance.SpawnCreatures(dropship.SpawnPool, creatureList, dropship.Arrival);
                             SpawnPoolManager.Instance.DecreaseQueuedCreatureCount(dropship.SpawnPool, dropship.SpawnPool.QueuedCreatures);
                         }
 

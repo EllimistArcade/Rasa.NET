@@ -16,6 +16,7 @@
         IMapRegionRepository MapRegions { get; }
         IMapMarkerRepository MapMarkers { get; }
         IMapEmitterRepository MapEmitters { get; }
+        ISpawnPoolArrivalRepository SpawnPoolArrivals { get; }
         IRecipeRepository Recipes { get; }
         INpcMissionRepository NpcMissions { get; }
         INpcMissionRewardRepository NpcMissionRewards { get; }

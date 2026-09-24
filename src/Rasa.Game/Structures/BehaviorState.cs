@@ -105,6 +105,12 @@ namespace Rasa.Structures
 
         /// <summary>Walking to a corpse its habit sent it to (CreatureHabits): it runs, and does the habit when it gets there.</summary>
         public bool Errand { get; set; }
+
+        /// <summary>Walking in from an arrival point to its pool's ground: at walk speed, however far, with ArrivalTimeoutMs to get there.</summary>
+        public bool Arriving { get; set; }
+
+        /// <summary>How long a walk in from an arrival point may take.</summary>
+        public long ArrivalTimeoutMs { get; set; }
     }
     
     public class AiPathFollowing

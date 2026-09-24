@@ -27,6 +27,11 @@ namespace Rasa.Managers
     ///    as an adult - _SOLDIER (argument 1) an Atta Soldier, _HARVESTER (2) an Atta Harvester:
     ///    the one of the world's that is nearest the grub's level, at the grub's level, with the
     ///    grub's grudges and its place in its spawn pool. One killed in its cocoon dies a grub.
+    ///    The adult hatches: CR_BIRTH 495 at CR_BIRTH_ATTA_COCOON (114) - the client's own
+    ///    "Creature Birth - Atta Cocoon" animation (1455) and CREATURE_BIRTH_ATTA_COCOON FX
+    ///    (1857), 1.4 s - standing where the cocoon was and doing nothing else until it is out
+    ///    (HatchMs). It comes out full size: the growing birth (CREATURE_BIRTH at its class) is
+    ///    the turret's and the pet's.
     ///
     /// CREATURE_VARIANT_ID is an index into a server table we do not have, so what comes out is
     /// chosen by the class the client names for the job. The turret and the pet are creature
@@ -52,6 +57,13 @@ namespace Rasa.Managers
         /// <summary>CREATURE_BIRTH, keyed by the born creature's own entity class, and the effect it wears while growing.</summary>
         public const ActionId BirthAction = (ActionId)155;
         public const int BirthTypeId = 10;
+
+        /// <summary>CR_BIRTH (CreatureBirthAbility) at CR_BIRTH_ATTA_COCOON: an adult Atta hatching out of a grub's cocoon.</summary>
+        public const ActionId HatchAction = (ActionId)495;
+        public const uint HatchArg = 114;
+
+        /// <summary>How long a hatching adult stands still when the action's data gives no recovery.</summary>
+        public const int DefaultHatchMs = 1433;
 
         public const uint TurretTemplateId = 570001;        // Ability_Bane_Turret
         public const uint HowlerPetTemplateId = 570002;     // Bane_Howler
@@ -94,6 +106,7 @@ namespace Rasa.Managers
 
         private static readonly List<Summoned> Summons = new List<Summoned>();
         private static readonly List<Cocoon> Cocoons = new List<Cocoon>();
+        private static readonly Dictionary<Creature, long> Hatching = new Dictionary<Creature, long>();
         private static readonly object SummonsLock = new object();
         private static readonly Random Random = new Random();
 
@@ -111,11 +124,20 @@ namespace Rasa.Managers
                 return Summons.Any(s => s.Creature == creature);
         }
 
-        /// <summary>Whether the creature is in its cocoon: it does nothing else.</summary>
+        /// <summary>Whether the creature is in its cocoon, or hatching out of one: it does nothing else.</summary>
         public static bool IsBusy(Creature creature)
         {
             lock (SummonsLock)
-                return Cocoons.Any(c => c.Grub == creature);
+                return Cocoons.Any(c => c.Grub == creature)
+                    || Hatching.TryGetValue(creature, out var until) && Environment.TickCount64 < until;
+        }
+
+        /// <summary>How long hatching takes: CR_BIRTH_ATTA_COCOON's recovery.</summary>
+        public static int HatchMs()
+        {
+            return AbilityManager.Instance != null && AbilityManager.Instance.TryGetLevel(HatchAction, HatchArg, out var hatch) && hatch.RecoveryMs > 0
+                ? hatch.RecoveryMs
+                : DefaultHatchMs;
         }
 
         /// <summary>What a creature row scales by between two levels: x2 every 8.</summary>
@@ -319,6 +341,9 @@ namespace Rasa.Managers
 
                 // A grub killed in its cocoon is done with it.
                 Cocoons.RemoveAll(c => c.MapChannel == mapChannel && !Alive(c.Grub));
+
+                foreach (var hatched in Hatching.Where(h => now >= h.Value).Select(h => h.Key).ToList())
+                    Hatching.Remove(hatched);
             }
 
             foreach (var summon in summons)
@@ -392,9 +417,25 @@ namespace Rasa.Managers
                 SpawnPoolManager.Instance.DecreaseAliveCreatureCount(mapChannel, grub.SpawnPool);
 
             CellManager.Instance.AddToWorld(mapChannel, adult);
-            Birth(mapChannel, adult, grub);
+            Hatch(mapChannel, adult);
 
             JoinFight(adult, grub, target);
+        }
+
+        /// <summary>
+        /// Out of the cocoon: CR_BIRTH_ATTA_COCOON on the adult, which plays the hatching and its
+        /// FX, and the adult held where it is for as long.
+        /// </summary>
+        private static void Hatch(MapChannel mapChannel, Creature adult)
+        {
+            lock (SummonsLock)
+                Hatching[adult] = Environment.TickCount64 + HatchMs();
+
+            BehaviorManager.Instance.StopMoving(adult);
+            adult.Controller.Path.Clear();
+
+            CellManager.Instance.CellCallMethod(mapChannel, adult, new PerformWindupPacket(PerformType.TwoArgs, HatchAction, HatchArg));
+            CellManager.Instance.CellCallMethod(mapChannel, adult, new AbilityRecoveryPacket(HatchAction, HatchArg, AbilityRecoveryPacket.HitDataKind.None));
         }
 
         /// <summary>What came in takes up its maker's grudges and its target.</summary>

@@ -34,6 +34,12 @@ namespace Rasa.Structures
 
         /// <summary>Milliseconds until the line of sight is tested again.</summary>
         public long SightRecheckIn { get; set; }
+
+        /// <summary>Whether the creature has made its first attack of this fight (BehaviorManager.OpensNow).</summary>
+        public bool Opened { get; set; }
+
+        /// <summary>How many thinks it has had an attack ready this fight and held it (BehaviorManager.OpensNow).</summary>
+        public int OpeningRolls { get; set; }
     }
 
     /// <summary>

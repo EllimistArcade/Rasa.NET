@@ -106,6 +106,16 @@ namespace Rasa.Managers
 
         private static readonly Random CooldownRandom = new Random();
 
+        /// <summary>
+        /// A creature's first attack of a fight is not instant (OpensNow): each think it has an
+        /// attack ready, in range and in sight, it rolls to use it - OpeningChanceStep (25%) on the
+        /// first such think, 50% on the second, 75% on the third, and certain on the
+        /// OpeningThinks-th (the fourth). Until then it stands and faces its target. After the
+        /// first attack its actions follow their cooldowns (NextCooldown, ByReadiness).
+        /// </summary>
+        public const int OpeningThinks = 4;
+        public const double OpeningChanceStep = 1.0 / OpeningThinks;
+
         public const byte WanderIdle = 0;
         public const byte WanderMoving = 1;
 
@@ -767,6 +777,15 @@ namespace Rasa.Managers
                         continue;   // action on cooldown
                     }
 
+                    // The first attack of a fight waits on a roll that grows each think (OpensNow):
+                    // until it comes up, the creature stands and faces its target.
+                    if (!OpensNow(creature))
+                    {
+                        needToMove = false;
+                        UpdateEntityMovement(targetDistX, targetDistY, targetDistZ, creature, mapChannel, 0.0f, false, delta);
+                        break;
+                    }
+
                     // Rage, Scourge, a warcry: on itself or its own side, and only when it would
                     // do something; otherwise on to the next action (CreatureBuffs).
                     if (CreatureBuffs.Is(action))
@@ -1347,6 +1366,44 @@ namespace Rasa.Managers
         /// Every attack gets its turn as it comes ready, rather than the first slots taking every
         /// opening and the later ones waiting behind them. Ties keep their slot order.
         /// </summary>
+        /// <summary>The chance of opening on the next think after this many held ones: 25%, 50%, 75%, then certain.</summary>
+        public static double OpeningChance(int heldThinks)
+        {
+            return Math.Min(1.0, (Math.Max(0, heldThinks) + 1) * OpeningChanceStep);
+        }
+
+        /// <summary>
+        /// Whether a creature with an attack ready uses it now: always once it has opened the
+        /// fight, and always for a minion (it fights on its master's word, not as an enemy);
+        /// otherwise the opening roll, unit being a roll in [0, 1). A held think is counted.
+        /// </summary>
+        public static bool OpensNow(Creature creature, double unit)
+        {
+            var fighting = creature.Controller.ActionFighting;
+
+            if (fighting.Opened || creature.MasterEntityId != 0)
+                return true;
+
+            if (unit < OpeningChance(fighting.OpeningRolls))
+            {
+                fighting.Opened = true;
+                return true;
+            }
+
+            fighting.OpeningRolls++;
+            return false;
+        }
+
+        private static bool OpensNow(Creature creature)
+        {
+            double unit;
+
+            lock (CooldownRandom)
+                unit = CooldownRandom.NextDouble();
+
+            return OpensNow(creature, unit);
+        }
+
         public static List<CreatureAction> ByReadiness(IEnumerable<CreatureAction> actions)
         {
             return actions.OrderBy(a => a.CooldownTimer).ToList();
@@ -1375,6 +1432,13 @@ namespace Rasa.Managers
             // fights whoever attacks it; an object or decoration fights nobody.
             if (!MayFight(creature, targetEntityId))
                 return;
+
+            // A fight starting, not a change of target within one: its first attack is rolled for again (OpensNow).
+            if (creature.Controller.CurrentAction != BehaviorActionFighting)
+            {
+                creature.Controller.ActionFighting.Opened = false;
+                creature.Controller.ActionFighting.OpeningRolls = 0;
+            }
 
             creature.Controller.CurrentAction = BehaviorActionFighting;
             // Whatever the creature was walking towards is not where the fight is: without this

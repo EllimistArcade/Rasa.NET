@@ -305,8 +305,10 @@ namespace Rasa.Managers
         /// staff's or a blade's own attack is not this: that is the weapon's primary, and goes
         /// through the fire path under the Staff or Blades skill.
         ///
-        /// Timed on its own clock from the alt action's recovery and reuse, as the client times
-        /// it. The target has to be within the alt action's range.
+        /// Timed on its own clock from the alt action's windup, recovery and reuse, as the client
+        /// paces it (baseactoraction.py: the windup, then the reuse timer set at perform to
+        /// recovery + reuse). The target has to be within the alt action's range: 4-5 m for the
+        /// swings (WeaponSwings).
         /// </summary>
         public void TryMeleeAttack(Client client, RequestWeaponAttackPacket packet)
         {
@@ -351,8 +353,7 @@ namespace Rasa.Managers
             if (player.NextMeleeAt > now + ShotTolerance)
                 return;
 
-            var interval = level != null ? level.RecoveryMs + level.ReuseMs : 0;
-            player.NextMeleeAt = Math.Max(player.NextMeleeAt, now - ShotTolerance) + Math.Max(MinRefire, interval);
+            player.NextMeleeAt = Math.Max(player.NextMeleeAt, now - ShotTolerance) + Math.Max(MinRefire, SwingCycleMs(level));
 
             var targetId = packet.TargetId > 0 ? (ulong)packet.TargetId : player.Target;
 
@@ -381,6 +382,13 @@ namespace Rasa.Managers
                 WeaponDamageType(player, (DamageType)(weaponInfo.WeaponAltInfo?.AltDamageType ?? 0)), melee: true,
                 knockbackChance: Stuns.HandToHandKnockbackChance(pump), knockbackStunMs: Stuns.HandToHandMs(pump));
         }
+
+        /// <summary>
+        /// One swing to the next: windup + recovery + reuse, as the client paces an action - 716 ms
+        /// for a pistol's 174/4, 410 for a staff's 174/2. 0 for an action with no level row.
+        /// </summary>
+        public static long SwingCycleMs(ActionLevelInfo level) =>
+            level == null ? 0 : Math.Max(0, level.WindupMs) + Math.Max(0, level.RecoveryMs) + Math.Max(0, level.ReuseMs);
 
         /// <summary>
         /// The damage type a player's weapon attack lands as: the weapon's own, unless it is

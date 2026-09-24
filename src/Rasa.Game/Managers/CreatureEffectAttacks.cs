@@ -66,7 +66,8 @@ namespace Rasa.Managers
     /// - a damage over time, a resistance down, a Polarity Field - from a creature's attack
     /// (OnCreatureHit): a Forean shaman's Decay on the Bane it fights. The rest - a hold, a blind,
     /// a bomb - are the player's client acting on its own character, and on a creature an
-    /// attack of those is its hit alone.
+    /// attack of those is its hit alone - but for a Necromite's self-destruct, which blows up on
+    /// a creature as on a player.
     /// </summary>
     public static class CreatureEffectAttacks
     {
@@ -166,10 +167,10 @@ namespace Rasa.Managers
             // on everyone near them.
             if (kind == Kind.GroundBlast)
             {
-                CreatureBombs.GroundBlast(mapChannel, attacker, player, missile.CreatureAction, info);
+                var bomb = CreatureBombs.GroundBlast(mapChannel, attacker, player, missile.CreatureAction, info);
 
-                // A Necromite's bomb is itself.
-                if (module == NecromiteSelfDestructModule)
+                // A Necromite's bomb is itself: spent when it goes on.
+                if (module == NecromiteSelfDestructModule && bomb != null)
                     CreatureBombs.Spend(mapChannel, attacker, player);
 
                 return;
@@ -212,6 +213,15 @@ namespace Rasa.Managers
                 return;
 
             var kind = KindOf(module);
+
+            // A Necromite that reached a creature blows up on it, as on a player.
+            if (module == NecromiteSelfDestructModule)
+            {
+                if (CreatureBombs.GroundBlast(mapChannel, attacker, victim, missile.CreatureAction, info) != null)
+                    CreatureBombs.Spend(mapChannel, attacker, victim);
+
+                return;
+            }
 
             if (!CreatureTakes(kind))
                 return;

@@ -51,7 +51,9 @@ namespace Rasa.Managers
     ///    NECROMITE_SELF_DESTRUCT 382, "AoE dmg when a necromite blows up on a player", the
     ///    class's targetGameEffect - going off DELAY_TIME_MS (0.5 s) on within EFFECT_RADIUS
     ///    (5 m). The Necromite is spent on it (Spend): it dies as its bomb goes on, the kill its
-    ///    target's, as a Fithik's self-destruct is.
+    ///    target's, as a Fithik's self-destruct is. A Necromite blows up on whatever it is
+    ///    fighting - a player, or a creature (a Forean, an AFS turret) - and its blast takes
+    ///    everything around that it may fight, players and creatures (HitsCreatures).
     ///  - Corpse (NecromiteCorpseExplosionAbility 490, "Causes a Necromite to explode on a
     ///    corpse", canTargetDead): a Necromite in a fight with a creature's body within its reach
     ///    (the argument's range, 5 m) and a player it may fight within EFFECT_RADIUS (10 m) of
@@ -157,6 +159,7 @@ namespace Rasa.Managers
             public CreatureAction Action;
             public GameEffect Effect;          // null for a self-destruct or an egg's windup, which are recoveries
             public bool EggDrop;               // the windup is a Stalker's egg drop, not a self-destruct
+            public bool HitsCreatures;         // the blast takes the creatures its source may fight, not only players (a Necromite's)
             public float Radius;
             public DamageType DamageType;
             public long GoesOffAt;
@@ -237,8 +240,14 @@ namespace Rasa.Managers
         public static long GroundBlastDelayOf(ActionId actionId, ActionLevelInfo info) =>
             actionId == NecromiteSelfDestruct ? Math.Max(0, info?.Get(AbilityProperty.DelayTimeMs) ?? 0) : 0;
 
-        /// <summary>A Linker's ground blast, a Predator's missile or a Necromite has hit a player: the bomb on them, going off when its delay is up.</summary>
-        public static GameEffect GroundBlast(MapChannel mapChannel, Creature linker, Manifestation player, CreatureAction action, ActionLevelInfo info)
+        /// <summary>Whether a blast of this action takes creatures as well as players: a Necromite's does.</summary>
+        public static bool BlastHitsCreatures(ActionId actionId) => actionId == NecromiteSelfDestruct;
+
+        /// <summary>
+        /// A Linker's ground blast, a Predator's missile or a Necromite has hit someone: the bomb
+        /// on them, going off when its delay is up. A player, or - a Necromite's - a creature.
+        /// </summary>
+        public static GameEffect GroundBlast(MapChannel mapChannel, Creature linker, Actor player, CreatureAction action, ActionLevelInfo info)
         {
             if (mapChannel == null || linker == null || player == null || action == null || info == null)
                 return null;
@@ -253,7 +262,7 @@ namespace Rasa.Managers
                 return null;    // turned away (Cure's guard)
 
             // The recovery that announces it goes out first; the blast follows on the next tick.
-            Arm(mapChannel, linker, player, action, bomb, RadiusOf(info), TypeOf(info), delayMs);
+            Arm(mapChannel, linker, player, action, bomb, RadiusOf(info), TypeOf(info), delayMs, BlastHitsCreatures(action.ActionId));
 
             return bomb;
         }
@@ -599,7 +608,7 @@ namespace Rasa.Managers
             };
         }
 
-        private static void Arm(MapChannel mapChannel, Creature source, Actor holder, CreatureAction action, GameEffect effect, float radius, DamageType type, long delayMs)
+        private static void Arm(MapChannel mapChannel, Creature source, Actor holder, CreatureAction action, GameEffect effect, float radius, DamageType type, long delayMs, bool hitsCreatures = false)
         {
             lock (BombsLock)
                 Bombs.Add(new Pending
@@ -611,8 +620,28 @@ namespace Rasa.Managers
                     Effect = effect,
                     Radius = radius,
                     DamageType = type,
+                    HitsCreatures = hitsCreatures,
                     GoesOffAt = Environment.TickCount64 + delayMs
                 });
+        }
+
+        /// <summary>The creatures a blast around a point reaches: alive, on the map, within radius, and ones the source may fight.</summary>
+        public static List<Creature> CaughtCreatures(MapChannel mapChannel, Creature source, Vector3 centre, float radius)
+        {
+            var found = new List<Creature>();
+
+            if (mapChannel == null || source == null)
+                return found;
+
+            foreach (var cell in CellManager.CellsIn(mapChannel, source.Cells))
+                foreach (var creature in cell.CreatureList)
+                    if (creature != source && creature.State != CharacterState.Dead && creature.State != CharacterState.Dying
+                        && creature.Attributes.TryGetValue(Attributes.Health, out var health) && health.Current > 0
+                        && Vector3.DistanceSquared(creature.Position, centre) <= radius * radius
+                        && BehaviorManager.MayFight(source, creature.EntityId))
+                        found.Add(creature);
+
+            return found.Distinct().ToList();
         }
 
         /// <summary>Sets off the bombs on this map whose time has come. Run every map tick.</summary>
@@ -701,6 +730,24 @@ namespace Rasa.Managers
                 if (knockback > 0 && victim.State != CharacterState.Dead && victim.Attributes[Attributes.Health].Current > 0)
                     PlayerCrowdControl.Knockback(mapChannel, victim, holder, knockback);
             }
+
+            // A Necromite's takes the creatures it may fight too.
+            if (bomb.HitsCreatures)
+                foreach (var victim in CaughtCreatures(mapChannel, bomb.Source, holder.Position, bomb.Radius))
+                {
+                    var (amount, resisted, crit) = Roll(bomb.Source, victim, bomb.Action, bomb.DamageType);
+                    var taken = ActorManager.Instance.Damage(mapChannel, victim, amount, bomb.Source, bomb.DamageType);
+
+                    blast.Hits.Add(new TickEntry
+                    {
+                        EntityId = victim.EntityId,
+                        Amount = amount,
+                        Resisted = resisted,
+                        DamageType = bomb.DamageType,
+                        IsCritical = crit,
+                        DeathBlow = taken > 0 && victim.Attributes[Attributes.Health].Current <= 0
+                    });
+                }
 
             CellManager.Instance.CellCallMethod(mapChannel, holder, blast);
             GameEffectManager.Instance.DettachEffect(mapChannel, holder, bomb.Effect);

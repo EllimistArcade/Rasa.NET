@@ -26,11 +26,11 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 56003, "Bane Xanx xanx_v1_web", 238, 1, 1.0, 40.0, 30000, 1060, 21, 42, 4 };
             yield return new object[] { 56004, "Xanx Divide xanx_v1_web", 238, 1, 1.0, 40.0, 30000, 1060, 42, 84, 4 };
             yield return new object[] { 56005, "Arioch (Xanx boss) xanx_v2_web", 440, 2, 1.0, 40.0, 30000, 1060, 84, 168, 4 };
-            yield return new object[] { 56006, "Atta Harvester Ashen Desert atta_harvester_pheromone", 476, 1, 0.5, 10.0, 12000, 600, 0, 0, 1 };
+            yield return new object[] { 56006, "Atta Harvester Ashen Desert harvester_pheromone", 476, 1, 0.5, 10.0, 12000, 600, 0, 0, 1 };
             yield return new object[] { 56007, "Atta Harvester Incline atta_harvester_pheromone", 476, 1, 0.5, 10.0, 12000, 600, 0, 0, 1 };
             yield return new object[] { 56008, "Atta Harvester Plains atta_harvester_pheromone", 476, 1, 0.5, 10.0, 12000, 600, 0, 0, 1 };
-            yield return new object[] { 56009, "Atta Harvester Thunderhead atta_harvester_pheromone", 476, 1, 0.5, 10.0, 12000, 600, 0, 0, 1 };
-            yield return new object[] { 56010, "Phuumz (Atta Harvester boss) atta_harvester_pheromone", 476, 2, 0.5, 10.0, 12000, 600, 0, 0, 1 };
+            yield return new object[] { 56009, "Atta Harvester Thunderhead harvester_pheromone", 476, 1, 0.5, 10.0, 12000, 600, 0, 0, 1 };
+            yield return new object[] { 56010, "Phuumz atta_harvester_pheromone", 476, 2, 0.5, 10.0, 12000, 600, 0, 0, 1 };
             yield return new object[] { 56011, "Bane Miasma miasma_gas_cloud", 208, 1, 1.0, 10.0, 15000, 600, 0, 0, 1 };
             yield return new object[] { 56012, "Miasma Howling Maw miasma_gas_cloud", 208, 1, 1.0, 10.0, 15000, 600, 0, 0, 1 };
             yield return new object[] { 56013, "Thrax Technician boss 520009 thrax_decay", 450, 1, 1.0, 30.0, 10000, 500, 3, 6, 4 };
@@ -47,8 +47,8 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 56024, "Thrax Technician boss 520045 thrax_polarity_field", 456, 5, 1.0, 60.0, 15000, 500, 0, 0, 1 };
             yield return new object[] { 56025, "Thrax Technician boss 520052 thrax_decay", 450, 1, 1.0, 30.0, 10000, 500, 33, 70, 4 };
             yield return new object[] { 56026, "Thrax Technician boss 520052 thrax_polarity_field", 456, 5, 1.0, 60.0, 15000, 500, 0, 0, 1 };
-            yield return new object[] { 56027, "Thrax Grenadier boss 520008 thrax_explosive_nanites", 457, 1, 1.0, 30.0, 15000, 500, 4, 9, 6 };
-            yield return new object[] { 56028, "Thrax Grenadier boss 520061 thrax_explosive_nanites", 457, 1, 1.0, 30.0, 15000, 500, 62, 147, 6 };
+            yield return new object[] { 56027, "Thrax Grenadier boss 520008 explosive_nanites", 457, 1, 1.0, 30.0, 15000, 500, 4, 9, 6 };
+            yield return new object[] { 56028, "Thrax Grenadier boss 520061 explosive_nanites", 457, 1, 1.0, 30.0, 15000, 500, 62, 147, 6 };
             yield return new object[] { 56029, "Bane Hunter 41 hunter_net", 403, 1, 1.0, 40.0, 10000, 900, 6, 11, 13 };
             yield return new object[] { 56030, "Bane Hunter 45 hunter_net", 403, 1, 1.0, 40.0, 10000, 900, 5, 10, 13 };
             yield return new object[] { 56031, "Bane Hunter 530007 hunter_net", 403, 1, 1.0, 40.0, 10000, 900, 11, 21, 13 };

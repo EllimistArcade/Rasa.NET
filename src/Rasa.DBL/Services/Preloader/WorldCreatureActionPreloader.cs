@@ -50,7 +50,7 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 53022, "Linker Ashen Desert linker_hand_blast", 412, 1, 1.0, 40.0, 5000, 566, 220, 293, 1 };
             yield return new object[] { 53023, "Atta Soldier Ashen Desert atta_soldier_acid_spit", 479, 1, 1.0, 10.0, 5000, 0, 161, 330, 4 };
             yield return new object[] { 53024, "Atta Soldier Ashen Desert atta_soldier_melee", 478, 1, 0.5, 4.0, 1000, 0, 367, 734, 1 };
-            yield return new object[] { 53025, "Atta Harvester Ashen Desert atta_harvester_acid_spit", 475, 1, 1.0, 20.0, 5000, 0, 168, 235, 4 };
+            yield return new object[] { 53025, "Atta Harvester Ashen Desert harvester_acid_spit", 475, 1, 1.0, 20.0, 5000, 0, 168, 235, 4 };
             yield return new object[] { 53026, "Atta Grub Ashen Desert atta_grub_melee", 499, 1, 0.5, 2.0, 1000, 433, 202, 404, 1 };
             yield return new object[] { 53027, "Thrax Soldier Crucible thrax_kick", 397, 1, 0.5, 3.0, 10000, 333, 166, 218, 1 };
             yield return new object[] { 53028, "Thrax Soldier Crucible weapon 174/48", 174, 48, 0.5, 3.5, 1300, 0, 320, 480, 1 };
@@ -178,7 +178,7 @@ namespace Rasa.Services.Preloader
             yield return new object[] { 53150, "Maw Pools maw_melee", 422, 1, 0.5, 5.0, 1000, 0, 188, 380, 1 };
             yield return new object[] { 53151, "Atta Soldier Thunderhead atta_soldier_acid_spit", 479, 1, 1.0, 10.0, 5000, 0, 176, 360, 4 };
             yield return new object[] { 53152, "Atta Soldier Thunderhead atta_soldier_melee", 478, 1, 0.5, 4.0, 1000, 0, 400, 800, 1 };
-            yield return new object[] { 53153, "Atta Harvester Thunderhead atta_harvester_acid_spit", 475, 1, 1.0, 20.0, 5000, 0, 183, 257, 4 };
+            yield return new object[] { 53153, "Atta Harvester Thunderhead harvester_acid_spit", 475, 1, 1.0, 20.0, 5000, 0, 183, 257, 4 };
             yield return new object[] { 53154, "Atta Grub Thunderhead atta_grub_melee", 499, 1, 0.5, 2.0, 1000, 433, 220, 440, 1 };
             yield return new object[] { 53155, "Thrax Soldier Thunderhead thrax_kick", 397, 1, 0.5, 3.0, 10000, 333, 139, 183, 1 };
             yield return new object[] { 53156, "Thrax Soldier Thunderhead weapon 174/48", 174, 48, 0.5, 3.5, 1300, 0, 269, 404, 1 };

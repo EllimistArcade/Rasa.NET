@@ -29,11 +29,14 @@ namespace Rasa.Managers
     ///    a HealAbility aimed at nothing - its side within RADIUS_AROUND_SOURCE (24 m), itself
     ///    included, each healed by the argument's DAMAGE_AMOUNT_MIN..MAX (the only amount it
     ///    has), announced as bare heal amounts as the Caretaker's is.
-    ///  - Jumpstart (TechnicianReviveAbility, CR_TECHNICIAN_REVIVE 400): a Thrax Technician's
-    ///    revive, the Caretaker's in every way the data shows - canTargetDead, a bare heal amount
-    ///    per hit, AnnounceRevive - with its bolt's flight (VFX_VELOCITY 10 m/s) added to its
-    ///    windup. The client's range is 1 m, which would have it walk to the body; the row's
-    ///    reach is the corpse it can bring back from where it stands.
+    ///  - Jumpstart (TechnicianReviveAbility, CR_TECHNICIAN_REVIVE 400): "Perform emergency
+    ///    repairs and restart a downed vehicle, turret, or other mechanical ally." The Caretaker's
+    ///    revive as the data shows it - canTargetDead, a bare heal amount per hit, AnnounceRevive
+    ///    - with its bolt's flight (VFX_VELOCITY 10 m/s) added to its windup, on machines only: a
+    ///    MECHANICAL or MACHINA corpse of its side (a Linker, a Machina, a Shield Drone, a Bane
+    ///    turret), its own summoned turret included. The client's range is 1 m, which would have
+    ///    it walk to the body; the row's reach is the corpse it can bring back from where it
+    ///    stands.
     ///  - Self revive (MachinaReviveAbility, CR_MACHINA_REVIVE 429): a Machina's first death in a
     ///    life is not its end. It goes down - no kill, no experience, no loot - and the recovery
     ///    (3 s) later stands up at HEAL_PERCENT of its health and goes back to its fight; the next
@@ -156,6 +159,9 @@ namespace Rasa.Managers
 
         private static bool IsMachine(Creature creature)
         {
+            if (creature == null)
+                return false;
+
             var flags = CreatureManager.CreatureFlagsOf(creature);
 
             return flags.Contains((int)CreatureFlag.Mechanical) || flags.Contains((int)CreatureFlag.Machina);
@@ -176,9 +182,21 @@ namespace Rasa.Managers
         /// ReviveWindowMs, a spawned creature (not a minion or a scripted object), not claimed by a
         /// corpse ability, and not one the client has taken away (a Howler's death bomb).
         /// </summary>
-        public static bool IsRevivable(Creature caster, Creature corpse)
+        public static bool IsRevivable(Creature caster, Creature corpse, bool summonsToo = false)
         {
-            if (corpse == null || corpse == caster || corpse.State != CharacterState.Dead || corpse.IsScripted || corpse.MasterEntityId != 0)
+            if (corpse == null || caster == null || corpse == caster || corpse.State != CharacterState.Dead || corpse.IsScripted)
+                return false;
+
+            // A minion is its master's; a creature's summon (a turret) only where the revive allows it.
+            if (corpse.MasterEntityId != 0 && !(summonsToo && CreatureSummons.IsSummoned(corpse)))
+                return false;
+
+            // A Machina lying down before its own self revive gets itself up.
+            if (IsCasting(corpse))
+                return false;
+
+            // A Necromite is blowing the body up.
+            if (CreatureBombs.IsCorpseClaimed(corpse))
                 return false;
 
             if (corpse.TargetCategory != caster.TargetCategory || corpse.Controller.DeadTime > ReviveWindowMs)
@@ -193,6 +211,15 @@ namespace Rasa.Managers
 
             // Claimed by Reanimation, Cadaver Immolation, a Hortimonculus.
             return !AbilityManager.IsBiologicalCorpse(corpse) || AbilityManager.IsUsableCorpse(corpse);
+        }
+
+        /// <summary>Whether this caster's revive may bring this corpse back: a Technician's jumpstart machines alone, summoned turrets included.</summary>
+        public static bool CanRevive(Creature caster, CreatureAction action, Creature corpse)
+        {
+            if (action != null && action.ActionId == TechnicianRevive)
+                return IsMachine(corpse) && IsRevivable(caster, corpse, summonsToo: true);
+
+            return IsRevivable(caster, corpse);
         }
 
         /// <summary>
@@ -237,7 +264,7 @@ namespace Rasa.Managers
                     {
                         var reach = (float)Math.Max(1, action.RangeMax);
 
-                        target = CorpsesWithin(mapChannel, creature, reach).FirstOrDefault(c => IsRevivable(creature, c));
+                        target = CorpsesWithin(mapChannel, creature, reach).FirstOrDefault(c => CanRevive(creature, action, c));
 
                         if (target == null)
                             continue;
@@ -443,7 +470,7 @@ namespace Rasa.Managers
             var recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.Heal);
 
             // Gone, taken, or looted away in the windup: the Caretaker performs and nobody gets up.
-            if (corpse != null && corpse.MapContextId == mapChannel.MapInfo.MapContextId && IsRevivable(caster, corpse))
+            if (corpse != null && corpse.MapContextId == mapChannel.MapInfo.MapContextId && CanRevive(caster, action, corpse))
             {
                 var health = Revive(mapChannel, corpse, RollHeal(caster, info), caster);
 

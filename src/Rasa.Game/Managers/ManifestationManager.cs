@@ -3065,7 +3065,7 @@ namespace Rasa.Managers
                     Logger.WriteLog(LogType.Error, "UpdateStatsValues: Player try to equip non_armor item");
                     continue;
                 }
-                armorMax += equipmentItem.ItemTemplate.ArmorValue;      // ToDo
+                armorMax += equipmentItem.ItemTemplate.ArmorValue;      // the class's max_hp (itemtemplate_armor, Add_armor_values)
                 armorRegenRate += classInfo.ArmorClassInfo.RegenRate;
                 
                 // what about damage absorbed? Was it used at all?

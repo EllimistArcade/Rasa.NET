@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -251,7 +251,7 @@ namespace Rasa.Managers
             BehaviorManager.Instance.StopMoving(creature);
             creature.Controller.Path.Clear();
             Busy(creature, (info?.WindupMs ?? 0) + (info?.RecoveryMs ?? 0));
-            habit.CooldownTimer = habit.Cooldown;
+            habit.CooldownTimer = BehaviorManager.NextCooldown(creature, habit);
         }
 
         private static void Steal(MapChannel mapChannel, Creature filcher, CreatureAction habit, Creature corpse)
@@ -303,7 +303,7 @@ namespace Rasa.Managers
                 .ToList();
 
             Show(mapChannel, predator, habit, null, seen);
-            habit.CooldownTimer = habit.Cooldown;
+            habit.CooldownTimer = BehaviorManager.NextCooldown(predator, habit);
 
             foreach (var player in seen.Where(Detection.IsHidden))
                 Detection.Reveal(mapChannel, player);

@@ -217,7 +217,7 @@ namespace Rasa.Managers
             if (heal.CooldownTimer > 0)
                 return;
 
-            heal.CooldownTimer = heal.Cooldown;
+            heal.CooldownTimer = BehaviorManager.NextCooldown(drone, heal);
 
             var amount = HealAmount(drone);
 

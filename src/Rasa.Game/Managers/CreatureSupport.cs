@@ -173,7 +173,7 @@ namespace Rasa.Managers
             if (mapChannel == null || creature?.Actions == null || IsCasting(creature))
                 return false;
 
-            foreach (var action in creature.Actions)
+            foreach (var action in BehaviorManager.ByReadiness(creature.Actions))
             {
                 if (action.CooldownTimer > 0)
                     continue;
@@ -215,7 +215,7 @@ namespace Rasa.Managers
                 }
 
                 Start(mapChannel, creature, action, kind, target, info.WindupMs);
-                action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
+                action.CooldownTimer = BehaviorManager.NextCooldown(creature, action);
 
                 return true;
             }

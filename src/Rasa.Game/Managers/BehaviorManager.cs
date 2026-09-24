@@ -96,6 +96,16 @@ namespace Rasa.Managers
         /// </summary>
         public const long HoldForCooldownMs = 1500;
 
+        /// <summary>
+        /// The least and most a creature waits past an action's cooldown before it may use it
+        /// again, as a share of that cooldown (NextCooldown): a random wait of 1% to 50% on top, so
+        /// a pack does not fire in step and a rotation does not tick like a clock.
+        /// </summary>
+        public const double CooldownJitterMin = 0.01;
+        public const double CooldownJitterMax = 0.50;
+
+        private static readonly Random CooldownRandom = new Random();
+
         public const byte WanderIdle = 0;
         public const byte WanderMoving = 1;
 
@@ -727,7 +737,8 @@ namespace Rasa.Managers
                 // round whatever is in the way, not stand at the edge of its range.
                 var sightBlocked = false;
 
-                foreach (var action in creature.Actions)
+                // Longest ready first: every attack is used as it comes off cooldown (ByReadiness).
+                foreach (var action in ByReadiness(creature.Actions))
                 {
                     // Heals and revives are not aimed at the enemy (CreatureSupport.TryStart), nor
                     // are the habits (CreatureHabits).
@@ -763,7 +774,7 @@ namespace Rasa.Managers
                         if (!CreatureBuffs.Perform(mapChannel, creature, action, targetActor))
                             continue;
 
-                        action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
+                        action.CooldownTimer = NextCooldown(creature, action);
                         break;
                     }
 
@@ -794,7 +805,7 @@ namespace Rasa.Managers
                     {
                         AmoeboidVomit.Perform(mapChannel, creature, action);
 
-                        action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
+                        action.CooldownTimer = NextCooldown(creature, action);
                         break;
                     }
 
@@ -806,7 +817,7 @@ namespace Rasa.Managers
                         KaelRushingBlow.Start(mapChannel, creature, action, targetActor, dmg);
                         AbilityManager.OnCreatureActed(mapChannel, creature, true);
 
-                        action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
+                        action.CooldownTimer = NextCooldown(creature, action);
                         break;
                     }
 
@@ -819,7 +830,7 @@ namespace Rasa.Managers
                     AbilityManager.OnCreatureActed(mapChannel, creature, true);
 
                     // set cooldown, lengthened by whatever slows its attacks (Called Shot: Arm)
-                    action.CooldownTimer = (long)Math.Round(action.Cooldown * GameEffectManager.AttackRateModifierOf(creature));
+                    action.CooldownTimer = NextCooldown(creature, action);
 
                     // creature used action, break loop
                     break;
@@ -1302,6 +1313,43 @@ namespace Rasa.Managers
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// When a creature may use an action again after using it now: its cooldown, lengthened by
+        /// whatever slows its attacks (Called Shot: Arm), plus a random CooldownJitterMin to
+        /// CooldownJitterMax of that again.
+        /// </summary>
+        public static long NextCooldown(Creature creature, CreatureAction action)
+        {
+            double unit;
+
+            lock (CooldownRandom)
+                unit = CooldownRandom.NextDouble();
+
+            return WithJitter(action.Cooldown * (creature != null ? GameEffectManager.AttackRateModifierOf(creature) : 1.0), unit);
+        }
+
+        /// <summary>A cooldown with its wait on top, for a roll in [0, 1): 1% of it at 0, 50% at 1.</summary>
+        public static long WithJitter(double cooldown, double unit)
+        {
+            if (cooldown <= 0)
+                return 0;
+
+            var share = CooldownJitterMin + Math.Max(0, Math.Min(1, unit)) * (CooldownJitterMax - CooldownJitterMin);
+
+            return (long)Math.Round(cooldown * (1 + share));
+        }
+
+        /// <summary>
+        /// A creature's actions in the order it should try them: the one that came off cooldown
+        /// longest ago first (a ready action's timer keeps counting down below zero), then the rest.
+        /// Every attack gets its turn as it comes ready, rather than the first slots taking every
+        /// opening and the later ones waiting behind them. Ties keep their slot order.
+        /// </summary>
+        public static List<CreatureAction> ByReadiness(IEnumerable<CreatureAction> actions)
+        {
+            return actions.OrderBy(a => a.CooldownTimer).ToList();
         }
 
         public void SetActionFighting(Creature creature, ulong targetEntityId)

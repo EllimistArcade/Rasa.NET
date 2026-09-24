@@ -754,6 +754,11 @@ namespace Rasa.Managers
             if (missile.AreaDamage <= 0 && CreatureEffectAttacks.KindOf(missile.ActionId, missile.ActionArgId) == CreatureEffectAttacks.Kind.None)
                 return;
 
+            // A missile that lands as a bomb (a Predator's) hits the one it was fired at: its
+            // blast is what reaches the rest (CreatureBombs.GroundBlast), whatever cone it aims in.
+            if (CreatureEffectAttacks.KindOf(missile.ActionId, missile.ActionArgId) == CreatureEffectAttacks.Kind.GroundBlast)
+                return;
+
             var area = missile.AreaOverride ?? CreatureAreaAttacks.AreaOf(missile.ActionId, missile.ActionArgId);
 
             if (!area.IsArea)

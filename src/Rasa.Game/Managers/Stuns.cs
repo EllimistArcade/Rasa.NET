@@ -68,7 +68,9 @@ namespace Rasa.Managers
         /// <summary>
         /// The stun an ability's hit carries, from its data: (chance, milliseconds), or (0, 0) for
         /// none. STUN_CHANCE/STUN_DURATION where the ability has them; otherwise the duration
-        /// Tectonic Strike, Concussive Wave and Rushing Blow keep in DURATION_MS or DURATION.
+        /// Tectonic Strike, Concussive Wave and Rushing Blow keep in DURATION_MS or DURATION. A
+        /// Tectonic Strike with no DURATION_MS gives DURATION in seconds (the Treeback's stomp,
+        /// CR_TREEBACK_STOMP 190: DURATION 8).
         /// </summary>
         public static (int Chance, int Ms) OfAbility(string module, ActionLevelInfo info)
         {
@@ -78,7 +80,7 @@ namespace Rasa.Managers
             switch (module)
             {
                 case "abilities.tectonicstrike":
-                    return (100, info.Get(AbilityProperty.DurationMs));
+                    return (100, info.Has(AbilityProperty.DurationMs) ? info.Get(AbilityProperty.DurationMs) : info.Get(AbilityProperty.Duration) * 1000);
                 case "abilities.concussivewave":
                 case "abilities.rushingblow":
                 case "abilities.ai.kaelrushingblowability":

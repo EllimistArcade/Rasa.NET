@@ -179,6 +179,9 @@ namespace Rasa.Managers
             return (Math.Max(0, knockback), chance, ms);
         }
 
+        /// <summary>Whether the action's knockback carries its stun too, rather than the stun being what it does when it does not knock back.</summary>
+        public static bool KnocksDownAndStuns(string module) => module == "abilities.tectonicstrike";
+
         /// <summary>A creature's attack has hit a player: its knockback or stun, if its action carries one.</summary>
         public static void CreatureActionHit(MapChannel mapChannel, Creature attacker, Manifestation player, ActionId actionId, uint actionArgId)
         {
@@ -189,9 +192,11 @@ namespace Rasa.Managers
             var (knockback, chance, ms) = OfCreatureAction(module, info);
 
             // CHANCE_KNOCK_BACK, where the action gives one (Kael rushing blow: 30%), is the
-            // chance the knockback lands; one that does not can still stagger.
+            // chance the knockback lands; one that does not can still stagger. A Tectonic Strike
+            // knocks back and stuns, as a player's does: the stun keeps them down after the
+            // getup (the Treeback's stomp: 20 m, then 8 s).
             if (knockback > 0 && Stuns.Roll(info.Get(AbilityProperty.ChanceKnockBack, 100)))
-                Knockback(mapChannel, player, attacker, knockback);
+                Knockback(mapChannel, player, attacker, knockback, KnocksDownAndStuns(module) ? ms : 0);
             else if (ms > 0 && Stuns.Roll(chance))
                 Stun(mapChannel, player, attacker, ms);
         }

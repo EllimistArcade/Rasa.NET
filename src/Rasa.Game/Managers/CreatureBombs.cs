@@ -34,6 +34,9 @@ namespace Rasa.Managers
     ///    LINKER_GROUND_BLAST, the class's targetGameEffect, announced by the attack's recovery -
     ///    going off at once on everyone within EFFECT_RADIUS of that player
     ///    (CreatureEffectAttacks puts it on; the attack itself does no damage).
+    ///  - Missile (PredatorMissileAbility 426): the same on the player a Predator's missile hits -
+    ///    PREDATOR_MISSILE_EXPLOSION, a BombEffect whose removeTarget is off, the class's
+    ///    targetGameEffect - going off at once within EFFECT_RADIUS (10 m).
     ///
     /// The damage is the creature_action row's, resisted as the argument's DAMAGE_TYPE (physical
     /// when it gives none), and only players take it. Death actions sit on the creature's row with
@@ -49,6 +52,7 @@ namespace Rasa.Managers
         public const ActionId PredatorDeath = (ActionId)407;
         public const ActionId FithikSelfDestruct = (ActionId)180;
         public const ActionId LinkerGroundBlast = (ActionId)264;
+        public const ActionId PredatorMissile = (ActionId)426;
 
         public const int HowlerDeathTypeId = 461;           // HOWLER_DEATH
 
@@ -59,6 +63,7 @@ namespace Rasa.Managers
         public const int HowlerDeathFxLevel = 13;
         public const int PredatorDeathTypeId = 286;         // PREDATOR_DEATH_EXPLOSION
         public const int LinkerGroundBlastTypeId = 298;     // LINKER_GROUND_BLAST
+        public const int PredatorMissileTypeId = 284;       // PREDATOR_MISSILE_EXPLOSION
 
         /// <summary>Ours: the share of its health at which a Fithik starts its self-destruct.</summary>
         public const int SelfDestructHealthPercent = 20;
@@ -74,7 +79,8 @@ namespace Rasa.Managers
                 case HowlerDeath:
                 case PredatorDeath: return Kind.DeathBomb;
                 case FithikSelfDestruct: return Kind.SelfDestruct;
-                case LinkerGroundBlast: return Kind.GroundBlast;
+                case LinkerGroundBlast:
+                case PredatorMissile: return Kind.GroundBlast;
                 default: return Kind.None;
             }
         }
@@ -175,13 +181,16 @@ namespace Rasa.Managers
             Arm(mapChannel, creature, creature, action, bomb, RadiusOf(info), TypeOf(info), delayMs);
         }
 
-        /// <summary>A Linker's ground blast has hit a player: the bomb on them, going off at once.</summary>
+        /// <summary>The bomb an attack that lands as one puts on the player it hits: a Predator's missile's, else a Linker's ground blast.</summary>
+        public static int GroundBlastTypeOf(ActionId actionId) => actionId == PredatorMissile ? PredatorMissileTypeId : LinkerGroundBlastTypeId;
+
+        /// <summary>A Linker's ground blast or a Predator's missile has hit a player: the bomb on them, going off at once.</summary>
         public static GameEffect GroundBlast(MapChannel mapChannel, Creature linker, Manifestation player, CreatureAction action, ActionLevelInfo info)
         {
             if (mapChannel == null || linker == null || player == null || action == null || info == null)
                 return null;
 
-            var bomb = NewBomb(mapChannel, linker, player, info, LinkerGroundBlastTypeId, 0, announce: false);
+            var bomb = NewBomb(mapChannel, linker, player, info, GroundBlastTypeOf(action.ActionId), 0, announce: false);
 
             bomb.IsBuff = false;
             GameEffectManager.Instance.Attach(mapChannel, player, bomb);

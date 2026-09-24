@@ -790,11 +790,16 @@ namespace Rasa.Managers
                         break;
                     }
 
-                    // Rage, Scourge, a warcry: on itself or its own side, and only when it would
-                    // do something; otherwise on to the next action (CreatureBuffs).
-                    if (CreatureBuffs.Is(action))
+                    // Rage, Scourge, a warcry: on itself or its own side (CreatureBuffs); a
+                    // Howler's shriek, on every player around it (CreatureDebuffs). Only when it
+                    // would do something; otherwise on to the next action.
+                    if (CreatureBuffs.Is(action) || CreatureDebuffs.Is(action))
                     {
-                        if (!CreatureBuffs.Perform(mapChannel, creature, action, targetActor))
+                        var used = CreatureBuffs.Is(action)
+                            ? CreatureBuffs.Perform(mapChannel, creature, action, targetActor)
+                            : CreatureDebuffs.Perform(mapChannel, creature, action);
+
+                        if (!used)
                             continue;
 
                         action.CooldownTimer = NextCooldown(creature, action);

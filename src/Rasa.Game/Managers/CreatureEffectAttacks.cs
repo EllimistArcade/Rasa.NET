@@ -36,8 +36,20 @@ namespace Rasa.Managers
     ///    argument's DAMAGE_TYPE, USE_COUNT times at most, USE_DROPOFF seconds apart
     ///    (AbilityManager.OnPlayerNanites).
     ///
-    ///  - Ground blast, no hit (LinkerGroundBlastAbility): a bomb on the player that goes off on
-    ///    everyone around them (CreatureBombs.GroundBlast).
+    ///  - Ground blast, no hit (LinkerGroundBlastAbility, PredatorMissileAbility): a bomb on the
+    ///    player that goes off on everyone around them (CreatureBombs.GroundBlast). The Predator's
+    ///    missile has a cone in its data (CONE_RADIUS 45, FOV_LIMIT 45) as well as the blast's
+    ///    EFFECT_RADIUS; the cone is where it may aim, and the blast is what spreads it, so the
+    ///    missile hits the one it was fired at (MissileManager.CreatureAreaHits).
+    ///  - Hit and burn (StriderEyeAbility, StriderLaserBeamAbility): the row's damage as a hit,
+    ///    and STRIDER_EYE_EXPLOSION 357 on the player for EFFECT_DURATION_MS, every
+    ///    EFFECT_INTERVAL_MS burning everyone within EFFECT_RADIUS of them - the player hit
+    ///    included - for EFFECT_DAMAGE_MIN..MAX. The row holds the hit's damage; the burn's is the
+    ///    row's scaled by the argument's EFFECT_DAMAGE to DAMAGE_AMOUNT (40-60 against 80-100 on
+    ///    the eye). The eye's class names the effect as its targetGameEffect, so its recovery
+    ///    announces it; the laser's names none, and the laser's data carries the same burn, so it
+    ///    carries it on the same effect, announced as it attaches. The effect has no FX of its
+    ///    own (no specialFX); it is what floats the burn's numbers (AnnounceDamage).
     ///
     /// Effects the client class names are attached quietly: the recovery that follows lists the
     /// player as hit, and TargetedAction.OnServerResolution announces the class's
@@ -49,7 +61,7 @@ namespace Rasa.Managers
     /// </summary>
     public static class CreatureEffectAttacks
     {
-        public enum Kind { None, DamageOverTime, Hold, Blind, ResistDown, Polarity, Nanites, GroundBlast }
+        public enum Kind { None, DamageOverTime, Hold, Blind, ResistDown, Polarity, Nanites, GroundBlast, Burn }
 
         public const int DecayTypeId = 82;                      // DECAY
         public const int AcidSpitTypeId = 379;                  // ATTA_HARVESTER_ACID_SPIT
@@ -60,6 +72,10 @@ namespace Rasa.Managers
         public const int GasCloudTypeId = 278;                  // MIASMA_GAS_CLOUD
         public const int PolarityFieldTypeId = 262;             // POLARITY_FIELD
         public const int ExplodingNanitesTypeId = 10000020;     // EXPLODING_NANITES_EFFECT
+        public const int StriderEyeExplosionTypeId = 357;       // STRIDER_EYE_EXPLOSION
+
+        public const string StriderEyeModule = "abilities.ai.stridereyeability";
+        public const string StriderLaserBeamModule = "abilities.ai.striderlaserbeamability";
 
         /// <summary>Ours: how far a creature's Polarity Field lowers the one resistance - the player version's PER_PUMP_MOD at one pump.</summary>
         public const int PolarityVulnerability = 10;
@@ -86,7 +102,11 @@ namespace Rasa.Managers
                 case "abilities.explodingnanites":
                     return Kind.Nanites;
                 case "abilities.ai.linkergroundblastability":
+                case "abilities.ai.predatormissileability":
                     return Kind.GroundBlast;
+                case StriderEyeModule:
+                case StriderLaserBeamModule:
+                    return Kind.Burn;
                 default:
                     return Kind.None;
             }
@@ -105,7 +125,7 @@ namespace Rasa.Managers
         /// its tick's, and the resistance, polarity and nanite attacks do no damage of their own;
         /// their classes have no DoAbility to show one.
         /// </summary>
-        public static bool Hits(Kind kind) => kind == Kind.None || kind == Kind.Hold || kind == Kind.Blind;
+        public static bool Hits(Kind kind) => kind == Kind.None || kind == Kind.Hold || kind == Kind.Blind || kind == Kind.Burn;
 
         /// <summary>A player a creature's attack has hit: the attack's effect, if it carries one.</summary>
         public static void OnHit(MapChannel mapChannel, Creature attacker, Manifestation player, Missile missile)
@@ -124,7 +144,8 @@ namespace Rasa.Managers
             if (kind == Kind.None)
                 return;
 
-            // A Linker's ground blast is a bomb on the player, going off on everyone near them.
+            // A Linker's ground blast or a Predator's missile is a bomb on the player, going off
+            // on everyone near them.
             if (kind == Kind.GroundBlast)
             {
                 CreatureBombs.GroundBlast(mapChannel, attacker, player, missile.CreatureAction, info);
@@ -135,6 +156,28 @@ namespace Rasa.Managers
 
             if (effect != null)
                 GameEffectManager.Instance.Attach(mapChannel, player, effect);
+        }
+
+        /// <summary>
+        /// A burn's damage per tick: the row's hit damage scaled by the argument's EFFECT_DAMAGE
+        /// to DAMAGE_AMOUNT, min by min and max by max. Nothing when the argument has no burn.
+        /// </summary>
+        public static (int Min, int Max) BurnOf(int rowMin, int rowMax, ActionLevelInfo info)
+        {
+            if (info == null)
+                return (0, 0);
+
+            int Scaled(int row, AbilityProperty effect, AbilityProperty hit)
+            {
+                var of = info.Get(hit);
+
+                return of > 0 ? (int)Math.Round((double)row * info.Get(effect) / of) : 0;
+            }
+
+            var min = Scaled(rowMin, AbilityProperty.EffectDamageMin, AbilityProperty.DamageAmountMin);
+            var max = Scaled(rowMax, AbilityProperty.EffectDamageMax, AbilityProperty.DamageAmountMax);
+
+            return (Math.Min(min, max), Math.Max(min, max));
         }
 
         /// <summary>The effect an attack puts on a player, from its module, its level and the creature's row; null for none.</summary>
@@ -228,6 +271,28 @@ namespace Rasa.Managers
 
                     effect.ResistDamageType = (DamageType)info.Get(AbilityProperty.DamageType, (int)DamageType.Physical);
                     effect.ResistModifier = -PolarityVulnerability;
+
+                    return effect;
+                }
+
+                case Kind.Burn:
+                {
+                    var burn = BurnOf(rowMin, rowMax, info);
+
+                    if (burn.Max <= 0)
+                        return null;
+
+                    var interval = Math.Max(250, info.Get(AbilityProperty.EffectIntervalMs, 1000));
+                    var duration = Math.Max(interval, info.Get(AbilityProperty.EffectDurationMs, 5000));
+                    var effect = Effect(StriderEyeExplosionTypeId, duration + 250L, module == StriderLaserBeamModule);
+
+                    effect.TickDamageMin = burn.Min;
+                    effect.TickDamageMax = burn.Max;
+                    effect.TickDamageType = (DamageType)info.Get(AbilityProperty.DamageType, (int)DamageType.Physical);
+                    effect.TickScaleType = 0;   // the row's numbers are already the creature's
+                    effect.TickRadius = Math.Max(1, info.Get(AbilityProperty.EffectRadius, 5));
+                    effect.TickIntervalMs = interval;
+                    effect.NextTickTick = now + interval;
 
                     return effect;
                 }

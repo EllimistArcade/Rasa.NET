@@ -18,7 +18,9 @@ namespace Rasa.Managers
     ///    and look for loot to steal" - "There is absolutely no reason to let them loot the Bane
     ///    soldiers and deprive the AFS of necessary bounty". An idle Filcher that sees a corpse
     ///    with loot on it that nobody has open, within SightRange, flies to it and takes the loot:
-    ///    the dispenser is gone.
+    ///    the dispenser is gone. It takes it when its windup is done (0.8 s, the client's
+    ///    animation), not as it starts: a player who opens the corpse, or kills or stuns the
+    ///    Filcher, before then keeps the loot.
     ///  - Xanx devour (XanxDevourAbility, CR_XANX_DEVOUR 438): Xanx "eat dead Xanx to regain HP".
     ///    A hurt idle Xanx that sees a Xanx corpse within SightRange goes and eats it; one in a
     ///    fight below DevourInFightPercent of its health eats one it is standing by. It regains
@@ -258,10 +260,29 @@ namespace Rasa.Managers
         {
             var info = LevelOf(habit);
 
-            LootDispenserManager.Instance.RemoveForCreature(mapChannel, corpse);
-
             Hold(filcher, habit, info);
-            Show(mapChannel, filcher, habit, corpse, new[] { corpse });
+
+            CellManager.Instance.CellCallMethod(mapChannel, filcher,
+                new PerformWindupPacket(PerformType.ThreeArgs, habit.ActionId, habit.ActionArgId, corpse.EntityId));
+
+            // The loot goes when the windup is done (CreatureWindups), if it is still there to take.
+            CreatureWindups.After(mapChannel, filcher, info?.WindupMs ?? 0, () => TakeLoot(mapChannel, filcher, habit, corpse));
+        }
+
+        /// <summary>The Filcher's windup is done: the loot, if nobody has opened the corpse or cleared it meanwhile, and the recovery either way.</summary>
+        private static void TakeLoot(MapChannel mapChannel, Creature filcher, CreatureAction habit, Creature corpse)
+        {
+            var taken = corpse.MapContextId == filcher.MapContextId && IsWorthStealing(mapChannel, corpse);
+
+            if (taken)
+                LootDispenserManager.Instance.RemoveForCreature(mapChannel, corpse);
+
+            var recovery = new AbilityRecoveryPacket(habit.ActionId, habit.ActionArgId, AbilityRecoveryPacket.HitDataKind.None);
+
+            if (taken)
+                recovery.Hits.Add(new AbilityHit { EntityId = corpse.EntityId });
+
+            CellManager.Instance.CellCallMethod(mapChannel, filcher, recovery);
         }
 
         private static void Devour(MapChannel mapChannel, Creature xanx, CreatureAction habit, Creature corpse)

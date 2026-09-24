@@ -42,14 +42,15 @@ namespace Rasa.Managers
     ///    EFFECT_RADIUS; the cone is where it may aim, and the blast is what spreads it, so the
     ///    missile hits the one it was fired at (MissileManager.CreatureAreaHits).
     ///  - Hit and burn (StriderEyeAbility, StriderLaserBeamAbility): the row's damage as a hit,
-    ///    and STRIDER_EYE_EXPLOSION 357 on the player for EFFECT_DURATION_MS, every
-    ///    EFFECT_INTERVAL_MS burning everyone within EFFECT_RADIUS of them - the player hit
-    ///    included - for EFFECT_DAMAGE_MIN..MAX. The row holds the hit's damage; the burn's is the
+    ///    and a damage-over-time on every player within EFFECT_RADIUS of the one hit, that one
+    ///    included: EFFECT_DAMAGE_MIN..MAX every EFFECT_INTERVAL_MS for EFFECT_DURATION_MS. The
+    ///    client has the burns as classes of their own - StriderEyeEffect (STRIDER_EYE 358, FX
+    ///    at level 1) and StriderLaserBeamEffect (STRIDER_LASER_BEAM 360), both DamageOverTime,
+    ///    whose OnTick floats [(targetId, rawInfo)] - so each victim carries its own and walking
+    ///    out of the blast does not take it off. The row holds the hit's damage; the burn's is the
     ///    row's scaled by the argument's EFFECT_DAMAGE to DAMAGE_AMOUNT (40-60 against 80-100 on
-    ///    the eye). The eye's class names the effect as its targetGameEffect, so its recovery
-    ///    announces it; the laser's names none, and the laser's data carries the same burn, so it
-    ///    carries it on the same effect, announced as it attaches. The effect has no FX of its
-    ///    own (no specialFX); it is what floats the burn's numbers (AnnounceDamage).
+    ///    the eye). The eye's class names STRIDER_EYE_EXPLOSION 357 as its targetGameEffect: it
+    ///    is put on the player hit, briefly and quietly, for the recovery to announce.
     ///
     /// Effects the client class names are attached quietly: the recovery that follows lists the
     /// player as hit, and TargetedAction.OnServerResolution announces the class's
@@ -73,6 +74,11 @@ namespace Rasa.Managers
         public const int PolarityFieldTypeId = 262;             // POLARITY_FIELD
         public const int ExplodingNanitesTypeId = 10000020;     // EXPLODING_NANITES_EFFECT
         public const int StriderEyeExplosionTypeId = 357;       // STRIDER_EYE_EXPLOSION
+        public const int StriderEyeTypeId = 358;                // STRIDER_EYE, the eye's burn
+        public const int StriderLaserBeamTypeId = 360;          // STRIDER_LASER_BEAM, the laser's burn
+
+        /// <summary>Ours: how long the eye's explosion stays on the player hit - long enough for the recovery to find it.</summary>
+        public const long ExplosionMs = 1000;
 
         public const string StriderEyeModule = "abilities.ai.stridereyeability";
         public const string StriderLaserBeamModule = "abilities.ai.striderlaserbeamability";
@@ -152,10 +158,48 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A Strider's eye or laser: the explosion on the player hit, and a burn on everyone
+            // around them.
+            if (kind == Kind.Burn)
+            {
+                Burn(mapChannel, attacker, player, missile, module, info);
+                return;
+            }
+
             var effect = Build(mapChannel, attacker, missile, module, kind, info);
 
             if (effect != null)
                 GameEffectManager.Instance.Attach(mapChannel, player, effect);
+        }
+
+        private static void Burn(MapChannel mapChannel, Creature attacker, Manifestation player, Missile missile, string module, ActionLevelInfo info)
+        {
+            if (module == StriderEyeModule)
+                GameEffectManager.Instance.Attach(mapChannel, player, new GameEffect
+                {
+                    TypeId = StriderEyeExplosionTypeId,
+                    EffectId = GameEffectManager.Instance.NextEffectId(mapChannel),
+                    EffectLevel = info.Level,
+                    ActionId = info.ActionId,
+                    SourceId = attacker.EntityId,
+                    Source = attacker,
+                    SourceLevel = (int)attacker.Level,
+                    IsBuff = false,
+                    ExpiresTick = Environment.TickCount64 + ExplosionMs,
+                    AnnounceOnAttach = false        // the recovery announces it
+                });
+
+            var radius = Math.Max(1, info.Get(AbilityProperty.EffectRadius, 5));
+
+            foreach (var victim in CreatureBombs.Caught(mapChannel, attacker, player.Position, radius))
+            {
+                var burn = Build(mapChannel, attacker, missile, module, Kind.Burn, info);
+
+                if (burn == null)
+                    return;
+
+                GameEffectManager.Instance.Attach(mapChannel, victim, burn);
+            }
         }
 
         /// <summary>
@@ -284,13 +328,12 @@ namespace Rasa.Managers
 
                     var interval = Math.Max(250, info.Get(AbilityProperty.EffectIntervalMs, 1000));
                     var duration = Math.Max(interval, info.Get(AbilityProperty.EffectDurationMs, 5000));
-                    var effect = Effect(StriderEyeExplosionTypeId, duration + 250L, module == StriderLaserBeamModule);
+                    var effect = Effect(module == StriderLaserBeamModule ? StriderLaserBeamTypeId : StriderEyeTypeId, duration + 250L, true);
 
                     effect.TickDamageMin = burn.Min;
                     effect.TickDamageMax = burn.Max;
                     effect.TickDamageType = (DamageType)info.Get(AbilityProperty.DamageType, (int)DamageType.Physical);
                     effect.TickScaleType = 0;   // the row's numbers are already the creature's
-                    effect.TickRadius = Math.Max(1, info.Get(AbilityProperty.EffectRadius, 5));
                     effect.TickIntervalMs = interval;
                     effect.NextTickTick = now + interval;
 

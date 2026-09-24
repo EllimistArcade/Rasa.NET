@@ -538,9 +538,7 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Damage from a tick: to the holder (a damage-over-time), or to every hostile within
-        /// TickRadius of the holder (Scourge) - for an effect a creature put on a player (a
-        /// Strider's burn), every player that creature may fight within TickRadius of them, the
-        /// holder among them. Rolled and scaled to the source's level like any
+        /// TickRadius of the holder (Scourge). Rolled and scaled to the source's level like any
         /// ability damage, with the victim's resistance applied. A damage-over-time whose source
         /// has left the map ends: there is nobody to credit a kill to, and a creature brought to
         /// zero with no killer is left standing.
@@ -559,9 +557,7 @@ namespace Rasa.Managers
 
             if (effect.TickRadius > 0)
             {
-                if (actor is Manifestation && source is Creature burner)
-                    targets.AddRange(CreatureBombs.Caught(mapChannel, burner, actor.Position, effect.TickRadius));   // a Strider's burn
-                else if (actor is Manifestation holder)
+                if (actor is Manifestation holder)
                     targets.AddRange(AbilityManager.HostilesWithin(mapChannel, holder, actor.Position, effect.TickRadius));
                 else if (actor is Creature creatureHolder)
                     targets.AddRange(CreatureBombs.Caught(mapChannel, creatureHolder, actor.Position, effect.TickRadius));   // a Thrax's Scourge

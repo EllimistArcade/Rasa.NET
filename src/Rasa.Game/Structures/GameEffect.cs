@@ -89,6 +89,13 @@ namespace Rasa.Structures
         public bool IsSkillPassive { get; set; }
 
         /// <summary>
+        /// Kept on the server and told to no client: an effect the server needs whose type the
+        /// client has no class for (a grub's cocoon, CreatureSummons). Its attach, detach and
+        /// its introduction to newcomers are not sent.
+        /// </summary>
+        public bool ServerOnly { get; set; }
+
+        /// <summary>
         /// Values for the client's tooltip beyond the fixed ones (duration, damage type, buff
         /// flags), keyed as the effect's tooltip format string names them - dmgMod, resistMod,
         /// healMin and so on. Every key the string uses has to be here or the client's %
@@ -275,6 +282,13 @@ namespace Rasa.Structures
 
         /// <summary>Metres around the holder the tick's damage reaches; 0 means the holder is what is damaged.</summary>
         public float TickRadius { get; set; }
+
+        /// <summary>
+        /// A TickRadius effect whose client class's OnTick takes the damage list (a Stalker's
+        /// egg charge, StalkerEggChargeEffect): the hits go out as its tick rather than through
+        /// AnnounceDamage, which is for a class whose OnTick takes nothing (Scourge).
+        /// </summary>
+        public bool TickRadiusAsTick { get; set; }
 
         /// <summary>Healing on each tick, before level scaling; 0 for none.</summary>
         public int TickHealMin { get; set; }

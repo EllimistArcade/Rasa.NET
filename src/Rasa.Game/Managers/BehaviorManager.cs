@@ -294,10 +294,11 @@ namespace Rasa.Managers
             // but it can still cross into another cell doing so.
             var knockedBack = StepKnockback(mapChannel, creature, delta);
 
-            // Mid-charge (Kael rushing blow), or winding up to blow itself up (a Fithik), it does
-            // nothing else until that is done.
+            // Mid-charge (Kael rushing blow), winding up to blow itself up (a Fithik) or to drop
+            // an egg (a Stalker), or in a cocoon (an Atta grub), it does nothing else until that
+            // is done.
             if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature) || CreatureBombs.IsSelfDestructing(creature)
-                || CreatureSupport.IsCasting(creature) || CreatureHabits.IsBusy(creature))
+                || CreatureSupport.IsCasting(creature) || CreatureHabits.IsBusy(creature) || CreatureSummons.IsBusy(creature))
             {
                 needCellUpdate = CellChanged(creature, delta);
                 return;
@@ -736,6 +737,11 @@ namespace Rasa.Managers
                     return;
                 }
 
+                // Brought to half its health, an Atta grub cocoons, and comes out an adult
+                // (CreatureSummons).
+                if (CreatureSummons.TryCocoon(mapChannel, creature))
+                    return;
+
                 // A Caretaker or a Technician looks after its side first: a heal, a repair or a
                 // revive, when one would do something (CreatureSupport).
                 if (CreatureSupport.TryStart(mapChannel, creature))
@@ -791,13 +797,16 @@ namespace Rasa.Managers
                     }
 
                     // Rage, Scourge, a warcry: on itself or its own side (CreatureBuffs); a
-                    // Howler's shriek, on every player around it (CreatureDebuffs). Only when it
-                    // would do something; otherwise on to the next action.
-                    if (CreatureBuffs.Is(action) || CreatureDebuffs.Is(action))
+                    // Howler's shriek, on every player around it (CreatureDebuffs); a Technician's
+                    // turret or a Hunter's pet (CreatureSummons); a Stalker's egg charge
+                    // (CreatureBombs). Only when it would do something; otherwise on to the next
+                    // action.
+                    if (CreatureBuffs.Is(action) || CreatureDebuffs.Is(action) || CreatureSummons.IsSummon(action) || CreatureBombs.IsOvulate(action))
                     {
-                        var used = CreatureBuffs.Is(action)
-                            ? CreatureBuffs.Perform(mapChannel, creature, action, targetActor)
-                            : CreatureDebuffs.Perform(mapChannel, creature, action);
+                        var used = CreatureBuffs.Is(action) ? CreatureBuffs.Perform(mapChannel, creature, action, targetActor)
+                            : CreatureDebuffs.Is(action) ? CreatureDebuffs.Perform(mapChannel, creature, action)
+                            : CreatureSummons.IsSummon(action) ? CreatureSummons.Perform(mapChannel, creature, action, targetActor)
+                            : CreatureBombs.Ovulate(mapChannel, creature, action);
 
                         if (!used)
                             continue;

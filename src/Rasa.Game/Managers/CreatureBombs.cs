@@ -34,6 +34,15 @@ namespace Rasa.Managers
     ///    LINKER_GROUND_BLAST, the class's targetGameEffect, announced by the attack's recovery -
     ///    going off at once on everyone within EFFECT_RADIUS of that player
     ///    (CreatureEffectAttacks puts it on; the attack itself does no damage).
+    ///  - Egg (StalkerOvulateAbility 441, StalkerEggDropAbility 442): a Stalker ovulates -
+    ///    STALKER_EGG_CHARGE 304 on itself, the class's sourceGameEffect, for EFFECT_DURATION_MS
+    ///    (20 s), every EFFECT_INTERVAL_MS (2 s) burning every player within EFFECT_RADIUS (20 m)
+    ///    for the ovulate row's damage, the tick StalkerEggChargeEffect.OnTick floats - and when
+    ///    the charge is done it drops the egg: its windup (3.7 s, standing still), then
+    ///    STALKER_EGG_DROP_EXPLOSION 305 on itself going off DELAY_TIME_MS later on every player
+    ///    within the drop's EFFECT_RADIUS (60 m) for the egg row's damage, EMP, knocking them
+    ///    KNOCKBACK_DISTANCE (10 m) back. One killed before the egg drops does not drop it. When
+    ///    to ovulate is ours: in a fight, with a player in reach, not already charging.
     ///  - Missile (PredatorMissileAbility 426): the same on the player a Predator's missile hits -
     ///    PREDATOR_MISSILE_EXPLOSION, a BombEffect whose removeTarget is off, the class's
     ///    targetGameEffect - going off at once within EFFECT_RADIUS (10 m).
@@ -53,6 +62,8 @@ namespace Rasa.Managers
         public const ActionId FithikSelfDestruct = (ActionId)180;
         public const ActionId LinkerGroundBlast = (ActionId)264;
         public const ActionId PredatorMissile = (ActionId)426;
+        public const ActionId StalkerOvulate = (ActionId)441;
+        public const ActionId StalkerEggDrop = (ActionId)442;
 
         public const int HowlerDeathTypeId = 461;           // HOWLER_DEATH
 
@@ -64,6 +75,8 @@ namespace Rasa.Managers
         public const int PredatorDeathTypeId = 286;         // PREDATOR_DEATH_EXPLOSION
         public const int LinkerGroundBlastTypeId = 298;     // LINKER_GROUND_BLAST
         public const int PredatorMissileTypeId = 284;       // PREDATOR_MISSILE_EXPLOSION
+        public const int StalkerEggChargeTypeId = 304;      // STALKER_EGG_CHARGE
+        public const int StalkerEggDropTypeId = 305;        // STALKER_EGG_DROP_EXPLOSION
 
         /// <summary>Ours: the share of its health at which a Fithik starts its self-destruct.</summary>
         public const int SelfDestructHealthPercent = 20;
@@ -89,6 +102,10 @@ namespace Rasa.Managers
 
         public static bool IsSelfDestruct(CreatureAction action) => action != null && action.ActionId == FithikSelfDestruct;
 
+        public static bool IsOvulate(CreatureAction action) => action != null && action.ActionId == StalkerOvulate;
+
+        public static bool IsEggDrop(CreatureAction action) => action != null && action.ActionId == StalkerEggDrop;
+
         /// <summary>Whether a Fithik at this health should start its self-destruct.</summary>
         public static bool ShouldSelfDestruct(int health, int maxHealth) => maxHealth > 0 && health > 0 && health * 100 <= maxHealth * SelfDestructHealthPercent;
 
@@ -110,7 +127,8 @@ namespace Rasa.Managers
             public Creature Source;
             public Actor Holder;
             public CreatureAction Action;
-            public GameEffect Effect;          // null for a self-destruct, which is a recovery
+            public GameEffect Effect;          // null for a self-destruct or an egg's windup, which are recoveries
+            public bool EggDrop;               // the windup is a Stalker's egg drop, not a self-destruct
             public float Radius;
             public DamageType DamageType;
             public long GoesOffAt;
@@ -120,7 +138,7 @@ namespace Rasa.Managers
         private static readonly object BombsLock = new object();
         private static readonly Random Random = new Random();
 
-        /// <summary>Whether the creature is winding up its self-destruct: it does nothing else.</summary>
+        /// <summary>Whether the creature is winding up its self-destruct, or a Stalker its egg drop: it does nothing else.</summary>
         public static bool IsSelfDestructing(Creature creature)
         {
             lock (BombsLock)
@@ -204,6 +222,130 @@ namespace Rasa.Managers
             return bomb;
         }
 
+        /// <summary>
+        /// A Stalker ovulates, if it would do something: not already charging or dropping an egg,
+        /// with a player in the charge's reach. The charge burns around it, and when it is done
+        /// the egg drops (StartEggDrop). Whether it did.
+        /// </summary>
+        public static bool Ovulate(MapChannel mapChannel, Creature stalker, CreatureAction action)
+        {
+            if (mapChannel == null || stalker == null || !IsOvulate(action) || IsSelfDestructing(stalker) || IsCharging(stalker))
+                return false;
+
+            var info = LevelOf(action);
+
+            if (info == null)
+                return false;
+
+            var radius = Math.Max(1, info.Get(AbilityProperty.EffectRadius, 20));
+
+            if (Caught(mapChannel, stalker, stalker.Position, radius).Count == 0)
+                return false;
+
+            var interval = Math.Max(250, info.Get(AbilityProperty.EffectIntervalMs, 2000));
+            var now = Environment.TickCount64;
+            var egg = stalker.Actions.FirstOrDefault(IsEggDrop);
+
+            var charge = new GameEffect
+            {
+                TypeId = StalkerEggChargeTypeId,
+                EffectId = GameEffectManager.Instance.NextEffectId(mapChannel),
+                EffectLevel = info.Level,
+                ActionId = info.ActionId,
+                SourceId = stalker.EntityId,
+                Source = stalker,
+                SourceLevel = (int)stalker.Level,
+                IsBuff = true,
+                AllowDetach = false,
+                AnnounceOnAttach = false,       // the recovery announces it, the class's sourceGameEffect
+                ExpiresTick = now + Math.Max(interval, info.Get(AbilityProperty.EffectDurationMs, 20000)) + 250,
+                TickDamageMin = (int)action.MinDamage,
+                TickDamageMax = (int)Math.Max(action.MinDamage, action.MaxDamage),
+                TickDamageType = TypeOf(info),
+                TickScaleType = 0,              // the row's numbers are already the creature's
+                TickRadius = radius,
+                TickRadiusAsTick = true,
+                TickIntervalMs = interval,
+                NextTickTick = now + interval
+            };
+
+            // Charged - run its course, not cut short by a death or a leash - the egg drops, if the
+            // Stalker is still standing to drop it.
+            if (egg != null)
+                charge.OnExpired = (map, actor, effect) =>
+                {
+                    if (map != null && actor is Creature dropper && dropper.State != CharacterState.Dead && dropper.State != CharacterState.Dying
+                        && dropper.Attributes[Attributes.Health].Current > 0)
+                        StartEggDrop(map, dropper, egg);
+                };
+
+            GameEffectManager.Instance.Attach(mapChannel, stalker, charge);
+
+            CellManager.Instance.CellCallMethod(mapChannel, stalker, new PerformWindupPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
+            CellManager.Instance.CellCallMethod(mapChannel, stalker, new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
+
+            return true;
+        }
+
+        /// <summary>Whether a Stalker is charging an egg.</summary>
+        public static bool IsCharging(Creature creature) =>
+            creature.ActiveEffects.Values.Any(e => e.TypeId == StalkerEggChargeTypeId && !e.IsExpired);
+
+        /// <summary>A Stalker's egg is charged: it stops, winds the drop up, and drops it when that is done.</summary>
+        public static void StartEggDrop(MapChannel mapChannel, Creature stalker, CreatureAction action)
+        {
+            if (mapChannel == null || stalker == null || action == null || IsSelfDestructing(stalker))
+                return;
+
+            var info = LevelOf(action);
+
+            if (info == null)
+                return;
+
+            BehaviorManager.Instance.StopMoving(stalker);
+            stalker.Controller.Path.Clear();
+
+            CellManager.Instance.CellCallMethod(mapChannel, stalker, new PerformWindupPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
+
+            lock (BombsLock)
+                Bombs.Add(new Pending
+                {
+                    MapChannel = mapChannel,
+                    Source = stalker,
+                    Holder = stalker,
+                    Action = action,
+                    EggDrop = true,
+                    Radius = RadiusOf(info),
+                    DamageType = TypeOf(info),
+                    GoesOffAt = Environment.TickCount64 + Math.Max(0, info.WindupMs)
+                });
+        }
+
+        /// <summary>The egg drop's windup is up: the bomb on the Stalker, announced by the recovery, going off DELAY_TIME_MS later.</summary>
+        private static void DropEgg(MapChannel mapChannel, Pending windup)
+        {
+            var stalker = windup.Source;
+
+            if (stalker.State == CharacterState.Dead || stalker.State == CharacterState.Dying || stalker.MapContextId != mapChannel.MapInfo.MapContextId
+                || !stalker.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
+                return;
+
+            var info = LevelOf(windup.Action);
+
+            if (info == null)
+                return;
+
+            var delayMs = Math.Max(0, info.Get(AbilityProperty.DelayTimeMs));
+            var bomb = NewBomb(mapChannel, stalker, stalker, info, StalkerEggDropTypeId, delayMs, announce: false);
+
+            GameEffectManager.Instance.Attach(mapChannel, stalker, bomb);
+
+            // TARGET_NONE with a sourceGameEffect: the recovery announces it on the Stalker.
+            CellManager.Instance.CellCallMethod(mapChannel, stalker, new AbilityRecoveryPacket(windup.Action.ActionId, windup.Action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
+
+            Arm(mapChannel, stalker, stalker, windup.Action, bomb, windup.Radius, windup.DamageType, delayMs);
+        }
+
         /// <summary>A Fithik starts its self-destruct: the windup to everyone who can see it, and the blast when it is up.</summary>
         public static void StartSelfDestruct(MapChannel mapChannel, Creature fithik, CreatureAction action)
         {
@@ -270,7 +412,9 @@ namespace Rasa.Managers
 
             foreach (var bomb in due)
             {
-                if (bomb.Effect == null)
+                if (bomb.Effect == null && bomb.EggDrop)
+                    DropEgg(mapChannel, bomb);
+                else if (bomb.Effect == null)
                     SelfDestruct(mapChannel, bomb);
                 else
                     Explode(mapChannel, bomb);
@@ -312,6 +456,7 @@ namespace Rasa.Managers
                 return;
 
             var blast = new GameEffectAnnounceDamagePacket(bomb.Effect.EffectId, "DoExplosion");
+            var knockback = LevelOf(bomb.Action)?.Get(AbilityProperty.KnockbackDistance) ?? 0;
 
             foreach (var victim in Caught(mapChannel, bomb.Source, holder.Position, bomb.Radius))
             {
@@ -320,6 +465,10 @@ namespace Rasa.Managers
                 ActorManager.Instance.Damage(mapChannel, victim, amount, bomb.Source, bomb.DamageType);
 
                 blast.Hits.Add(new TickEntry { EntityId = victim.EntityId, Amount = amount, Resisted = resisted, DamageType = bomb.DamageType, IsCritical = crit });
+
+                // KNOCKBACK_DISTANCE, where the blast has one (a Stalker's egg): away from where it went off.
+                if (knockback > 0 && victim.State != CharacterState.Dead && victim.Attributes[Attributes.Health].Current > 0)
+                    PlayerCrowdControl.Knockback(mapChannel, victim, holder, knockback);
             }
 
             CellManager.Instance.CellCallMethod(mapChannel, holder, blast);

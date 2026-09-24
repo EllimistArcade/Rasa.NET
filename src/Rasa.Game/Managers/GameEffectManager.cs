@@ -144,7 +144,11 @@ namespace Rasa.Managers
 
             var attached = AttachedPacket(effect, effect.AnnounceOnAttach);
 
-            if (effect.IsSkillPassive)
+            if (effect.ServerOnly)
+            {
+                // nobody is told
+            }
+            else if (effect.IsSkillPassive)
                 ClientOf(mapChannel, actor)?.CallMethod(actor.EntityId, attached);
             else
                 CellManager.Instance.CellCallMethod(mapChannel, actor, attached);
@@ -204,7 +208,7 @@ namespace Rasa.Managers
                 if (effect.IsExpired)
                     continue;
 
-                if (effect.IsSkillPassive && viewer != actor)
+                if (effect.ServerOnly || effect.IsSkillPassive && viewer != actor)
                     continue;
 
                 packets.Add(AttachedPacket(effect, effect.AnnounceToNewcomers));
@@ -300,7 +304,11 @@ namespace Rasa.Managers
 
             // inform clients (Recv_GameEffectDetached 75)
             // Told to whoever was told of it.
-            if (gameEffect.IsSkillPassive)
+            if (gameEffect.ServerOnly)
+            {
+                // nobody was told of it
+            }
+            else if (gameEffect.IsSkillPassive)
                 ClientOf(mapChannel, actor)?.CallMethod(actor.EntityId, new GameEffectDetachedPacket { EffectId = gameEffect.EffectId });
             else
                 CellManager.Instance.CellCallMethod(mapChannel, actor, new GameEffectDetachedPacket { EffectId = gameEffect.EffectId });
@@ -583,7 +591,7 @@ namespace Rasa.Managers
                 });
             }
 
-            if (effect.TickRadius > 0)
+            if (effect.TickRadius > 0 && !effect.TickRadiusAsTick)
             {
                 // The holder is not the one hurt, so the effect announces the damage on their
                 // behalf; the client's ScourgeEffect ticks on damage, so this is its tick too.

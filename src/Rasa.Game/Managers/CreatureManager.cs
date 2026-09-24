@@ -229,11 +229,15 @@ namespace Rasa.Managers
             // Creature back on its feet, so a claim left over from a previous life would still be
             // sitting there the next time it died to something that was not a player, and that
             // player would be handed a corpse they did not earn.
-            creature.HarvestOwnerEntityId = client?.Player.EntityId ?? 0;
-            creature.HarvestAttemptsLeft = client != null ? Harvest.AttemptsPerCorpse : 0;
+            // A turret or a pet another creature brought in is nothing to loot or harvest
+            // (CreatureSummons): only its experience is earned.
+            var summoned = CreatureSummons.IsSummoned(creature);
+
+            creature.HarvestOwnerEntityId = !summoned ? client?.Player.EntityId ?? 0 : 0;
+            creature.HarvestAttemptsLeft = client != null && !summoned ? Harvest.AttemptsPerCorpse : 0;
 
             // spawn loot
-            if (killedBy != null && client != null)
+            if (killedBy != null && client != null && !summoned)
                 LootDispenserManager.Instance.Loot(client, creature);
         }
 

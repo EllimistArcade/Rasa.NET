@@ -30,7 +30,8 @@ namespace Rasa.Managers
             (EntityClasses)11302,   // Emplacement_AFS_Turret_Mini, "AFS Light Turret"
             (EntityClasses)23902,   // Emplacement_AFS_Turret_Brann, "Brann Turret"
             (EntityClasses)7482,    // Emplacement_Bane_Turret_Standard
-            (EntityClasses)10509    // Emplacement_Bane_Turret_Mini
+            (EntityClasses)10509,   // Emplacement_Bane_Turret_Mini
+            (EntityClasses)20359    // Ability_Bane_Turret, a Technician's (CreatureSummons): it stands where it was set down
         };
 
         /// <summary>Whether this creature is an emplacement: it is if its class is one.</summary>

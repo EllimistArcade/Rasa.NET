@@ -214,6 +214,9 @@ namespace Rasa.Managers
                     // Creature heals, repairs and revives whose windup is up.
                     CreatureSupport.Worker(mapChannel);
 
+                    // Summoned turrets and pets whose time is up; grubs out of their cocoons.
+                    CreatureSummons.Worker(mapChannel);
+
                     // Crab Mines: seeking, running, going off.
                     AbilityManager.Instance.CrabMineWorker(mapChannel);
 

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Rasa.Managers
 {
@@ -269,6 +270,12 @@ namespace Rasa.Managers
                 LoadedItemTemplates[template.Id].ItemInfo.Tradable = template.NotTradableFlag != 0;
                 LoadedItemTemplates[template.Id].QualityId = template.QualityId;
                 LoadedItemTemplates[template.Id].SellPrice = template.SellPrice;
+
+                // What the client calls the buyback price is what a vendor pays for the item, the
+                // sell price. It was never filled in, so every tooltip sent 0: the client read the
+                // item as worth nothing, priced every repair at its 1-credit floor while the server
+                // charged its own figure, and showed a sale value and an auction price of 0.
+                LoadedItemTemplates[template.Id].ItemInfo.BuyBackPrice = Math.Max(template.SellPrice, 0);
             }
             
             Logger.WriteLog(LogType.Initialize, $"Loaded {itemTemplatesData.Count} ItemTemplates.");
@@ -399,6 +406,13 @@ namespace Rasa.Managers
                 return;
 
             client.CallMethod(item.EntityId, new ItemStatusPacket(item.CurrentHitPoints, maxHitPoints));
+        }
+
+        /// <summary>Writes an item's current hit points - its condition - to the database.</summary>
+        internal void SaveHitPoints(IItemChange item)
+        {
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            unitOfWork.Items.UpdateCurrentHitPoints(item);
         }
 
         internal void UpdateItemCurrentAmmo(IItemChange item)

@@ -50,5 +50,13 @@
 
         /// <summary>When <see cref="Heat"/> was last brought up to date, in Environment.TickCount64 ms.</summary>
         public long HeatUpdatedAt { get; set; }
+
+        /// <summary>
+        /// Wear not yet taken off <see cref="CurrentHitPoints"/>, in hit points, 0 to 1. A shot
+        /// costs a weapon a few thousandths of a hit point; they add up here until they make a
+        /// whole one (Managers.Durability). Not persisted: what is lost with it at logout is less
+        /// than a hit point.
+        /// </summary>
+        public double WearCarry { get; set; }
     }
 }

@@ -235,6 +235,11 @@ namespace Rasa.Managers
             health.Current -= healthTaken;
             CellManager.Instance.CellCallMethod(mapChannel, target, new UpdateHealthPacket(health, target is Creature ? target.EntityId : 0));
 
+            // A hit a player endures wears the armour they have on (Durability) - a creature's
+            // lightning, an effect's tick, as weapon fire does in MissileManager.
+            if (target is Manifestation struck && armorTaken + healthTaken > 0)
+                Durability.WearArmor(mapChannel, struck);
+
             if (target is Creature creature)
             {
                 if (health.Current <= 0)

@@ -334,6 +334,10 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A broken weapon is no use for swinging either (Durability).
+            if (weapon != player.MorphWeapon && Durability.IsBroken(weapon))
+                return;
+
             // Only the swing this weapon has. A client naming any other action as its alt attack
             // is asking for something the weapon cannot do.
             if ((uint)packet.ActionId != weaponInfo.AltActionId || (uint)packet.ActionArgId != weaponInfo.AltActionArgId)
@@ -373,6 +377,18 @@ namespace Rasa.Managers
             // The alt damage is a single figure - the tooltip shows one number for it - and so is the swing.
             var damage = (int)(weaponInfo.WeaponAltInfo?.AltMaxDamage ?? 0);
             var pump = SkillPump(player, WeaponSkills.HandToHand);
+
+            // It is the weapon being swung, so it is the weapon's condition that decides how hard,
+            // and the swing is an attack that wears it - by its share of a second, as a shot does,
+            // and only if the barrel is still hot from shooting (a swing adds no heat itself).
+            if (weapon != player.MorphWeapon)
+            {
+                var swingSkill = WeaponSkillOf(weapon);
+                var barrel = CurrentHeat(weapon, WeaponSkills.CoolRateModifier(swingSkill, SkillPump(player, swingSkill)));
+
+                damage = Durability.ScaleDamage(weapon, damage);
+                Durability.WearWeapon(client, weapon, Math.Max(MinRefire, SwingCycleMs(level)), barrel);
+            }
 
             damage = GameEffectManager.ApplyDamageDealt(player, damage, WeaponSkills.DamagePercent(WeaponSkills.HandToHand, pump));
 
@@ -706,6 +722,13 @@ namespace Rasa.Managers
                 return FireResult.NotFired;
             }
 
+            // Nor does a broken one, until it is repaired: "You will no longer gain any benefit
+            // from the equipment until it is repaired." The client was told when it broke
+            // (WeaponBroken) and paints it red in the drawer. A polymorphed player's creature
+            // weapon has no condition to speak of.
+            if (weapon != client.Player.MorphWeapon && Durability.IsBroken(weapon))
+                return FireResult.NotFired;
+
             // ToDo: isOverheated, and some other checks
             if (!client.Player.WeaponReady)
             {
@@ -785,6 +808,17 @@ namespace Rasa.Managers
             // let's calculate damage
             var damageRange = weaponClassInfo.MaxDamage - weaponClassInfo.MinDamage;
             var damage = weaponClassInfo.MinDamage + new Random().Next(0, damageRange + 1);
+
+            // A worn weapon hits softer (Durability): full damage down to 75% condition, half at
+            // 25% and below. Then the shot wears it, by its share of a second of firing - if it
+            // went with the barrel at or above MIN_HEAT_FOR_DURABILITY_LOSS. The heat is the
+            // barrel's with this shot's own added (AddWeaponHeat, above): the shot that takes it
+            // over the line is fired hot.
+            if (weapon != client.Player.MorphWeapon)
+            {
+                damage = Durability.ScaleDamage(weapon, damage);
+                Durability.WearWeapon(client, weapon, Math.Max(MinRefire, weapon.ItemTemplate.WeaponInfo.Refire), weapon.Heat);
+            }
 
             // Then the weapon skill's bonus (+10% a pump from pump 2) and what the effects on
             // the shooter do to it - Rage's bonus, Sacrifice's trade - added together.
@@ -3065,8 +3099,16 @@ namespace Rasa.Managers
                     Logger.WriteLog(LogType.Error, "UpdateStatsValues: Player try to equip non_armor item");
                     continue;
                 }
-                armorMax += equipmentItem.ItemTemplate.ArmorValue;      // the class's max_hp (itemtemplate_armor, Add_armor_values)
-                armorRegenRate += classInfo.ArmorClassInfo.RegenRate;
+                // What a piece gives the armour bar is what its condition leaves of it: all of it
+                // down to 75%, half at 25% and below, nothing broken (Durability). "Armor cannot
+                // absorb damage as efficiently" - and the bar is what absorbs. A broken piece
+                // gives no regeneration either: "no longer gain any benefit".
+                var effectiveness = Durability.EffectivenessOf(equipmentItem);
+
+                armorMax += equipmentItem.ItemTemplate.ArmorValue * effectiveness;      // the class's max_hp (itemtemplate_armor, Add_armor_values)
+
+                if (effectiveness > 0)
+                    armorRegenRate += classInfo.ArmorClassInfo.RegenRate;
                 
                 // what about damage absorbed? Was it used at all?
             }

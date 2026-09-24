@@ -386,7 +386,12 @@ namespace Rasa.Managers
             // Self Destruct goes off on the next damage its holder takes, and Conversion turns
             // what landed into healing for the squad.
             if (actor is Manifestation victim && armorDecrease + healthDecrease > 0)
+            {
                 AbilityManager.OnPlayerDamaged(mapChannel, victim, armorDecrease + healthDecrease);
+
+                // "The more hits you endure, the more your equipment's durability decreases."
+                Durability.WearArmor(mapChannel, victim);
+            }
 
             // A creature attack that knocks back or stuns does so to a player as well, and one
             // that carries a game effect puts it on them (CreatureEffectAttacks) - before the

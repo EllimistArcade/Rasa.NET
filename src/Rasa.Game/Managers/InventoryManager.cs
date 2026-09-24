@@ -1382,11 +1382,12 @@ namespace Rasa.Managers
             if (!usable)
                 return AddItemToInventory(client, item);
 
-            var itemClassInfo = EntityClassManager.Instance.GetItemClassInfo(item);
-
             item.OwnerId = client.Player.Id;
             item.OwnerSlotId = destSlot;
-            item.CurrentHitPoints = itemClassInfo.MaxHitPoints;
+            // Its condition comes with it. This used to put every item back to its maximum on the
+            // way in, which was harmless while nothing wore - and a free repair once things do: sell
+            // a worn piece and buy it back, or put it in the clan lockbox and take it out again. Every
+            // item is made at its maximum (ItemManager.CreateItem), so there is nothing to top up.
 
             ItemManager.Instance.SendItemDataToClient(client, item, false);
             AddItemBySlot(client, InventoryType.Personal, item.EntityId, destSlot, true, true);
@@ -1472,7 +1473,6 @@ namespace Rasa.Managers
                 {
                     item.OwnerId = client.Player.Id;
                     item.OwnerSlotId = (uint)(itemCategoryOffset + i);
-                    item.CurrentHitPoints = itemClassInfo.MaxHitPoints;
                     // send data to client
                     ItemManager.Instance.SendItemDataToClient(client, item, false);
                     // add item to empty slot
@@ -1563,7 +1563,6 @@ namespace Rasa.Managers
                     // AddItemBySlot sets OwnerId for the destination; SelectedSlot (a pod
                     // number) used to be stored here as if it were a character id.
                     item.OwnerSlotId = (uint)(i);
-                    item.CurrentHitPoints = itemClassInfo.MaxHitPoints;
                     // send data to client
                     ItemManager.Instance.SendItemDataToClient(client, item, false);
                     // add item to empty slot

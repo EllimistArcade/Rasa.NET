@@ -731,7 +731,11 @@ namespace Rasa.Managers
             if (item.CurrentHitPoints >= maxHitPoints)
                 return false;
 
-            cost = (int)Math.Round((double)(maxHitPoints - item.CurrentHitPoints) * item.ItemTemplate.SellPrice / 100);
+            // The client's price, so the repair window charges what it shows (Durability.RepairCost).
+            // The old (max - current) x sell / 100 grew with the item's maximum: a chest piece of
+            // 3,600 hit points fully worn cost 36 times its sell price, where the client showed
+            // at most one.
+            cost = Durability.RepairCost(item);
 
             return true;
         }
@@ -749,6 +753,7 @@ namespace Rasa.Managers
             }
 
             item.CurrentHitPoints = maxHitPoints;
+            item.WearCarry = 0;
             ManifestationManager.Instance.LossCredits(client, cost);
             ItemManager.Instance.SendItemDataToClient(client, item, true);
 
@@ -759,6 +764,11 @@ namespace Rasa.Managers
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             unitOfWork.Items.UpdateCurrentHitPoints(item);
+
+            // Worn armour that is being worn gave less to the armour bar than it will now.
+            if (client.Player.Inventory.EquippedInventory.Contains(itemEntityId)
+                && EntityClassManager.Instance.GetClassInfo(item.ItemTemplate.Class)?.ArmorClassInfo != null)
+                ManifestationManager.Instance.RefreshStats(client.Player);
 
             return RepairResult.Repaired;
         }

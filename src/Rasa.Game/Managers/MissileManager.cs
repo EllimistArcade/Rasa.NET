@@ -556,7 +556,8 @@ namespace Rasa.Managers
         /// <param name="coneHalfAngle">Degrees either side of the shooter's facing a cone weapon hits (ConeWeapons); 0 for a single target.</param>
         /// <param name="knockbackStunMs">How much longer a creature the knockback lands on stays down (Hand to Hand).</param>
         /// <param name="landsInMs">A creature ability's windup and flight (CreatureWindups): when it lands, in place of the half a millisecond a metre a shot takes.</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0, int knockbackStunMs = 0, CreatureAction creatureAction = null, int? landsInMs = null)
+        /// <param name="optimalRange">A player's weapon shot: the weapon's optimal range, past which its damage drops (RangeFalloff); 0 for no drop.</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0, int knockbackStunMs = 0, CreatureAction creatureAction = null, int? landsInMs = null, float optimalRange = 0)
         {
             var missile = new Missile
             {
@@ -575,7 +576,8 @@ namespace Rasa.Managers
                 // Launchers: the share each splashed creature takes is of the damage before the
                 // crit roll, which only the target hit makes.
                 SplashRadius = Math.Max(0, splashRadius),
-                SplashDamage = splashRadius > 0 ? Splash.DamageOf(damage) : 0
+                SplashDamage = splashRadius > 0 ? Splash.DamageOf(damage) : 0,
+                OptimalRange = melee ? 0 : Math.Max(0, optimalRange)
             };
 
             // A cone weapon picks what it hits from where the shooter faces, not from a lock.
@@ -716,9 +718,12 @@ namespace Rasa.Managers
                 || missile.TargetActor == null || !IsOnMap(mapChannel, missile.TargetActor))
                 return;
 
+            // The round flew as far as its target, and the splash is as weak as the round (RangeFalloff).
+            var damage = RangeFalloff.Scale(missile.SplashDamage, missile.OptimalRange, shooter.Position, missile.TargetActor.Position);
+
             foreach (var creature in AbilityManager.HostilesWithin(mapChannel, shooter, missile.TargetActor.Position, missile.SplashRadius))
                 if (creature != missile.TargetActor)
-                    ExtraHit(mapChannel, missile, shooter, creature, missile.SplashDamage, false);
+                    ExtraHit(mapChannel, missile, shooter, creature, damage, false);
         }
 
         /// <summary>
@@ -731,9 +736,11 @@ namespace Rasa.Managers
             if (missile.ConeTargets == null || missile.ConeDamage <= 0 || !(missile.Source is Manifestation shooter))
                 return;
 
+            // Each at its own distance (RangeFalloff).
             foreach (var creature in missile.ConeTargets)
                 if (creature != missile.TargetActor && IsOnMap(mapChannel, creature))
-                    ExtraHit(mapChannel, missile, shooter, creature, missile.ConeDamage, true);
+                    ExtraHit(mapChannel, missile, shooter, creature,
+                        RangeFalloff.Scale(missile.ConeDamage, missile.OptimalRange, shooter.Position, creature.Position), true);
         }
 
         /// <summary>
@@ -932,6 +939,11 @@ namespace Rasa.Managers
             if (targetType == EntityType.Creature || targetType == EntityType.Character)
             {
                 var amount = missile.DamageA;
+
+                // A weapon shot past its optimal range does less, before the crit multiplies what is left (RangeFalloff).
+                if (missile.OptimalRange > 0 && missile.Source != null)
+                    amount = RangeFalloff.Scale(amount, missile.OptimalRange, missile.Source.Position, missile.TargetActor.Position);
+
                 missile.IsCritical = CriticalHits.Resolve(missile.Source, missile.TargetActor, missile.IsMelee, missile.CritChance, ref amount);
 
                 // "Enemies deliver bonus damage to crouched targets": a melee hit on someone

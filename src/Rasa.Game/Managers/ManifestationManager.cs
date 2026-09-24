@@ -884,7 +884,8 @@ namespace Rasa.Managers
                 rootMs: skillId == WeaponSkills.NetGuns ? CrowdControl.NetGunRootMs : 0,
                 knockbackChance: knockbackChance,
                 splashRadius: Splash.RadiusOf(weapon.ItemTemplate.WeaponInfo),
-                coneHalfAngle: ConeWeapons.IsCone(weapon.ItemTemplate.WeaponInfo, weaponClassInfo) ? ConeWeapons.HalfAngleOf(weapon.ItemTemplate.WeaponInfo) : 0);
+                coneHalfAngle: ConeWeapons.IsCone(weapon.ItemTemplate.WeaponInfo, weaponClassInfo) ? ConeWeapons.HalfAngleOf(weapon.ItemTemplate.WeaponInfo) : 0,
+                optimalRange: weapon.ItemTemplate.WeaponInfo.Range);
             
             return FireResult.Fired;
         }

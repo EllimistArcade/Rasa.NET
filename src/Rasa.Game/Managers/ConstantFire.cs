@@ -186,7 +186,8 @@ namespace Rasa.Managers
                 if (target.State == CharacterState.Dead || target.State == CharacterState.Dying)
                     continue;
 
-                var rolled = damage;
+                // Each target at its own distance: past the weapon's optimal range the pulse does less (RangeFalloff).
+                var rolled = RangeFalloff.Scale(damage, weapon.ItemTemplate.WeaponInfo.Range, player.Position, target.Position);
                 var crit = CriticalHits.Resolve(player, target, false, CriticalHits.AttackerChance(player, false, critBonus), ref rolled);
                 var amount = GameEffectManager.ApplyResist(target, rolled, out var resisted, damageType);
                 var landed = ActorManager.Instance.Damage(mapChannel, target, amount, player, damageType);

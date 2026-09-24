@@ -244,7 +244,8 @@ namespace Rasa.Managers
                 return;
             }
 
-            if (item.ItemTemplate.BoundToCharacter)
+            // Bound on Character, or Not Tradable (mission items are both): "This item cannot be traded."
+            if (item.ItemTemplate.BoundToCharacter || item.ItemTemplate.NotTradable)
             {
                 Decline(client, PlayerMessage.PmTradeItemCanNotBeTraded);
                 return;

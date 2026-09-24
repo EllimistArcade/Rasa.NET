@@ -808,6 +808,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // "Not Sellable" on the tooltip (has_sellable_flag clear - mission items): "This item cannot be sold".
+            if (!soldItem.ItemTemplate.HasSellableFlag)
+            {
+                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmItemCanNotBeSold, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                return;
+            }
+
             var quantity = (uint) Math.Min(packet.Quantity, soldItem.StackSize);
             var sellPrice = Math.Min((long) Math.Max(soldItem.ItemTemplate.SellPrice, 0) * quantity, int.MaxValue);
 

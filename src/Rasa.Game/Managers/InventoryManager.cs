@@ -461,6 +461,34 @@ namespace Rasa.Managers
             Logger.WriteLog(LogType.Debug, $"ToDO: RequestMoveItemToClanLockboxPacket");
         }
 
+        /// <summary>
+        /// Whether an item from the pack may go into the footlocker or, with clan set, the clan
+        /// lockbox; says why not when it may not. The footlocker refuses not_placable_in_lockbox
+        /// ("That item cannot be put in footlocker."); the clan lockbox, where anyone of the right
+        /// rank can take it out, also refuses anything bound or not tradable ("Non tradable items
+        /// cannot be placed in clan lockbox."). Mission items are all three.
+        /// </summary>
+        private static bool MayStore(Client client, ulong entityId, bool clan)
+        {
+            var template = EntityManager.Instance.GetItem(entityId)?.ItemTemplate;
+
+            if (template == null)
+                return true;
+
+            PlayerMessage? refusal = null;
+
+            if (clan && (template.BoundToCharacter || template.NotTradable))
+                refusal = PlayerMessage.PmClanLockboxItemNotTradable;
+            else if (template.NotPlaceableInLockbox)
+                refusal = PlayerMessage.PmNotPlaceableInLockbox;
+
+            if (refusal == null)
+                return true;
+
+            client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(refusal.Value, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+            return false;
+        }
+
         public void RequestMoveItemToHomeInventory(Client client, RequestMoveItemToHomeInventoryPacket packet)
         {
             // remove item
@@ -476,6 +504,9 @@ namespace Rasa.Managers
             var entityId = client.Player.Inventory.PersonalInventory[(int)packet.SrcSlot];
 
             if (entityId == 0)
+                return;
+
+            if (!MayStore(client, entityId, false))
                 return;
 
             RemoveItemBySlot(client, InventoryType.Personal, packet.SrcSlot);
@@ -503,6 +534,9 @@ namespace Rasa.Managers
             var entityId = client.Player.Inventory.PersonalInventory[(int)packet.SrcSlot];
 
             if (entityId == 0)
+                return;
+
+            if (!MayStore(client, entityId, true))
                 return;
 
             // If DestSlot is not empty, move current item to SrcSlot (item swap)
@@ -585,6 +619,9 @@ namespace Rasa.Managers
             var entityId = client.Player.Inventory.PersonalInventory[(int)packet.SrcSlot];
 
             if (entityId == 0)
+                return;
+
+            if (!MayStore(client, entityId, true))
                 return;
 
             var tempItem = EntityManager.Instance.GetItem(entityId);
@@ -675,6 +712,11 @@ namespace Rasa.Managers
 
             var tempItem = EntityManager.Instance.GetItem(entityId);
             bool wasSwap = client.Player.Inventory.PersonalInventory[(int)packet.DestSlot] != 0;
+
+            // A swap puts the pack's item in the lockbox.
+            if (wasSwap && !packet.ManagePersonalSlot && !MayStore(client, client.Player.Inventory.PersonalInventory[(int)packet.DestSlot], true))
+                return;
+
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             if (packet.ManagePersonalSlot)
@@ -780,6 +822,10 @@ namespace Rasa.Managers
             var entityId = client.Player.Inventory.HomeInventory[(int)packet.SrcSlot];
 
             if (entityId == 0)
+                return;
+
+            // A swap puts the pack's item in the footlocker.
+            if (client.Player.Inventory.PersonalInventory[(int)packet.DestSlot] != 0 && !MayStore(client, client.Player.Inventory.PersonalInventory[(int)packet.DestSlot], false))
                 return;
 
             RemoveItemBySlot(client, InventoryType.HomeInventory, packet.SrcSlot);

@@ -223,6 +223,9 @@ namespace Rasa.Managers
                     // Creature actions that are not missiles, whose windup is done.
                     CreatureWindups.Worker(mapChannel);
 
+                    // Miasmas whose time as a cloud is up coalesce.
+                    CreatureMiasma.Worker(mapChannel);
+
                     // Crab Mines: seeking, running, going off.
                     AbilityManager.Instance.CrabMineWorker(mapChannel);
 

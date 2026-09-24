@@ -669,6 +669,7 @@ namespace Rasa.Managers
                     AbsorbPercent = effect.AbsorbPercent,
                     AbsorbPool = effect.AbsorbPool,
                     PowerRegenPercent = effect.PowerRegenPercent,
+                    MissPercent = effect.MissPercent,
                     Parent = effect
                 };
 
@@ -882,6 +883,21 @@ namespace Rasa.Managers
                 return amount;
 
             return Math.Max(0, amount * Math.Max(0, 100 - percent) / 100);
+        }
+
+        /// <summary>The share of shots at the actor that miss it for the effects on it (Chaff): the strongest, 0 to 100.</summary>
+        public static int MissPercentOf(Actor actor)
+        {
+            var percent = 0;
+
+            if (actor == null)
+                return 0;
+
+            foreach (var effect in actor.ActiveEffects.Values)
+                if (!effect.IsExpired && effect.MissPercent > percent)
+                    percent = effect.MissPercent;
+
+            return Math.Min(100, percent);
         }
 
         /// <summary>Percent added to the actor's chance of a critical hit by the effects on them (Crit Wave).</summary>

@@ -150,6 +150,13 @@ namespace Rasa.Structures
         /// </summary>
         public int IncomingRangedPercent { get; set; }
 
+        /// <summary>
+        /// Percent of the shots aimed at the holder that miss it (Chaff's
+        /// DEFENSIVE_TOHIT_MODIFIER, "harder to hit"); melee is unaffected. The strongest on the
+        /// holder counts.
+        /// </summary>
+        public int MissPercent { get; set; }
+
         #endregion
 
         /// <summary>

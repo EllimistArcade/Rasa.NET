@@ -295,11 +295,11 @@ namespace Rasa.Managers
             var knockedBack = StepKnockback(mapChannel, creature, delta);
 
             // Mid-charge (Kael rushing blow), winding up to blow itself up (a Fithik), to drop an
-            // egg (a Stalker) or any ability (CreatureWindups), or in a cocoon (an Atta grub), it
-            // does nothing else until that is done.
+            // egg (a Stalker) or any ability (CreatureWindups), in a cocoon (an Atta grub), or a
+            // cloud (a Miasma, CreatureMiasma), it does nothing else until that is done.
             if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature) || CreatureBombs.IsSelfDestructing(creature)
                 || CreatureSupport.IsCasting(creature) || CreatureHabits.IsBusy(creature) || CreatureSummons.IsBusy(creature)
-                || CreatureWindups.IsWindingUp(creature))
+                || CreatureWindups.IsWindingUp(creature) || CreatureMiasma.IsDissipated(creature))
             {
                 needCellUpdate = CellChanged(creature, delta);
                 return;
@@ -797,16 +797,19 @@ namespace Rasa.Managers
                         break;
                     }
 
-                    // Rage, Scourge, a warcry: on itself or its own side (CreatureBuffs); a
+                    // Rage, Scourge, a warcry, chaff: on itself or its own side (CreatureBuffs); a
                     // Howler's shriek, on every player around it (CreatureDebuffs); a Technician's
-                    // turret or a Hunter's pet (CreatureSummons); a Stalker's egg charge
-                    // (CreatureBombs). Only when it would do something; otherwise on to the next
-                    // action.
-                    if (CreatureBuffs.Is(action) || CreatureDebuffs.Is(action) || CreatureSummons.IsSummon(action) || CreatureBombs.IsOvulate(action))
+                    // turret, a Hunter's pet or a Thrax's Necromite (CreatureSummons); a Stalker's egg charge
+                    // (CreatureBombs); a Miasma turning to a cloud to coalesce on whoever is around
+                    // it (CreatureMiasma). Only when it would do something; otherwise on to the
+                    // next action.
+                    if (CreatureBuffs.Is(action) || CreatureDebuffs.Is(action) || CreatureSummons.IsSummon(action) || CreatureBombs.IsOvulate(action)
+                        || CreatureMiasma.Is(action))
                     {
                         var used = CreatureBuffs.Is(action) ? CreatureBuffs.Perform(mapChannel, creature, action, targetActor)
                             : CreatureDebuffs.Is(action) ? CreatureDebuffs.Perform(mapChannel, creature, action)
                             : CreatureSummons.IsSummon(action) ? CreatureSummons.Perform(mapChannel, creature, action, targetActor)
+                            : CreatureMiasma.Is(action) ? CreatureMiasma.Dissipate(mapChannel, creature, action)
                             : CreatureBombs.Ovulate(mapChannel, creature, action);
 
                         if (!used)

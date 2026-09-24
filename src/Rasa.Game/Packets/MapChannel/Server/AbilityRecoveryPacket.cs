@@ -26,7 +26,7 @@ namespace Rasa.Packets.MapChannel.Server
     /// </summary>
     public class AbilityRecoveryPacket : ServerPythonPacket
     {
-        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists, TypeIds, RawInfo, HealRepair }
+        public enum HitDataKind { None, Damage, Heal, EffectAttach, CureLists, TypeIds, RawInfo, HealRepair, DamagePair }
 
         public override GameOpcode Opcode { get; } = GameOpcode.PerformRecovery;
 
@@ -115,6 +115,16 @@ namespace Rasa.Packets.MapChannel.Server
                     case HitDataKind.Heal:
                         pw.WriteInt(hit.Amount);
                         break;
+                    case HitDataKind.DamagePair:
+                        // (clientInfo, extraClientInfo) - MiasmaCoalesceAbility.DoAbility: the
+                        // hit, and its extra damage of another type or None.
+                        pw.WriteTuple(2);
+                        DamageInfoWriter.WriteRawInfo(pw, hit.DamageType, hit.Amount, hit.Resisted, hit.IsCritical, hit.DeathBlow);
+                        if (hit.Extra != null)
+                            DamageInfoWriter.WriteRawInfo(pw, hit.Extra.DamageType, hit.Extra.Amount, hit.Extra.Resisted, hit.Extra.IsCritical, hit.Extra.DeathBlow);
+                        else
+                            pw.WriteNoneStruct();
+                        break;
                     case HitDataKind.HealRepair:
                         // (healAmount, repairAmount) - TechnicianHealAbility.DoAbility.
                         pw.WriteTuple(2);
@@ -164,6 +174,9 @@ namespace Rasa.Packets.MapChannel.Server
         public DamageType DamageType { get; set; }
         public bool IsCritical { get; set; }
         public bool DeathBlow { get; set; }
+
+        /// <summary>For HitDataKind.DamagePair: the extra damage of another type the hit carries, or null for none.</summary>
+        public AbilityHit Extra { get; set; }
 
         /// <summary>For HitDataKind.EffectAttach: the gameeffectdata id the client announces on this entity.</summary>
         public int EffectTypeId { get; set; }

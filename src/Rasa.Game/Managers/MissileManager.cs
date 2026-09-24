@@ -198,6 +198,11 @@ namespace Rasa.Managers
                 // Mind Control's Infectious: a slave's victim may be confused in turn.
                 if (missile.DamageA > 0 && missile.Source is Creature slave)
                     AbilityManager.Instance.OnMindSlaveHit(mapChannel, slave, creature);
+
+                // A creature's attack that carries an effect puts it on the creature it hit as
+                // on a player (a Forean shaman's Decay on the Bane it fights).
+                if (missile.Source is Creature striker)
+                    CreatureEffectAttacks.OnCreatureHit(mapChannel, striker, creature, missile);
             }
 
             // A Shield Drone sends almost all of it back, unless the shot came from inside the
@@ -218,6 +223,23 @@ namespace Rasa.Managers
 
         /// <summary>misstype 2, a dodge: the player a creature's area ability was wound up at had left its area when it landed (CreatureWindups).</summary>
         public const uint MissTypeDodge = 2;
+
+        /// <summary>misstype 1, a plain miss: a shot at someone under Chaff that went wide.</summary>
+        public const uint MissTypeMiss = 1;
+
+        /// <summary>
+        /// Whether a shot goes wide for the Chaff on its target: MissPercentOf the target, rolled.
+        /// A blow at arm's length is not turned by a cloud of foil.
+        /// </summary>
+        public static bool MissesForChaff(Missile missile, Func<int, bool> roll)
+        {
+            if (missile == null || missile.IsMelee || missile.TargetActor == null)
+                return false;
+
+            var percent = GameEffectManager.MissPercentOf(missile.TargetActor);
+
+            return percent > 0 && roll(percent);
+        }
 
         /// <summary>
         /// A hit that left its creature alive: the stuns, knockback, slow and freeze it carries (an
@@ -860,6 +882,22 @@ namespace Rasa.Managers
             {
                 missile.Args.MisstEntities.Add(missile.TargetEntityId);
                 missile.Args.Missdata.Add(MissTypeDeflect);
+
+                SplashAround(mapChannel, missile);
+                ConeHits(mapChannel, missile);
+                CreatureAreaHits(mapChannel, missile);
+
+                CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
+                return;
+            }
+
+            // Chaff around the target: "interferes with enemy targeting, making you and nearby
+            // allies harder to hit". A shot that goes wide is a plain miss (misstype 1); what it
+            // would have done around its target still happens, as a deflected one's does.
+            if ((targetType == EntityType.Character || targetType == EntityType.Creature) && MissesForChaff(missile, Stuns.Roll))
+            {
+                missile.Args.MisstEntities.Add(missile.TargetEntityId);
+                missile.Args.Missdata.Add(MissTypeMiss);
 
                 SplashAround(mapChannel, missile);
                 ConeHits(mapChannel, missile);

@@ -25,6 +25,15 @@ namespace Rasa.Managers
     ///    Caretaker's side within the row's range, dead less than ReviveWindowMs, gets up where it
     ///    lay with HEAL_AMOUNT health: back in its spawn pool's count, its loot and harvest rights
     ///    gone, Revived sent so every client stands it up.
+    ///  - Funnel (LifeforceFunnelAction, CR_FOREAN_LIFEFORCE_FUNNEL 255): a Forean shaman's heal,
+    ///    a HealAbility aimed at nothing - its side within RADIUS_AROUND_SOURCE (24 m), itself
+    ///    included, each healed by the argument's DAMAGE_AMOUNT_MIN..MAX (the only amount it
+    ///    has), announced as bare heal amounts as the Caretaker's is.
+    ///  - Jumpstart (TechnicianReviveAbility, CR_TECHNICIAN_REVIVE 400): a Thrax Technician's
+    ///    revive, the Caretaker's in every way the data shows - canTargetDead, a bare heal amount
+    ///    per hit, AnnounceRevive - with its bolt's flight (VFX_VELOCITY 10 m/s) added to its
+    ///    windup. The client's range is 1 m, which would have it walk to the body; the row's
+    ///    reach is the corpse it can bring back from where it stands.
     ///  - Self revive (MachinaReviveAbility, CR_MACHINA_REVIVE 429): a Machina's first death in a
     ///    life is not its end. It goes down - no kill, no experience, no loot - and the recovery
     ///    (3 s) later stands up at HEAL_PERCENT of its health and goes back to its fight; the next
@@ -50,6 +59,8 @@ namespace Rasa.Managers
         public const ActionId CaretakerRevive = (ActionId)242;
         public const ActionId TechnicianHeal = (ActionId)275;
         public const ActionId MachinaRevive = (ActionId)429;
+        public const ActionId ForeanFunnel = (ActionId)255;
+        public const ActionId TechnicianRevive = (ActionId)400;
 
         /// <summary>Ours: an ally below this share of its health is worth a heal.</summary>
         public const int HurtPercent = 80;
@@ -66,9 +77,11 @@ namespace Rasa.Managers
         {
             switch (actionId)
             {
-                case CaretakerHeal: return Kind.Heal;
+                case CaretakerHeal:
+                case ForeanFunnel: return Kind.Heal;
                 case TechnicianHeal: return Kind.Repair;
-                case CaretakerRevive: return Kind.Revive;
+                case CaretakerRevive:
+                case TechnicianRevive: return Kind.Revive;
                 case MachinaRevive: return Kind.SelfRevive;
                 default: return Kind.None;
             }
@@ -107,11 +120,21 @@ namespace Rasa.Managers
             return info;
         }
 
-        /// <summary>HEAL_AMOUNT_MIN..MAX scaled to the creature's level.</summary>
+        /// <summary>The heal an argument gives: HEAL_AMOUNT_MIN..MAX, or DAMAGE_AMOUNT_MIN..MAX where it has no other (a Lifeforce Funnel).</summary>
+        public static (int Min, int Max) HealRangeOf(ActionLevelInfo info)
+        {
+            var heal = info.Has(AbilityProperty.HealAmountMin) || info.Has(AbilityProperty.HealAmountMax);
+            var minProperty = heal ? AbilityProperty.HealAmountMin : AbilityProperty.DamageAmountMin;
+            var maxProperty = heal ? AbilityProperty.HealAmountMax : AbilityProperty.DamageAmountMax;
+            var min = info.Get(minProperty);
+
+            return (min, Math.Max(min, info.Get(maxProperty, min)));
+        }
+
+        /// <summary>HEAL_AMOUNT_MIN..MAX (HealRangeOf) scaled to the creature's level.</summary>
         public static int RollHeal(Creature caster, ActionLevelInfo info)
         {
-            var min = info.Get(AbilityProperty.HealAmountMin);
-            var max = Math.Max(min, info.Get(AbilityProperty.HealAmountMax, min));
+            var (min, max) = HealRangeOf(info);
             int rolled;
 
             lock (Random)
@@ -222,13 +245,22 @@ namespace Rasa.Managers
                     }
                 }
 
-                Start(mapChannel, creature, action, kind, target, info.WindupMs);
+                Start(mapChannel, creature, action, kind, target, info.WindupMs + BoltFlightMs(creature, target, info));
                 action.CooldownTimer = BehaviorManager.NextCooldown(creature, action);
 
                 return true;
             }
 
             return false;
+        }
+
+        /// <summary>A bolt's flight to the one it is cast at, where the argument gives it a VFX_VELOCITY (a Technician's jumpstart); 0 otherwise.</summary>
+        public static int BoltFlightMs(Creature caster, Actor target, ActionLevelInfo info)
+        {
+            if (caster == null || target == null || info == null || info.Get(AbilityProperty.VfxVelocity) <= 0)
+                return 0;
+
+            return CreatureWindups.FlightMs(info, Vector3.Distance(caster.Position, target.Position));
         }
 
         /// <summary>Dead creatures within reach of the caster, nearest first.</summary>

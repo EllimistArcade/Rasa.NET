@@ -36,8 +36,9 @@ namespace Rasa.Managers
     ///    argument's DAMAGE_TYPE, USE_COUNT times at most, USE_DROPOFF seconds apart
     ///    (AbilityManager.OnPlayerNanites).
     ///
-    ///  - Ground blast, no hit (LinkerGroundBlastAbility, PredatorMissileAbility): a bomb on the
-    ///    player that goes off on everyone around them (CreatureBombs.GroundBlast). The Predator's
+    ///  - Ground blast, no hit (LinkerGroundBlastAbility, PredatorMissileAbility,
+    ///    NecromiteSelfDestructAbility): a bomb on the player that goes off on everyone around
+    ///    them (CreatureBombs.GroundBlast). A Necromite's is itself: it is spent on it. The Predator's
     ///    missile has a cone in its data (CONE_RADIUS 45, FOV_LIMIT 45) as well as the blast's
     ///    EFFECT_RADIUS; the cone is where it may aim, and the blast is what spreads it, so the
     ///    missile hits the one it was fired at (MissileManager.CreatureAreaHits).
@@ -61,8 +62,11 @@ namespace Rasa.Managers
     /// targetGameEffect on every hit - the attach FX, the icon, and for the web and the net the
     /// movement block. The quill's class names none, so its flash is announced as it attaches.
     ///
-    /// Only players take these. A creature's attack on another creature - a turret, a pet - is
-    /// its hit alone.
+    /// Players take all of these. A creature takes the ones that are numbers on the server alone
+    /// - a damage over time, a resistance down, a Polarity Field - from a creature's attack
+    /// (OnCreatureHit): a Forean shaman's Decay on the Bane it fights. The rest - a hold, a blind,
+    /// a bomb - are the player's client acting on its own character, and on a creature an
+    /// attack of those is its hit alone.
     /// </summary>
     public static class CreatureEffectAttacks
     {
@@ -85,6 +89,7 @@ namespace Rasa.Managers
         public const long ExplosionMs = 1000;
 
         public const string StriderEyeModule = "abilities.ai.stridereyeability";
+        public const string NecromiteSelfDestructModule = "abilities.ai.necromiteselfdestructability";
         public const string StriderLaserBeamModule = "abilities.ai.striderlaserbeamability";
 
         /// <summary>Ours: how far a creature's Polarity Field lowers the one resistance - the player version's PER_PUMP_MOD at one pump.</summary>
@@ -113,6 +118,7 @@ namespace Rasa.Managers
                     return Kind.Nanites;
                 case "abilities.ai.linkergroundblastability":
                 case "abilities.ai.predatormissileability":
+                case NecromiteSelfDestructModule:
                     return Kind.GroundBlast;
                 case StriderEyeModule:
                 case StriderLaserBeamModule:
@@ -161,6 +167,11 @@ namespace Rasa.Managers
             if (kind == Kind.GroundBlast)
             {
                 CreatureBombs.GroundBlast(mapChannel, attacker, player, missile.CreatureAction, info);
+
+                // A Necromite's bomb is itself.
+                if (module == NecromiteSelfDestructModule)
+                    CreatureBombs.Spend(mapChannel, attacker, player);
+
                 return;
             }
 
@@ -183,6 +194,35 @@ namespace Rasa.Managers
 
             if (effect != null)
                 GameEffectManager.Instance.Attach(mapChannel, player, effect);
+        }
+
+        /// <summary>Whether a creature takes this kind of effect from another creature's attack: the ones that are the server's numbers alone.</summary>
+        public static bool CreatureTakes(Kind kind) => kind == Kind.DamageOverTime || kind == Kind.ResistDown || kind == Kind.Polarity;
+
+        /// <summary>A creature another creature's attack has hit: the attack's effect, if it is one a creature takes.</summary>
+        public static void OnCreatureHit(MapChannel mapChannel, Creature attacker, Creature victim, Missile missile)
+        {
+            if (mapChannel == null || attacker == null || victim == null || missile == null || AbilityManager.Instance == null)
+                return;
+
+            if (victim.State == CharacterState.Dead || victim.State == CharacterState.Dying)
+                return;
+
+            if (!AbilityManager.Instance.TryGetAction(missile.ActionId, missile.ActionArgId, out var module, out var info) || info == null)
+                return;
+
+            var kind = KindOf(module);
+
+            if (!CreatureTakes(kind))
+                return;
+
+            var effect = Build(mapChannel, attacker, missile, module, kind, info);
+
+            if (effect == null)
+                return;
+
+            // Quietly, as on a player: the recovery listing the creature hit announces it.
+            GameEffectManager.Instance.Attach(mapChannel, victim, effect);
         }
 
         /// <summary>

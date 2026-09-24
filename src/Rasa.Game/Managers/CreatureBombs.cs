@@ -46,6 +46,12 @@ namespace Rasa.Managers
     ///  - Missile (PredatorMissileAbility 426): the same on the player a Predator's missile hits -
     ///    PREDATOR_MISSILE_EXPLOSION, a BombEffect whose removeTarget is off, the class's
     ///    targetGameEffect - going off at once within EFFECT_RADIUS (10 m).
+    ///  - Necromite (NecromiteSelfDestructAbility 489, "Causes a Necromite to self-destruct and
+    ///    damage nearby hostiles"): the same on the player a Necromite reaches -
+    ///    NECROMITE_SELF_DESTRUCT 382, "AoE dmg when a necromite blows up on a player", the
+    ///    class's targetGameEffect - going off DELAY_TIME_MS (0.5 s) on within EFFECT_RADIUS
+    ///    (5 m). The Necromite is spent on it (Spend): it dies as its bomb goes on, the kill its
+    ///    target's, as a Fithik's self-destruct is.
     ///
     /// The damage is the creature_action row's, resisted as the argument's DAMAGE_TYPE (physical
     /// when it gives none), and only players take it. Death actions sit on the creature's row with
@@ -64,6 +70,7 @@ namespace Rasa.Managers
         public const ActionId PredatorMissile = (ActionId)426;
         public const ActionId StalkerOvulate = (ActionId)441;
         public const ActionId StalkerEggDrop = (ActionId)442;
+        public const ActionId NecromiteSelfDestruct = (ActionId)489;
 
         public const int HowlerDeathTypeId = 461;           // HOWLER_DEATH
 
@@ -77,6 +84,7 @@ namespace Rasa.Managers
         public const int PredatorMissileTypeId = 284;       // PREDATOR_MISSILE_EXPLOSION
         public const int StalkerEggChargeTypeId = 304;      // STALKER_EGG_CHARGE
         public const int StalkerEggDropTypeId = 305;        // STALKER_EGG_DROP_EXPLOSION
+        public const int NecromiteSelfDestructTypeId = 382; // NECROMITE_SELF_DESTRUCT
 
         /// <summary>Ours: the share of its health at which a Fithik starts its self-destruct.</summary>
         public const int SelfDestructHealthPercent = 20;
@@ -199,16 +207,24 @@ namespace Rasa.Managers
             Arm(mapChannel, creature, creature, action, bomb, RadiusOf(info), TypeOf(info), delayMs);
         }
 
-        /// <summary>The bomb an attack that lands as one puts on the player it hits: a Predator's missile's, else a Linker's ground blast.</summary>
-        public static int GroundBlastTypeOf(ActionId actionId) => actionId == PredatorMissile ? PredatorMissileTypeId : LinkerGroundBlastTypeId;
+        /// <summary>The bomb an attack that lands as one puts on the player it hits: a Predator's missile's, a Necromite's, else a Linker's ground blast.</summary>
+        public static int GroundBlastTypeOf(ActionId actionId) =>
+            actionId == PredatorMissile ? PredatorMissileTypeId
+            : actionId == NecromiteSelfDestruct ? NecromiteSelfDestructTypeId
+            : LinkerGroundBlastTypeId;
 
-        /// <summary>A Linker's ground blast or a Predator's missile has hit a player: the bomb on them, going off at once.</summary>
+        /// <summary>How long a bomb on a player waits: a Necromite's its DELAY_TIME_MS, the rest none.</summary>
+        public static long GroundBlastDelayOf(ActionId actionId, ActionLevelInfo info) =>
+            actionId == NecromiteSelfDestruct ? Math.Max(0, info?.Get(AbilityProperty.DelayTimeMs) ?? 0) : 0;
+
+        /// <summary>A Linker's ground blast, a Predator's missile or a Necromite has hit a player: the bomb on them, going off when its delay is up.</summary>
         public static GameEffect GroundBlast(MapChannel mapChannel, Creature linker, Manifestation player, CreatureAction action, ActionLevelInfo info)
         {
             if (mapChannel == null || linker == null || player == null || action == null || info == null)
                 return null;
 
-            var bomb = NewBomb(mapChannel, linker, player, info, GroundBlastTypeOf(action.ActionId), 0, announce: false);
+            var delayMs = GroundBlastDelayOf(action.ActionId, info);
+            var bomb = NewBomb(mapChannel, linker, player, info, GroundBlastTypeOf(action.ActionId), delayMs, announce: false);
 
             bomb.IsBuff = false;
             GameEffectManager.Instance.Attach(mapChannel, player, bomb);
@@ -217,9 +233,25 @@ namespace Rasa.Managers
                 return null;    // turned away (Cure's guard)
 
             // The recovery that announces it goes out first; the blast follows on the next tick.
-            Arm(mapChannel, linker, player, action, bomb, RadiusOf(info), TypeOf(info), 0);
+            Arm(mapChannel, linker, player, action, bomb, RadiusOf(info), TypeOf(info), delayMs);
 
             return bomb;
+        }
+
+        /// <summary>
+        /// A Necromite has put its bomb on the one it reached: it is spent, and dies of it - the
+        /// kill its target's, as a Fithik's self-destruct is. A summon, it leaves nothing to loot.
+        /// </summary>
+        public static void Spend(MapChannel mapChannel, Creature necromite, Actor target)
+        {
+            if (mapChannel == null || necromite == null || necromite.State == CharacterState.Dead || necromite.State == CharacterState.Dying
+                || !necromite.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
+                return;
+
+            health.Current = 0;
+            CellManager.Instance.CellCallMethod(mapChannel, necromite, new UpdateHealthPacket(health, necromite.EntityId));
+
+            CreatureManager.Instance.HandleCreatureKill(mapChannel, necromite, target ?? necromite);
         }
 
         /// <summary>

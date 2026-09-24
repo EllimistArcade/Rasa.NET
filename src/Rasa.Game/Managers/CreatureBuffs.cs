@@ -38,6 +38,14 @@ namespace Rasa.Managers
     ///    with two (MaxChannelers). The class shows nothing on the one fed (its DoAbility is
     ///    empty) and has no effect of its own, so the boost is the server's alone (ServerOnly).
     ///    How long it lasts is ours; the argument's DAMAGE_AMOUNT (10-20) is not used.
+    ///  - Chaff (ChaffAction, CR_FOREAN_CHAFF 204): "Creates a cloud of flying metallic foil that
+    ///    interferes with enemy targeting, making you and nearby allies harder to hit."
+    ///    CHAFFSOURCE 90 on the Forean - the class's targetGameEffect, TARGET_SELF - for DURATION
+    ///    (60 s), and as an aura every INTERVAL (5 s) CHAFF 91 on its own side within
+    ///    RADIUS_AROUND_SOURCE (6 m), which ChaffSourceEffect.OnTick announces on the ids each
+    ///    tick names. On all of them DEFENSIVE_TOHIT_MODIFIER (50) is the share of shots at them
+    ///    that go wide (GameEffect.MissPercent, MissileManager.MissesForChaff): the server has no
+    ///    to-hit roll of its own for the modifier to move, so it is read as a miss chance.
     ///
     /// Each is used only when it would do something - not while its effect is still on, not a
     /// warcry with nobody to hear it, not a channel with no Linker to feed - and otherwise the
@@ -49,6 +57,7 @@ namespace Rasa.Managers
         public const ActionId ThraxScourge = (ActionId)455;
         public const ActionId HarvesterWarcry = (ActionId)477;
         public const ActionId LinkerChannel = (ActionId)410;
+        public const ActionId ForeanChaff = (ActionId)204;
 
         /// <summary>The guide's "doubling or tripling": what each Linker feeding another adds to its attacks, and how many may.</summary>
         public const int ChannelBoostPercent = 100;
@@ -73,6 +82,8 @@ namespace Rasa.Managers
         public const int RageTypeId = 235;          // RAGE
         public const int RageSourceTypeId = 236;    // RAGESOURCE
         public const int ScourgeTypeId = 256;       // SCOURGE_EFFECT
+        public const int ChaffSourceTypeId = 90;    // CHAFFSOURCE
+        public const int ChaffTypeId = 91;          // CHAFF
 
         /// <summary>Ours: how long before a creature's warcry can call again.</summary>
         public const long WarcryRearmMs = 60000;
@@ -82,7 +93,7 @@ namespace Rasa.Managers
 
         public static bool Is(CreatureAction action) =>
             action != null && (action.ActionId == ThraxRage || action.ActionId == ThraxScourge || action.ActionId == HarvesterWarcry
-                || action.ActionId == LinkerChannel);
+                || action.ActionId == LinkerChannel || action.ActionId == ForeanChaff);
 
         /// <summary>Uses the action if it would do something now; whether it did.</summary>
         public static bool Perform(MapChannel mapChannel, Creature creature, CreatureAction action, Actor target)
@@ -101,6 +112,8 @@ namespace Rasa.Managers
                     return Warcry(mapChannel, creature, action, info, target);
                 case LinkerChannel:
                     return Channel(mapChannel, creature, action, info);
+                case ForeanChaff:
+                    return Chaff(mapChannel, creature, action, info);
                 default:
                     return false;
             }
@@ -178,6 +191,39 @@ namespace Rasa.Managers
             }
 
             GameEffectManager.Instance.Attach(mapChannel, creature, rage);
+        }
+
+        private static bool Chaff(MapChannel mapChannel, Creature creature, CreatureAction action, ActionLevelInfo info)
+        {
+            if (Has(creature, ChaffSourceTypeId))
+                return false;
+
+            WindUp(mapChannel, creature, action, info, () => { StartChaff(mapChannel, creature, info); return new[] { creature }; });
+
+            return true;
+        }
+
+        /// <summary>The cloud: CHAFFSOURCE on the Forean, CHAFF on its side around it, and shots at any of them going wide.</summary>
+        public static GameEffect StartChaff(MapChannel mapChannel, Creature creature, ActionLevelInfo info)
+        {
+            var chaff = NewEffect(mapChannel, creature, info, ChaffSourceTypeId, Math.Max(1, info.Get(AbilityProperty.Duration, 60)) * 1000L);
+
+            chaff.MissPercent = Math.Max(0, Math.Min(100, info.Get(AbilityProperty.DefensiveTohitModifier)));
+            chaff.AllowDetach = true;
+
+            if (info.Get(AbilityProperty.RadiusAroundSource) > 0)
+            {
+                chaff.AuraRadius = info.Get(AbilityProperty.RadiusAroundSource);
+                chaff.AuraChildTypeId = ChaffTypeId;
+                chaff.AuraTickAnnounces = true;
+                chaff.TickIntervalMs = Math.Max(1, info.Get(AbilityProperty.Interval, 5)) * 1000;
+                chaff.NextTickTick = Environment.TickCount64;
+            }
+
+            if (mapChannel != null)
+                GameEffectManager.Instance.Attach(mapChannel, creature, chaff);
+
+            return chaff;
         }
 
         private static bool Scourge(MapChannel mapChannel, Creature creature, CreatureAction action, ActionLevelInfo info)

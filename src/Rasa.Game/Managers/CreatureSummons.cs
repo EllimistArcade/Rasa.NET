@@ -21,6 +21,12 @@ namespace Rasa.Managers
     ///  - Pet (HunterPetAbility, CR_HUNTER_PET 277 - "Causes a Hunter to summon a Howler"): a
     ///    Bane_Howler (7336) at the Hunter's level plus CREATURE_LEVEL_DIFFERENCE, for
     ///    CREATURE_LIFETIME_MS (two minutes), with the Howler's melee and sonic attacks.
+    ///  - Necromite (ThraxNecromiteAbility, CR_THRAX_NECROMITE 488 - "Causes a Thrax to summon a
+    ///    Necromite"): an Ability_Bane_Necromite (7528), the summoned Necromite class, with the
+    ///    Necromite's bite (Weapon_Creature_Necromite, WEAPON_ATTACK_NECROMITE 1/109) and its
+    ///    self-destruct (CR_NECROMITE_SELF_DESTRUCT 489): it runs at the Thrax's target and blows
+    ///    up on them (CreatureBombs). It grows in as the turret does (CREATURE_BIRTH at its
+    ///    class). It stands for NecromiteLifetimeMs if it has not spent itself by then.
     ///  - Cocoon (AttaGrubCocoonAbility, CR_ATTA_GRUB_COCOON 500 - "Causes a atta grub to cocoon
     ///    and transform to an adult atta"): the grub stops, winds up (8 s, the client's own
     ///    animation), taking EFFECT_DAMAGE_ABSORPTION_PERCENT less damage meanwhile, and comes out
@@ -34,13 +40,13 @@ namespace Rasa.Managers
     ///    the turret's and the pet's.
     ///
     /// CREATURE_VARIANT_ID is an index into a server table we do not have, so what comes out is
-    /// chosen by the class the client names for the job. The turret and the pet are creature
-    /// rows of their own (570001, 570002) at TemplateLevel, scaled to the summoner's level as
+    /// chosen by the class the client names for the job. The turret, the pet and the Necromite
+    /// are creature rows of their own (570001-570003) at TemplateLevel, scaled to the summoner's level as
     /// every creature row is - health, armour and damage x2 every 8 levels.
     ///
     /// Ours, the data giving none: a summoner has one turret and one pet up at a time
     /// (MaxEach); a turret stands for TurretLifetimeMs, which is its reuse, so a Technician
-    /// always has one while it fights; a grub cocoons once, at CocoonHealthPercent of its health.
+    /// always has one while it fights; a Necromite lasts NecromiteLifetimeMs; a grub cocoons once, at CocoonHealthPercent of its health.
     /// The cocoon's damage reduction is the server's alone: the client's AttaGrubCocoonEffect
     /// (ATTA_GRUB_COCOON_EFFECT 401) names a module 1.16.5.0 does not ship.
     ///
@@ -53,6 +59,7 @@ namespace Rasa.Managers
         public const ActionId TechnicianTurret = (ActionId)276;
         public const ActionId HunterPet = (ActionId)277;
         public const ActionId AttaGrubCocoon = (ActionId)500;
+        public const ActionId ThraxNecromite = (ActionId)488;
 
         /// <summary>CREATURE_BIRTH, keyed by the born creature's own entity class, and the effect it wears while growing.</summary>
         public const ActionId BirthAction = (ActionId)155;
@@ -67,6 +74,7 @@ namespace Rasa.Managers
 
         public const uint TurretTemplateId = 570001;        // Ability_Bane_Turret
         public const uint HowlerPetTemplateId = 570002;     // Bane_Howler
+        public const uint NecromiteTemplateId = 570003;     // Ability_Bane_Necromite
 
         /// <summary>The level the template rows are written at; a summon is scaled from it.</summary>
         public const uint TemplateLevel = 42;
@@ -79,6 +87,9 @@ namespace Rasa.Managers
 
         /// <summary>Ours: how long a Technician's turret stands - its reuse, the argument giving no lifetime.</summary>
         public const long TurretLifetimeMs = 60000;
+
+        /// <summary>Ours: how long a Necromite that has not blown itself up stands - the argument gives no lifetime.</summary>
+        public const long NecromiteLifetimeMs = 60000;
 
         /// <summary>Ours: how far towards its target a Technician sets its turret down.</summary>
         public const float TurretDistance = 3f;
@@ -110,7 +121,20 @@ namespace Rasa.Managers
         private static readonly object SummonsLock = new object();
         private static readonly Random Random = new Random();
 
-        public static bool IsSummon(CreatureAction action) => action != null && (action.ActionId == TechnicianTurret || action.ActionId == HunterPet);
+        public static bool IsSummon(CreatureAction action) =>
+            action != null && (action.ActionId == TechnicianTurret || action.ActionId == HunterPet || action.ActionId == ThraxNecromite);
+
+        /// <summary>The creature row a summon action brings in.</summary>
+        public static uint TemplateOf(ActionId actionId) =>
+            actionId == TechnicianTurret ? TurretTemplateId
+            : actionId == ThraxNecromite ? NecromiteTemplateId
+            : HowlerPetTemplateId;
+
+        /// <summary>How long a summon stands: the turret and the Necromite ours, the pet its CREATURE_LIFETIME_MS; 0 for as long as it lives.</summary>
+        public static long LifetimeOf(ActionId actionId, ActionLevelInfo info) =>
+            actionId == TechnicianTurret ? TurretLifetimeMs
+            : actionId == ThraxNecromite ? NecromiteLifetimeMs
+            : info?.Get(AbilityProperty.CreatureLifetimeMs) ?? 0;
 
         public static bool IsCocoon(CreatureAction action) => action != null && action.ActionId == AttaGrubCocoon;
 
@@ -209,7 +233,7 @@ namespace Rasa.Managers
                 return Summons.Count(s => s.SummonerId == summonerId && s.ActionId == actionId && Alive(s.Creature));
         }
 
-        /// <summary>A turret or a pet, if the summoner has fewer than MaxEach up; whether it came.</summary>
+        /// <summary>A turret, a pet or a Necromite, if the summoner has fewer than MaxEach up; whether it came.</summary>
         public static bool Perform(MapChannel mapChannel, Creature summoner, CreatureAction action, Actor target)
         {
             if (mapChannel == null || summoner == null || !IsSummon(action) || AbilityManager.Instance == null
@@ -219,8 +243,7 @@ namespace Rasa.Managers
             if (CountFor(summoner.EntityId, action.ActionId) >= MaxEach)
                 return false;
 
-            var turret = action.ActionId == TechnicianTurret;
-            var templateId = turret ? TurretTemplateId : HowlerPetTemplateId;
+            var templateId = TemplateOf(action.ActionId);
 
             if (!CreatureManager.Instance.LoadedCreatures.ContainsKey(templateId))
             {
@@ -277,7 +300,7 @@ namespace Rasa.Managers
             CellManager.Instance.AddToWorld(mapChannel, summon);
             Birth(mapChannel, summon, summoner);
 
-            var lifetime = turret ? TurretLifetimeMs : info.Get(AbilityProperty.CreatureLifetimeMs);
+            var lifetime = LifetimeOf(action.ActionId, info);
 
             lock (SummonsLock)
                 Summons.Add(new Summoned

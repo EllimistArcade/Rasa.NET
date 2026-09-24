@@ -45,11 +45,23 @@ namespace Rasa.Managers
     /// the ranged spit the guide describes, which also keeps a child from out-ranging the thing
     /// that made it. Deliberately NOT the vomit: a child that could regurgitate would fill the
     /// map.
+    ///
+    /// When its CREATURE_LIFETIME_MS is up a child expires rather than vanishing:
+    /// AmoeboidExpireAbility (CR_AMOEBOID_EXPIRE 435), "Handles death of a Amoeboid" - its own
+    /// "Amoeboid - Expire" windup (4.5 s, ABILITY_CREATURE_AMEOBOID_EXPIRE_WINDUP FX), standing
+    /// still and doing nothing else, then its resolve, and it lies dead - no kill, nothing to
+    /// loot - for the recovery (3 s) before it is gone. One killed while it expires just dies.
+    /// The argument's RADIUS_AROUND_SOURCE (5) and PERCENTAGE_CHANCE (50) name no damage, heal or
+    /// creature for them to act on, and are not used.
     /// </summary>
     public static class AmoeboidVomit
     {
         public const ActionId VomitV1 = (ActionId)274;
         public const ActionId VomitV2 = (ActionId)436;
+
+        /// <summary>CR_AMOEBOID_EXPIRE at its one argument: a child's end.</summary>
+        public const ActionId ExpireAction = (ActionId)435;
+        public const uint ExpireArg = 1;
 
         /// <summary>CR_AMOEBOID_SLIME, the spit a child is given.</summary>
         public const ActionId SlimeAction = (ActionId)211;
@@ -75,6 +87,10 @@ namespace Rasa.Managers
             public Creature Child;
             public ulong ParentId;
             public long RemoveAt;
+
+            /// <summary>Expiring: when the windup is done (it dies), and when it is gone; 0 until then.</summary>
+            public long ExpiresAt;
+            public long GoneAt;
         }
 
         private static readonly List<Spawn> Spawns = new List<Spawn>();
@@ -271,9 +287,25 @@ namespace Rasa.Managers
             {
                 var child = spawn.Child;
 
+                var inWorld = EntityManager.Instance.Creatures.TryGetValue(child.EntityId, out var registered) && registered == child;
+
+                // Expired and lain its time: gone.
+                if (spawn.GoneAt != 0)
+                {
+                    if (now < spawn.GoneAt)
+                        continue;
+
+                    lock (SpawnsLock)
+                        Spawns.Remove(spawn);
+
+                    if (inWorld)
+                        CellManager.Instance.RemoveCreatureFromWorld(mapChannel, child);
+
+                    continue;
+                }
+
                 // Killed, or taken out of the world by something else: no longer ours to count.
-                if (!EntityManager.Instance.Creatures.TryGetValue(child.EntityId, out var registered)
-                    || registered != child || child.State == CharacterState.Dead)
+                if (!inWorld || child.State == CharacterState.Dead || child.State == CharacterState.Dying)
                 {
                     lock (SpawnsLock)
                         Spawns.Remove(spawn);
@@ -281,14 +313,70 @@ namespace Rasa.Managers
                     continue;
                 }
 
+                if (spawn.ExpiresAt != 0)
+                {
+                    if (now >= spawn.ExpiresAt)
+                        Die(mapChannel, spawn, now);
+
+                    continue;
+                }
+
                 if (spawn.RemoveAt == 0 || now < spawn.RemoveAt)
                     continue;
 
-                lock (SpawnsLock)
-                    Spawns.Remove(spawn);
+                if (!StartExpiring(mapChannel, spawn, now))
+                {
+                    lock (SpawnsLock)
+                        Spawns.Remove(spawn);
 
-                CellManager.Instance.RemoveCreatureFromWorld(mapChannel, child);
+                    CellManager.Instance.RemoveCreatureFromWorld(mapChannel, child);
+                }
             }
+        }
+
+        /// <summary>A child's time is up: its expire's windup, standing still. Whether there was one to play.</summary>
+        private static bool StartExpiring(MapChannel mapChannel, Spawn spawn, long now)
+        {
+            if (!AbilityManager.Instance.TryGetLevel(ExpireAction, ExpireArg, out var expire))
+                return false;
+
+            var child = spawn.Child;
+            var windupMs = Math.Max(0, expire.WindupMs);
+
+            BehaviorManager.Instance.StopMoving(child);
+            child.Controller.Path.Clear();
+            child.Controller.PathIndex = 0;
+            child.Controller.WindupUntil = now + windupMs + Math.Max(0, expire.RecoveryMs);
+
+            CellManager.Instance.CellCallMethod(mapChannel, child,
+                new PerformWindupPacket(PerformType.TwoArgs, ExpireAction, ExpireArg));
+
+            spawn.ExpiresAt = now + Math.Max(1, windupMs);
+
+            return true;
+        }
+
+        /// <summary>The expire's windup is done: its resolve, and it lies dead for the recovery. Nobody's kill.</summary>
+        private static void Die(MapChannel mapChannel, Spawn spawn, long now)
+        {
+            var child = spawn.Child;
+            var recoveryMs = AbilityManager.Instance.TryGetLevel(ExpireAction, ExpireArg, out var expire) ? Math.Max(0, expire.RecoveryMs) : 0;
+
+            CellManager.Instance.CellCallMethod(mapChannel, child,
+                new AbilityRecoveryPacket(ExpireAction, ExpireArg, AbilityRecoveryPacket.HitDataKind.None));
+
+            child.State = CharacterState.Dead;
+            child.HarvestAttemptsLeft = 0;
+
+            if (child.Attributes.TryGetValue(Attributes.Health, out var health))
+            {
+                health.Current = 0;
+                CellManager.Instance.CellCallMethod(mapChannel, child, new UpdateHealthPacket(health, child.EntityId));
+            }
+
+            CellManager.Instance.CellCallMethod(mapChannel, child, new StateChangePacket(new List<CharacterState> { CharacterState.Dead }));
+
+            spawn.GoneAt = now + Math.Max(1, recoveryMs);
         }
     }
 }

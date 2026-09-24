@@ -52,6 +52,19 @@ namespace Rasa.Managers
     ///    class's targetGameEffect - going off DELAY_TIME_MS (0.5 s) on within EFFECT_RADIUS
     ///    (5 m). The Necromite is spent on it (Spend): it dies as its bomb goes on, the kill its
     ///    target's, as a Fithik's self-destruct is.
+    ///  - Corpse (NecromiteCorpseExplosionAbility 490, "Causes a Necromite to explode on a
+    ///    corpse", canTargetDead): a Necromite in a fight with a creature's body within its reach
+    ///    (the argument's range, 5 m) and a player it may fight within EFFECT_RADIUS (10 m) of
+    ///    that body winds up at it (0.8 s), and NECROMITE_CORPSE_EXPLOSION 380 - the class's
+    ///    targetGameEffect, "AoE dmg when a necromite blows up a corpse" - goes on the body,
+    ///    going off DELAY seconds (2) later on every player within EFFECT_RADIUS of it. The body
+    ///    is claimed from the moment the Necromite winds up at it (IsCorpseClaimed): no revive,
+    ///    no Reanimation, Cadaver Immolation or Hortimonculus, no second Necromite. The client's
+    ///    BombEffect takes the body away when it goes off (removeTarget), and the server gives it
+    ///    up for despawn then, as Cadaver Immolation's. As there, the effect is sent to the
+    ///    clients directly: the effect worker clears everything off a dead actor. A body
+    ///    destroyed by a finishing move, a scripted object or one the client has taken away (a
+    ///    Howler's) is not a body to use. The Necromite is not spent on a corpse.
     ///
     /// The damage is the creature_action row's, resisted as the argument's DAMAGE_TYPE (physical
     /// when it gives none), and only players take it. Death actions sit on the creature's row with
@@ -71,6 +84,7 @@ namespace Rasa.Managers
         public const ActionId StalkerOvulate = (ActionId)441;
         public const ActionId StalkerEggDrop = (ActionId)442;
         public const ActionId NecromiteSelfDestruct = (ActionId)489;
+        public const ActionId NecromiteCorpseExplosion = (ActionId)490;
 
         public const int HowlerDeathTypeId = 461;           // HOWLER_DEATH
 
@@ -85,6 +99,10 @@ namespace Rasa.Managers
         public const int StalkerEggChargeTypeId = 304;      // STALKER_EGG_CHARGE
         public const int StalkerEggDropTypeId = 305;        // STALKER_EGG_DROP_EXPLOSION
         public const int NecromiteSelfDestructTypeId = 382; // NECROMITE_SELF_DESTRUCT
+        public const int NecromiteCorpseExplosionTypeId = 380; // NECROMITE_CORPSE_EXPLOSION
+
+        /// <summary>How long a Necromite's claim on a body lasts past its windup, if the windup never lands (the Necromite killed).</summary>
+        public const long CorpseClaimSlackMs = 2000;
 
         /// <summary>Ours: the share of its health at which a Fithik starts its self-destruct.</summary>
         public const int SelfDestructHealthPercent = 20;
@@ -113,6 +131,8 @@ namespace Rasa.Managers
         public static bool IsOvulate(CreatureAction action) => action != null && action.ActionId == StalkerOvulate;
 
         public static bool IsEggDrop(CreatureAction action) => action != null && action.ActionId == StalkerEggDrop;
+
+        public static bool IsCorpseExplosion(CreatureAction action) => action != null && action.ActionId == NecromiteCorpseExplosion;
 
         /// <summary>Whether a Fithik at this health should start its self-destruct.</summary>
         public static bool ShouldSelfDestruct(int health, int maxHealth) => maxHealth > 0 && health > 0 && health * 100 <= maxHealth * SelfDestructHealthPercent;
@@ -236,6 +256,173 @@ namespace Rasa.Managers
             Arm(mapChannel, linker, player, action, bomb, RadiusOf(info), TypeOf(info), delayMs);
 
             return bomb;
+        }
+
+        private sealed class CorpseBomb
+        {
+            public MapChannel MapChannel;
+            public Creature Source;
+            public Creature Corpse;
+            public CreatureAction Action;
+            public int EffectId;
+            public float Radius;
+            public DamageType DamageType;
+            public long GoesOffAt;
+        }
+
+        private static readonly List<CorpseBomb> CorpseBombs = new List<CorpseBomb>();
+        private static readonly Dictionary<Creature, long> CorpseClaims = new Dictionary<Creature, long>();
+
+        /// <summary>Whether a Necromite has this body: winding up at it, or its bomb on it.</summary>
+        public static bool IsCorpseClaimed(Creature corpse)
+        {
+            if (corpse == null)
+                return false;
+
+            lock (BombsLock)
+                return CorpseBombs.Any(c => c.Corpse == corpse)
+                    || CorpseClaims.TryGetValue(corpse, out var until) && Environment.TickCount64 < until;
+        }
+
+        /// <summary>Whether a Necromite may blow this body up: a creature's corpse, not a scripted object, not destroyed by a finishing move or taken away by its client, and nobody else's.</summary>
+        public static bool IsBlastableCorpse(Creature necromite, Creature corpse)
+        {
+            if (corpse == null || corpse == necromite || corpse.State != CharacterState.Dead || corpse.IsScripted || corpse.CritKilled)
+                return false;
+
+            if (corpse.Actions != null && corpse.Actions.Any(a => KindOf(a.ActionId) == Kind.DeathBomb))
+                return false;
+
+            return !IsCorpseClaimed(corpse) && !AbilityManager.IsCorpseInUse(corpse);
+        }
+
+        /// <summary>The body nearest the Necromite within reach that has a player it may fight within radius of it; null for none.</summary>
+        private static Creature CorpseFor(MapChannel mapChannel, Creature necromite, float reach, float radius)
+        {
+            var bodies = new List<Creature>();
+
+            foreach (var cell in CellManager.CellsIn(mapChannel, necromite.Cells))
+                foreach (var creature in cell.CreatureList)
+                    if (Vector3.DistanceSquared(creature.Position, necromite.Position) <= reach * reach && IsBlastableCorpse(necromite, creature))
+                        bodies.Add(creature);
+
+            return bodies.Distinct()
+                .OrderBy(c => Vector3.DistanceSquared(c.Position, necromite.Position))
+                .FirstOrDefault(c => Caught(mapChannel, necromite, c.Position, radius).Count > 0);
+        }
+
+        /// <summary>
+        /// A Necromite in a fight: if there is a body in reach with a player near it, it winds up
+        /// at it and, when the windup is done, its bomb goes on the body. Whether it did.
+        /// </summary>
+        public static bool StartCorpseExplosion(MapChannel mapChannel, Creature necromite, CreatureAction action)
+        {
+            if (mapChannel == null || necromite == null || !IsCorpseExplosion(action))
+                return false;
+
+            var info = LevelOf(action);
+
+            if (info == null)
+                return false;
+
+            var reach = Math.Max(1f, info.MaxRange);
+            var radius = RadiusOf(info);
+            var corpse = CorpseFor(mapChannel, necromite, reach, radius);
+
+            if (corpse == null)
+                return false;
+
+            var windupMs = CreatureWindups.WindupMsOf(action, info);
+
+            lock (BombsLock)
+                CorpseClaims[corpse] = Environment.TickCount64 + windupMs + CorpseClaimSlackMs;
+
+            CellManager.Instance.CellCallMethod(mapChannel, necromite,
+                new PerformWindupPacket(PerformType.ThreeArgs, action.ActionId, action.ActionArgId, corpse.EntityId));
+
+            CreatureWindups.After(mapChannel, necromite, windupMs, () => PlantOnCorpse(mapChannel, necromite, corpse, action, info, radius));
+
+            return true;
+        }
+
+        private static void PlantOnCorpse(MapChannel mapChannel, Creature necromite, Creature corpse, CreatureAction action, ActionLevelInfo info, float radius)
+        {
+            lock (BombsLock)
+                CorpseClaims.Remove(corpse);
+
+            var recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None);
+
+            // Cleared away, or taken by something else, during the windup: it performs at nothing.
+            if (EntityManager.Instance.GetCreature(corpse.EntityId) != corpse || corpse.MapContextId != mapChannel.MapInfo.MapContextId
+                || !IsBlastableCorpse(necromite, corpse))
+            {
+                CellManager.Instance.CellCallMethod(mapChannel, necromite, recovery);
+                return;
+            }
+
+            var effectId = GameEffectManager.Instance.NextEffectId(mapChannel);
+            var type = TypeOf(info);
+
+            CellManager.Instance.CellCallMethod(mapChannel, corpse, new GameEffectAttachedPacket
+            {
+                EffectTypeId = NecromiteCorpseExplosionTypeId,
+                EffectId = effectId,
+                EffectLevel = Math.Max(1u, info.Level),
+                SourceId = necromite.EntityId,
+                Announced = true,
+                Duration = null,
+                DamageType = (int)type,
+                AttrId = 1,
+                IsActive = true,
+                IsBuff = false,
+                IsDebuff = true,
+                IsNegativeEffect = true,
+                Extras = new Dictionary<string, object>(),
+                Args = new List<object>()
+            });
+
+            recovery.Hits.Add(new AbilityHit { EntityId = corpse.EntityId });
+            CellManager.Instance.CellCallMethod(mapChannel, necromite, recovery);
+
+            lock (BombsLock)
+                CorpseBombs.Add(new CorpseBomb
+                {
+                    MapChannel = mapChannel,
+                    Source = necromite,
+                    Corpse = corpse,
+                    Action = action,
+                    EffectId = effectId,
+                    Radius = radius,
+                    DamageType = type,
+                    GoesOffAt = Environment.TickCount64 + Math.Max(0, info.Get(AbilityProperty.Delay, 2)) * 1000L
+                });
+        }
+
+        /// <summary>A body's bomb goes off: everyone around it hit, DoExplosion on the body, and the body given up.</summary>
+        private static void BlowCorpse(MapChannel mapChannel, CorpseBomb bomb)
+        {
+            var corpse = bomb.Corpse;
+
+            if (EntityManager.Instance.GetCreature(corpse.EntityId) != corpse || corpse.MapContextId != mapChannel.MapInfo.MapContextId)
+                return;
+
+            var blast = new GameEffectAnnounceDamagePacket(bomb.EffectId, "DoExplosion");
+
+            foreach (var victim in Caught(mapChannel, bomb.Source, corpse.Position, bomb.Radius))
+            {
+                var (amount, resisted, crit) = Roll(bomb.Source, victim, bomb.Action, bomb.DamageType);
+
+                ActorManager.Instance.Damage(mapChannel, victim, amount, bomb.Source, bomb.DamageType);
+
+                blast.Hits.Add(new TickEntry { EntityId = victim.EntityId, Amount = amount, Resisted = resisted, DamageType = bomb.DamageType, IsCritical = crit });
+            }
+
+            CellManager.Instance.CellCallMethod(mapChannel, corpse, blast);
+
+            // The clients have taken the body away with the blast; the server gives it up too, on
+            // the deletion path that tidies its loot dispenser.
+            if (corpse.Controller != null)
+                corpse.Controller.DeadTime = long.MaxValue / 2;
         }
 
         /// <summary>
@@ -432,6 +619,7 @@ namespace Rasa.Managers
         public static void Worker(MapChannel mapChannel)
         {
             List<Pending> due;
+            List<CorpseBomb> bodies;
             var now = Environment.TickCount64;
 
             lock (BombsLock)
@@ -440,7 +628,18 @@ namespace Rasa.Managers
 
                 foreach (var bomb in due)
                     Bombs.Remove(bomb);
+
+                bodies = CorpseBombs.Where(b => b.MapChannel == mapChannel && now >= b.GoesOffAt).ToList();
+
+                foreach (var body in bodies)
+                    CorpseBombs.Remove(body);
+
+                foreach (var lapsed in CorpseClaims.Where(c => now >= c.Value).Select(c => c.Key).ToList())
+                    CorpseClaims.Remove(lapsed);
             }
+
+            foreach (var body in bodies)
+                BlowCorpse(mapChannel, body);
 
             foreach (var bomb in due)
             {

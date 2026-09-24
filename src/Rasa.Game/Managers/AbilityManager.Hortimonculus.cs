@@ -124,12 +124,18 @@ namespace Rasa.Managers
             if (!(target is Creature corpse) || !IsBiologicalCorpse(corpse) || !TargetCategories.PlayerMayAttack(corpse.TargetCategory) || corpse.IsScripted)
                 return false;
 
+            return !IsCorpseInUse(corpse) && !CreatureBombs.IsCorpseClaimed(corpse);
+        }
+
+        /// <summary>Whether a player's corpse ability has this body: Cadaver Immolation burning it, a Hortimonculus growing from it.</summary>
+        internal static bool IsCorpseInUse(Creature corpse)
+        {
             lock (BurningCorpsesLock)
                 if (BurningCorpses.Any(c => c.Corpse == corpse))
-                    return false;
+                    return true;
 
             lock (PlantsLock)
-                return !Plants.Any(p => p.Corpse == corpse);
+                return Plants.Any(p => p.Corpse == corpse);
         }
 
         /// <summary>The plant this object is, or null.</summary>

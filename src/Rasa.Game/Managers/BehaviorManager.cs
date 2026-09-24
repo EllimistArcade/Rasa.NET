@@ -798,18 +798,20 @@ namespace Rasa.Managers
                     }
 
                     // Rage, Scourge, a warcry, chaff: on itself or its own side (CreatureBuffs); a
-                    // Howler's shriek, on every player around it (CreatureDebuffs); a Technician's
-                    // turret, a Hunter's pet or a Thrax's Necromite (CreatureSummons); a Stalker's egg charge
-                    // (CreatureBombs); a Miasma turning to a cloud to coalesce on whoever is around
-                    // it (CreatureMiasma). Only when it would do something; otherwise on to the
-                    // next action.
+                    // Howler's shriek, on every player around it (CreatureDebuffs); a
+                    // Technician's turret, a Hunter's pet or a Thrax's Necromite
+                    // (CreatureSummons); a Stalker's egg charge or a Necromite's bomb on a body
+                    // (CreatureBombs); a Miasma turning to a cloud to coalesce on whoever is
+                    // around it (CreatureMiasma). Only when it would do something; otherwise on to
+                    // the next action.
                     if (CreatureBuffs.Is(action) || CreatureDebuffs.Is(action) || CreatureSummons.IsSummon(action) || CreatureBombs.IsOvulate(action)
-                        || CreatureMiasma.Is(action))
+                        || CreatureMiasma.Is(action) || CreatureBombs.IsCorpseExplosion(action))
                     {
                         var used = CreatureBuffs.Is(action) ? CreatureBuffs.Perform(mapChannel, creature, action, targetActor)
                             : CreatureDebuffs.Is(action) ? CreatureDebuffs.Perform(mapChannel, creature, action)
                             : CreatureSummons.IsSummon(action) ? CreatureSummons.Perform(mapChannel, creature, action, targetActor)
                             : CreatureMiasma.Is(action) ? CreatureMiasma.Dissipate(mapChannel, creature, action)
+                            : CreatureBombs.IsCorpseExplosion(action) ? CreatureBombs.StartCorpseExplosion(mapChannel, creature, action)
                             : CreatureBombs.Ovulate(mapChannel, creature, action);
 
                         if (!used)

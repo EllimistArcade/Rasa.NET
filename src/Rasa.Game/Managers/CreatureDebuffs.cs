@@ -69,11 +69,20 @@ namespace Rasa.Managers
             if (amount <= 0 || reached.Count == 0)
                 return false;
 
-            var durationMs = Math.Max(1, info.Get(AbilityProperty.Duration, 15)) * 1000L;
-
             CellManager.Instance.CellCallMethod(mapChannel, creature,
                 new PerformWindupPacket(PerformType.ThreeArgs, action.ActionId, action.ActionArgId, creature.EntityId));
 
+            // The shriek goes out when the windup is done, on whoever is about then (CreatureWindups).
+            CreatureWindups.After(mapChannel, creature, CreatureWindups.WindupMsOf(action, info),
+                () => Shrieked(mapChannel, creature, action, info, amount, radius));
+
+            return true;
+        }
+
+        private static void Shrieked(MapChannel mapChannel, Creature creature, CreatureAction action, ActionLevelInfo info, int amount, int radius)
+        {
+            var reached = Unshrieked(CreatureBombs.Caught(mapChannel, creature, creature.Position, radius));
+            var durationMs = Math.Max(1, info.Get(AbilityProperty.Duration, 15)) * 1000L;
             var recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.TypeIds);
 
             foreach (var player in reached)
@@ -105,8 +114,6 @@ namespace Rasa.Managers
             }
 
             CellManager.Instance.CellCallMethod(mapChannel, creature, recovery);
-
-            return true;
         }
     }
 }

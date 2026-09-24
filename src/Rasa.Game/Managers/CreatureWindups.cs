@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Rasa.Managers
 {
@@ -25,6 +27,12 @@ namespace Rasa.Managers
     ///
     /// Weapon attacks - action 1 and 174 pairs, a module under weapons. - are shots and blows,
     /// not abilities, and land as they did.
+    ///
+    /// The actions that are not missiles wait the same way (After): Rage, Scourge and the warcry
+    /// (CreatureBuffs), the Howler's shriek (CreatureDebuffs), the Technician's turret and the
+    /// Hunter's pet (CreatureSummons) and the Amoeboid's vomit send their windup when they start
+    /// and do what they do, with its recovery, when it is done - the effect goes on, the ally
+    /// comes, the child is born then, and not before the animation that shows it.
     ///
     /// The Linker's chest blast has more to its windup: LinkerChestBlastWindupEffect, "absorbs
     /// damage done to a Linker performing the Chest Blast ability" (LINKER_CHEST_BLAST_WINDUP 270,
@@ -80,6 +88,86 @@ namespace Rasa.Managers
                 return true;
 
             return area.Contains(creature.Position, AbilityManager.FacingOf(creature), missile.AreaCentre ?? target.Position, target.Position);
+        }
+
+        private sealed class Deferred
+        {
+            public MapChannel MapChannel;
+            public Creature Creature;
+            public long At;
+            public Action Resolve;
+        }
+
+        private static readonly List<Deferred> Pending = new List<Deferred>();
+        private static readonly object PendingLock = new object();
+
+        /// <summary>
+        /// A creature action that is not a missile, wound up: the creature stops and stands for
+        /// windupMs, and resolve runs when it is done - unless the creature is dead, dying or
+        /// stunned by then, when nothing comes of it. No windup, and it runs now.
+        /// </summary>
+        public static void After(MapChannel mapChannel, Creature creature, int windupMs, Action resolve)
+        {
+            if (resolve == null)
+                return;
+
+            if (windupMs <= 0 || mapChannel == null || creature == null)
+            {
+                resolve();
+                return;
+            }
+
+            var at = Environment.TickCount64 + windupMs;
+
+            creature.Controller.WindupUntil = at;
+            creature.Controller.Path.Clear();
+            creature.Controller.PathIndex = 0;
+            BehaviorManager.Instance?.StopMoving(creature);
+
+            lock (PendingLock)
+                Pending.Add(new Deferred { MapChannel = mapChannel, Creature = creature, At = at, Resolve = resolve });
+        }
+
+        /// <summary>Whether this creature has a wound-up action waiting on its windup.</summary>
+        public static bool HasPending(Creature creature)
+        {
+            lock (PendingLock)
+                return Pending.Any(p => p.Creature == creature);
+        }
+
+        /// <summary>The wound-up actions on this map whose windup is done. Run every map tick.</summary>
+        public static void Worker(MapChannel mapChannel)
+        {
+            List<Deferred> due;
+            var now = Environment.TickCount64;
+
+            lock (PendingLock)
+            {
+                due = Pending.Where(p => p.MapChannel == mapChannel && now >= p.At).ToList();
+
+                foreach (var deferred in due)
+                    Pending.Remove(deferred);
+            }
+
+            foreach (var deferred in due)
+            {
+                var creature = deferred.Creature;
+
+                if (creature.State == CharacterState.Dead || creature.State == CharacterState.Dying
+                    || creature.MapContextId != mapChannel.MapInfo.MapContextId
+                    || !creature.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0
+                    || Stuns.IsStunned(creature))
+                    continue;
+
+                try
+                {
+                    deferred.Resolve();
+                }
+                catch (Exception e)
+                {
+                    Logger.WriteLog(LogType.Error, $"CreatureWindups: {creature.EntityId}'s wound-up action threw and was dropped: {e}");
+                }
+            }
         }
 
         /// <summary>Whether the creature is winding an ability up: it stands and does nothing else.</summary>

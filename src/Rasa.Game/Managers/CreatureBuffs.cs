@@ -125,12 +125,22 @@ namespace Rasa.Managers
             };
         }
 
-        /// <summary>The windup and the recovery, which lists who the action reached.</summary>
-        private static void Show(MapChannel mapChannel, Creature creature, CreatureAction action, IEnumerable<Actor> hits)
+        /// <summary>
+        /// The windup now, and when it is done (CreatureWindups.After) what the action does:
+        /// resolve returns who it reached, which the recovery lists.
+        /// </summary>
+        private static void WindUp(MapChannel mapChannel, Creature creature, CreatureAction action, ActionLevelInfo info, Func<IEnumerable<Actor>> resolve)
         {
             CellManager.Instance.CellCallMethod(mapChannel, creature,
                 new PerformWindupPacket(PerformType.ThreeArgs, action.ActionId, action.ActionArgId, creature.EntityId));
 
+            CreatureWindups.After(mapChannel, creature, CreatureWindups.WindupMsOf(action, info),
+                () => Recover(mapChannel, creature, action, resolve()));
+        }
+
+        /// <summary>The recovery, which lists who the action reached.</summary>
+        private static void Recover(MapChannel mapChannel, Creature creature, CreatureAction action, IEnumerable<Actor> hits)
+        {
             var recovery = new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None);
 
             foreach (var hit in hits)
@@ -144,6 +154,13 @@ namespace Rasa.Managers
             if (Has(creature, RageSourceTypeId))
                 return false;
 
+            WindUp(mapChannel, creature, action, info, () => { EnRage(mapChannel, creature, info); return new[] { creature }; });
+
+            return true;
+        }
+
+        private static void EnRage(MapChannel mapChannel, Creature creature, ActionLevelInfo info)
+        {
             var rage = NewEffect(mapChannel, creature, info, RageSourceTypeId, info.Get(AbilityProperty.Duration, 30) * 1000L);
 
             rage.DamageDealtPercent = info.Get(AbilityProperty.DamagePercentMin);
@@ -161,9 +178,6 @@ namespace Rasa.Managers
             }
 
             GameEffectManager.Instance.Attach(mapChannel, creature, rage);
-            Show(mapChannel, creature, action, new[] { creature });
-
-            return true;
         }
 
         private static bool Scourge(MapChannel mapChannel, Creature creature, CreatureAction action, ActionLevelInfo info)
@@ -171,6 +185,13 @@ namespace Rasa.Managers
             if (Has(creature, ScourgeTypeId) || action.MaxDamage == 0)
                 return false;
 
+            WindUp(mapChannel, creature, action, info, () => { StartScourge(mapChannel, creature, action, info); return new[] { creature }; });
+
+            return true;
+        }
+
+        private static void StartScourge(MapChannel mapChannel, Creature creature, CreatureAction action, ActionLevelInfo info)
+        {
             var scourge = NewEffect(mapChannel, creature, info, ScourgeTypeId, info.Get(AbilityProperty.Duration, 15) * 1000L);
 
             scourge.TickRadius = info.Get(AbilityProperty.EffectRadius, 6);
@@ -182,9 +203,6 @@ namespace Rasa.Managers
             scourge.NextTickTick = Environment.TickCount64 + 1000;
 
             GameEffectManager.Instance.Attach(mapChannel, creature, scourge);
-            Show(mapChannel, creature, action, new[] { creature });
-
-            return true;
         }
 
         private static bool Warcry(MapChannel mapChannel, Creature creature, CreatureAction action, ActionLevelInfo info, Actor target)
@@ -198,29 +216,40 @@ namespace Rasa.Managers
                 if (WarcryAt.TryGetValue(creature.EntityId, out var at) && now - at < WarcryRearmMs)
                     return false;
 
-            var count = Math.Max(1, info.Get(AbilityProperty.CallForHelpNumCreatures, 1));
-            var radius = info.Get(AbilityProperty.RadiusAroundSource, 20);
-            var heard = AlliesWithin(mapChannel, creature, creature.Position, radius)
-                .Where(a => a.Controller.CurrentAction != BehaviorManager.BehaviorActionFighting && !BehaviorManager.IsReturning(a))
-                .OrderBy(a => Vector3.DistanceSquared(a.Position, creature.Position))
-                .Take(count)
-                .ToList();
-
-            if (heard.Count == 0)
+            if (Hears(mapChannel, creature, info).Count == 0)
                 return false;
 
             lock (WarcryLock)
                 WarcryAt[creature.EntityId] = now;
 
-            foreach (var ally in heard)
+            // Who hears it is who is about when the cry goes up, at the end of the windup.
+            WindUp(mapChannel, creature, action, info, () =>
             {
-                ally.Hate.Ensure(target.EntityId, 1);
-                BehaviorManager.Instance.SetActionFighting(ally, target.EntityId);
-            }
+                var heard = Hears(mapChannel, creature, info);
 
-            Show(mapChannel, creature, action, heard);
+                foreach (var ally in heard)
+                {
+                    ally.Hate.Ensure(target.EntityId, 1);
+                    BehaviorManager.Instance.SetActionFighting(ally, target.EntityId);
+                }
+
+                return heard;
+            });
 
             return true;
+        }
+
+        /// <summary>The allies a warcry reaches: CALL_FOR_HELP_NUM_CREATURES of those within RADIUS_AROUND_SOURCE not already fighting, nearest first.</summary>
+        private static List<Creature> Hears(MapChannel mapChannel, Creature creature, ActionLevelInfo info)
+        {
+            var count = Math.Max(1, info.Get(AbilityProperty.CallForHelpNumCreatures, 1));
+            var radius = info.Get(AbilityProperty.RadiusAroundSource, 20);
+
+            return AlliesWithin(mapChannel, creature, creature.Position, radius)
+                .Where(a => a.Controller.CurrentAction != BehaviorManager.BehaviorActionFighting && !BehaviorManager.IsReturning(a))
+                .OrderBy(a => Vector3.DistanceSquared(a.Position, creature.Position))
+                .Take(count)
+                .ToList();
         }
 
         /// <summary>How many Linkers are feeding this one now.</summary>

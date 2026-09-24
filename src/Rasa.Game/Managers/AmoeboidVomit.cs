@@ -109,10 +109,17 @@ namespace Rasa.Managers
                 return;
 
             // Everyone who can see it gets the regurgitation itself, whether or not a child
-            // follows: the animation is the telegraph.
+            // follows: the animation is the telegraph. The child comes when the windup is done
+            // (CreatureWindups).
             CellManager.Instance.CellCallMethod(mapChannel, parent,
                 new PerformWindupPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
 
+            CreatureWindups.After(mapChannel, parent, CreatureWindups.WindupMsOf(action, level),
+                () => Regurgitate(mapChannel, parent, action, level));
+        }
+
+        private static void Regurgitate(MapChannel mapChannel, Creature parent, CreatureAction action, ActionLevelInfo level)
+        {
             CellManager.Instance.CellCallMethod(mapChannel, parent,
                 new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
 

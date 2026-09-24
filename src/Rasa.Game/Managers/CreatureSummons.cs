@@ -228,13 +228,28 @@ namespace Rasa.Managers
                 return false;
             }
 
+            CellManager.Instance.CellCallMethod(mapChannel, summoner,
+                new PerformWindupPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
+
+            // What it summons comes when the windup is done (CreatureWindups): the turret set
+            // down, the Howler called.
+            CreatureWindups.After(mapChannel, summoner, CreatureWindups.WindupMsOf(action, info),
+                () => Bring(mapChannel, summoner, action, info, templateId, target));
+
+            return true;
+        }
+
+        private static void Bring(MapChannel mapChannel, Creature summoner, CreatureAction action, ActionLevelInfo info, uint templateId, Actor target)
+        {
+            var turret = action.ActionId == TechnicianTurret;
+
+            if (target != null && (target.State == CharacterState.Dead || target.MapContextId != summoner.MapContextId))
+                target = null;
+
             var summon = CreatureManager.Instance.CreateCreature(templateId, null);
 
             if (summon == null)
-                return false;
-
-            CellManager.Instance.CellCallMethod(mapChannel, summoner,
-                new PerformWindupPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
+                return;
 
             CellManager.Instance.CellCallMethod(mapChannel, summoner,
                 new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
@@ -275,8 +290,6 @@ namespace Rasa.Managers
                 });
 
             JoinFight(summon, summoner, target);
-
-            return true;
         }
 
         /// <summary>

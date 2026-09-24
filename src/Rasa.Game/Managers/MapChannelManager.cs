@@ -220,6 +220,9 @@ namespace Rasa.Managers
                     // Linkers' channels whose windup is done, and the boosts that have run out.
                     CreatureBuffs.Worker(mapChannel);
 
+                    // Creature actions that are not missiles, whose windup is done.
+                    CreatureWindups.Worker(mapChannel);
+
                     // Crab Mines: seeking, running, going off.
                     AbilityManager.Instance.CrabMineWorker(mapChannel);
 

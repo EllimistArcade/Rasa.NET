@@ -1041,16 +1041,26 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Sets the health and armour refresh periods for the player's current combat state.
+        /// Sets the health and armour regeneration for the player's current combat state.
         ///
-        /// The period rather than the amount, because both are integers on the wire and a base
-        /// amount of 2 scaled by 0.2 truncates to nothing. See <see cref="CombatRegen"/>.
+        /// Health: the period, five times longer in combat. The period rather than the amount,
+        /// because both are integers on the wire and a base amount of 2 scaled by 0.2 truncates
+        /// to nothing. See <see cref="CombatRegen"/>.
         ///
-        /// This is the only place either period is set, including the out-of-combat value, so
-        /// that there is one answer to what the period is rather than two that have to agree. It
-        /// is called at the end of UpdateStatsValues for that reason and for a second one:
-        /// UpdateStatsValues recomputes the rates from scratch, so without it, changing a piece
-        /// of armour mid-fight would quietly restore full regeneration.
+        /// Armour: none at all in combat - "Body Armor doesn't regenerate during combat" - so its
+        /// amount is 0 there and the armour's own rate (ArmorRegenRate) out of it, at the base
+        /// period. The amount rather than the period, because a 0 amount is what every packet
+        /// carrying the armour sends (UpdateArmor, AttributeInfo), and the client's
+        /// UpdateAttribute resets the period to 1 on every UpdateArmor; a 0 amount also stops the
+        /// server's tick and makes the effects' percentages (Base Wave, Graviton Armor) moot,
+        /// since they scale this amount. Armour put back directly (ActorManager.RestoreArmor)
+        /// still goes on.
+        ///
+        /// This is the only place either is set, including the out-of-combat values, so that
+        /// there is one answer rather than two that have to agree. It is called at the end of
+        /// UpdateStatsValues for that reason and for a second one: UpdateStatsValues recomputes
+        /// the rates from scratch, so without it, changing a piece of armour mid-fight would
+        /// quietly restore full regeneration.
         ///
         /// A period of zero would stop regeneration entirely - the client's
         /// _EvaluatePredictedRefresh returns early on one - so neither branch may yield it.
@@ -1060,12 +1070,14 @@ namespace Rasa.Managers
             if (player == null)
                 return;
 
-            var period = player.InCombat
+            player.Attributes[Attributes.Health].RefreshPeriod = player.InCombat
                 ? CombatRegen.InCombatRegenPeriodSeconds
                 : CombatRegen.RegenPeriodSeconds;
 
-            player.Attributes[Attributes.Health].RefreshPeriod = period;
-            player.Attributes[Attributes.Armor].RefreshPeriod = period;
+            var armor = player.Attributes[Attributes.Armor];
+
+            armor.RefreshAmount = player.InCombat && !CombatRegen.ArmorRegeneratesInCombat ? 0 : player.ArmorRegenRate;
+            armor.RefreshPeriod = CombatRegen.RegenPeriodSeconds;
         }
 
         /// <summary>Drops players out of combat once their timer has run out.</summary>
@@ -3060,11 +3072,11 @@ namespace Rasa.Managers
             }
             armorMax = armorMax * (1.0d + armorBonusPct);
 
-            // The regen rate summed off the equipped armour goes on RefreshAmount. It used to be
-            // assigned to Current, which the fullreset branch a few lines below overwrites
-            // unconditionally - so it was computed, discarded, and armour never regenerated
-            // either.
-            attribute[Attributes.Armor].RefreshAmount = armorRegenRate;
+            // The regen rate summed off the equipped armour; ApplyRegenPeriod, below, puts it on
+            // RefreshAmount out of combat. It used to be assigned to Current, which the fullreset
+            // branch a few lines below overwrites unconditionally - so it was computed,
+            // discarded, and armour never regenerated either.
+            player.ArmorRegenRate = armorRegenRate;
             attribute[Attributes.Armor].NormalMax = (int)Math.Round(armorMax, 0);
             attribute[Attributes.Armor].CurrentMax = attribute[Attributes.Armor].NormalMax;
             if (fullreset)

@@ -151,6 +151,13 @@ namespace Rasa.Structures
         /// <summary>Environment.TickCount64 at which combat lapses, refreshed by every hit.</summary>
         public long CombatExpiresAt { get; set; }
 
+        /// <summary>
+        /// Armour regeneration per second from the armour worn (armorclass.regen_rate summed),
+        /// set by UpdateStatsValues. Armor.RefreshAmount carries it out of combat and 0 in combat
+        /// (ManifestationManager.ApplyRegenPeriod).
+        /// </summary>
+        public int ArmorRegenRate { get; set; }
+
         /// <summary>Seconds of regeneration ticked so far (ActorManager.Regenerate); the in-combat period is a multiple of them.</summary>
         public long RegenSeconds { get; set; }
 

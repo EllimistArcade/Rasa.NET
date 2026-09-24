@@ -299,8 +299,8 @@ namespace Rasa.Managers
         /// health and armour in manifestation_updatePlayer; power is the interim rule described
         /// at UpdateStatsValues. Chi (adrenaline) is not regenerated: it is gained on kills
         /// (ManifestationManager.GainAdrenaline) and spent by sprint and the like. In combat the
-        /// health and armour periods are five times longer (CombatRegen), which this honours by
-        /// ticking them every fifth second.
+        /// health period is five times longer (CombatRegen), which this honours by ticking it
+        /// every fifth second, and armour's amount is 0 (ManifestationManager.ApplyRegenPeriod).
         /// </summary>
         public void Regenerate(MapChannel mapChannel)
         {

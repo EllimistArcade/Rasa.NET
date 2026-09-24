@@ -19,7 +19,18 @@ namespace Rasa.Managers
     ///  - the ceiling is 100 crouched (CROUCHED_ACCURACY_MAX) and 80 standing still or walking
     ///    (STOPPED / SLOW_ACCURACY_MAX), 64 running (FAST_ACCURACY_MAX);
     ///  - each shot takes the weapon's recoil amount off it (baseweaponattack.py LocalDoAction);
-    ///  - drawing a weapon starts it from 0 (actor.py, on an equipment update with a weapon).
+    ///  - drawing a weapon starts it from 0 (actor.py, on an equipment update with a weapon);
+    ///  - with no target the ceiling is 0 (UpdateAccuracyRates: "if self.GetTargetId() is None:
+    ///    self.accuracyMaxValue = 0"), so the bead runs down, and starts building when a target
+    ///    is picked - "Beading begins as soon as you target an enemy" (the strategy guide).
+    ///
+    /// The bead also sets the damage of a shot. The guide: "Failing to allow any bead time
+    /// reduces the damage your attack delivers by a whopping 90% due to poor aim. Attacks with
+    /// partial beading deliver greater damage, even if you can't afford to wait for a perfect
+    /// shot." So a shot does NoBeadDamage of its damage at no bead, rising in a straight line to
+    /// all of it at the most the stance allows (the ceiling: 80 standing, 100 crouched) - standing
+    /// still and fully beaded is a full-damage shot; crouching gets there twice as fast and is the
+    /// only way to full bead's crit. The straight line is ours; the guide gives the two ends.
     ///
     /// The rates are worked out again whenever what they depend on changes - crouching, the
     /// target, the weapon - as UpdateAccuracyRates is on the client. Running is not told apart
@@ -27,9 +38,9 @@ namespace Rasa.Managers
     /// have reached 80 or only 64 never decides whether a shot was at full bead.
     ///
     /// The aim rate and recoil come from the weapon template, which is also what the client is
-    /// sent in WeaponInfo, so both ends run the same bead. Those two numbers are placeholders in
-    /// the shipped data (1 and 1 on every row), which makes the bead close almost at once when
-    /// crouched; correcting them per weapon corrects both ends together.
+    /// sent in WeaponInfo, so both ends run the same bead. The aim rates are the guide's
+    /// comparative bead times by weapon family (Retune_weapon_bead); recoil is still the shipped
+    /// placeholder, 1.
     /// </summary>
     public static class Accuracy
     {
@@ -39,6 +50,9 @@ namespace Rasa.Managers
         public const double CrouchedRateMod = 2.0;          // CROUCHED_ACCURACY_MOD
         public const double StandingMax = 80;               // STOPPED_ACCURACY_MAX, SLOW_ACCURACY_MAX
         public const double StandingRateMod = 1.0;          // STOPPED_ACCURACY_MOD
+
+        /// <summary>The share of its damage a shot does with no bead at all: "reduces the damage ... by a whopping 90%".</summary>
+        public const double NoBeadDamage = 0.10;
 
         /// <summary>Where the bead is now, brought up to date from the last time it was looked at.</summary>
         public static double Current(Manifestation player, long now)
@@ -60,6 +74,20 @@ namespace Rasa.Managers
         public static bool IsFullBead(Manifestation player, long now) => Current(player, now) / 100.0 > FullBeadRatio;
 
         /// <summary>
+        /// What share of its damage a shot fired now does: NoBeadDamage with no bead, all of it at
+        /// the stance's ceiling, in a straight line between.
+        /// </summary>
+        public static double DamageFactor(Manifestation player, long now)
+        {
+            var bead = Current(player, now);
+
+            if (player.AccuracyMax <= 0)
+                return NoBeadDamage;
+
+            return NoBeadDamage + (1 - NoBeadDamage) * Math.Min(1.0, bead / player.AccuracyMax);
+        }
+
+        /// <summary>
         /// The ceiling and the rate towards it, worked out again: the player crouched or stood,
         /// changed target or weapon. The bead is brought up to date first, so the time before the
         /// change counts at the old rate.
@@ -70,7 +98,7 @@ namespace Rasa.Managers
 
             var crouched = player.IsCrouching;
 
-            player.AccuracyMax = crouched ? CrouchedMax : StandingMax;
+            player.AccuracyMax = player.Target == 0 ? 0 : crouched ? CrouchedMax : StandingMax;
 
             if (player.AccuracyMax < player.AccuracyValue)
                 player.AccuracyRate = -LossPerMs;

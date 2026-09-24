@@ -805,6 +805,11 @@ namespace Rasa.Managers
 
             var fullBead = Accuracy.IsFullBead(client.Player, now);
 
+            // How well it was aimed decides how hard it hits: a tenth with no bead, all of it at
+            // the stance's full bead. A polymorphed player's creature weapon is not beaded.
+            if (weapon != client.Player.MorphWeapon)
+                damage = Math.Max(1, (int)Math.Round(damage * Accuracy.DamageFactor(client.Player, now)));
+
             Accuracy.Recoil(client.Player, weapon.ItemTemplate.WeaponInfo.RecoilAmount, aimRate, now);
 
             // Firearms on a rifle adds to the crit chance: "Rifles: +3% Crit Hit (+5% with full

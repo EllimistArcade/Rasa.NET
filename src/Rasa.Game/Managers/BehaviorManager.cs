@@ -294,11 +294,12 @@ namespace Rasa.Managers
             // but it can still cross into another cell doing so.
             var knockedBack = StepKnockback(mapChannel, creature, delta);
 
-            // Mid-charge (Kael rushing blow), winding up to blow itself up (a Fithik) or to drop
-            // an egg (a Stalker), or in a cocoon (an Atta grub), it does nothing else until that
-            // is done.
+            // Mid-charge (Kael rushing blow), winding up to blow itself up (a Fithik), to drop an
+            // egg (a Stalker) or any ability (CreatureWindups), or in a cocoon (an Atta grub), it
+            // does nothing else until that is done.
             if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature) || CreatureBombs.IsSelfDestructing(creature)
-                || CreatureSupport.IsCasting(creature) || CreatureHabits.IsBusy(creature) || CreatureSummons.IsBusy(creature))
+                || CreatureSupport.IsCasting(creature) || CreatureHabits.IsBusy(creature) || CreatureSummons.IsBusy(creature)
+                || CreatureWindups.IsWindingUp(creature))
             {
                 needCellUpdate = CellChanged(creature, delta);
                 return;
@@ -859,9 +860,21 @@ namespace Rasa.Managers
                     }
 
                     var actionData = new ActionData(creature, action.ActionId, action.ActionArgId, creature.Controller.ActionFighting.TargetEntityId, 0);
+
+                    // An ability lands when its windup is done, and its flight after that; the
+                    // creature stands meanwhile (CreatureWindups). A weapon's shot lands as it did.
+                    var landsIn = CreatureWindups.Begin(mapChannel, creature, action, (float)Math.Sqrt(targetDistSqr));
+
+                    if (landsIn.HasValue)
+                    {
+                        creature.Controller.Path.Clear();
+                        creature.Controller.PathIndex = 0;
+                        StopMoving(creature);
+                    }
+
                     // do damage, of the type the attack's weapon deals
                     MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, damageType: CreatureAttacks.DamageTypeOf(action),
-                        melee: action.ActionId == ActionId.WeaponMelee, creatureAction: action);
+                        melee: action.ActionId == ActionId.WeaponMelee, creatureAction: action, landsInMs: landsIn);
 
                     // Feedback on it burns it for acting: this is the hostile action the server has.
                     AbilityManager.OnCreatureActed(mapChannel, creature, true);

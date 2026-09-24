@@ -143,13 +143,20 @@ namespace Rasa.Managers
         /// <summary>What a creature row scales by between two levels: x2 every 8.</summary>
         public static double ScaleFor(uint fromLevel, uint toLevel) => Math.Pow(2, ((int)toLevel - (int)fromLevel) / 8.0);
 
+        /// <summary>The resistance that stands for all of a hit absorbed (a Linker's chest blast windup): nothing gets through that rounds to a point.</summary>
+        public const int AbsorbAllResist = 1000000;
+
         /// <summary>
         /// The resistance that takes absorbPercent off every hit, whatever its type: the inverse
-        /// of GameEffectManager.ResistMultiplier, 1 / (1 + 2r/100) = 1 - p/100.
+        /// of GameEffectManager.ResistMultiplier, 1 / (1 + 2r/100) = 1 - p/100. 100% is
+        /// AbsorbAllResist.
         /// </summary>
         public static int ResistFor(int absorbPercent)
         {
-            var share = Math.Max(0, Math.Min(99, absorbPercent)) / 100.0;
+            if (absorbPercent >= 100)
+                return AbsorbAllResist;
+
+            var share = Math.Max(0, absorbPercent) / 100.0;
 
             return (int)Math.Round((100.0 / (1 - share) - 100) / 2);
         }

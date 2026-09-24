@@ -216,6 +216,9 @@ namespace Rasa.Managers
         /// </summary>
         public const uint MissTypeDeflect = 4;
 
+        /// <summary>misstype 2, a dodge: the player a creature's area ability was wound up at had left its area when it landed (CreatureWindups).</summary>
+        public const uint MissTypeDodge = 2;
+
         /// <summary>
         /// A hit that left its creature alive: the stuns, knockback, slow and freeze it carries (an
         /// Ice, Sonic or Virulent crit, Hand to Hand, a grenade, a net gun), then whether the creature is now stunned and near death, which opens
@@ -497,6 +500,14 @@ namespace Rasa.Managers
 
                 mapChannel.QueuedMissiles.RemoveAt(i);
 
+                // A creature killed while winding an ability up does not land it, nor one stunned
+                // or knocked down out of it.
+                if (missile.AfterWindup && missile.Source is Creature winder
+                    && (winder.State == CharacterState.Dead || winder.State == CharacterState.Dying
+                        || !winder.Attributes.TryGetValue(Attributes.Health, out var winderHealth) || winderHealth.Current <= 0
+                        || Stuns.IsStunned(winder)))
+                    continue;
+
                 try
                 {
                     MissileTrigger(mapChannel, missile);
@@ -517,7 +528,8 @@ namespace Rasa.Managers
         /// <param name="splashRadius">Metres around the target a launcher's splash reaches (Splash); 0 for none.</param>
         /// <param name="coneHalfAngle">Degrees either side of the shooter's facing a cone weapon hits (ConeWeapons); 0 for a single target.</param>
         /// <param name="knockbackStunMs">How much longer a creature the knockback lands on stays down (Hand to Hand).</param>
-        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0, int knockbackStunMs = 0, CreatureAction creatureAction = null)
+        /// <param name="landsInMs">A creature ability's windup and flight (CreatureWindups): when it lands, in place of the half a millisecond a metre a shot takes.</param>
+        public void MissileLaunch(MapChannel mapChannel, ActionData action, int damage, int armorBypassPercent = 0, DamageType damageType = 0, double critBonus = 0, bool melee = false, int stunChance = 0, int stunMs = 0, int rootMs = 0, int knockbackChance = 0, float splashRadius = 0, float coneHalfAngle = 0, int knockbackStunMs = 0, CreatureAction creatureAction = null, int? landsInMs = null)
         {
             var missile = new Missile
             {
@@ -607,7 +619,13 @@ namespace Rasa.Managers
             // lightning special case that used to fire from here on a hand-typed damage roll
             // went with them.
             missile.TargetActor = targetActor;
-            missile.TriggerTime = triggerTime;
+            missile.TriggerTime = landsInMs ?? triggerTime;
+            missile.AfterWindup = landsInMs.HasValue;
+
+            // Wound up where its target stands now: a cone points there, a ring around a target
+            // lands there, whoever is there when it goes off (CreatureWindups).
+            if (missile.AfterWindup && targetActor != null)
+                missile.AreaCentre = targetActor.Position;
             missile.ActionId = action.ActionId;
             missile.ActionArgId = action.ActionArgId;
             missile.IsAbility = false;
@@ -845,6 +863,20 @@ namespace Rasa.Managers
 
                 SplashAround(mapChannel, missile);
                 ConeHits(mapChannel, missile);
+                CreatureAreaHits(mapChannel, missile);
+
+                CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
+                return;
+            }
+
+            // A creature's cone or ring, wound up where its target stood, lands on what is in it
+            // when the windup is done: a target that walked out of it dodged (CreatureWindups).
+            if (targetType == EntityType.Character && missile.AfterWindup && missile.Source is Creature winder
+                && !CreatureWindups.StillCaught(winder, missile))
+            {
+                missile.Args.MisstEntities.Add(missile.TargetEntityId);
+                missile.Args.Missdata.Add(MissTypeDodge);
+
                 CreatureAreaHits(mapChannel, missile);
 
                 CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));

@@ -46,6 +46,9 @@
         public int AreaDamage { get; set; }
         /// <summary>The creature_action row a creature's attack was made with: its damage is an effect's tick where the attack is a damage over time (CreatureEffectAttacks).</summary>
         public CreatureAction CreatureAction { get; set; }
+
+        /// <summary>A creature ability held for its windup (CreatureWindups): it does not land if the creature is dead by then.</summary>
+        public bool AfterWindup { get; set; }
         /// <summary>A creature attack's area when the attack names it rather than its action data (KaelRushingBlow's EFFECT_RADIUS).</summary>
         public Managers.CreatureArea? AreaOverride { get; set; }
         /// <summary>Where AreaOverride is centred, in place of the target's position.</summary>

@@ -7,6 +7,9 @@ namespace Rasa.Structures
 
     public class BehaviorState
     {
+        /// <summary>When the ability the creature is winding up is done winding up (CreatureWindups): until then it does nothing else.</summary>
+        public long WindupUntil { get; set; }
+
         public long DeadTime { get; set; } // amount of time that has passed since the actor died
         public byte CurrentAction { get; set; }
         // combat info

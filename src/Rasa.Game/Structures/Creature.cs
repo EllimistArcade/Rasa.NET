@@ -134,6 +134,15 @@ namespace Rasa.Structures
         /// </summary>
         public int HarvestAttemptsLeft { get; set; }
 
+        /// <summary>
+        /// Whether this creature's last death was a Critical Death finish. The finishing move
+        /// destroys the body, so the corpse stays down: a Machina does not self revive and a
+        /// Caretaker cannot raise it (CreatureSupport). Written on every death in
+        /// HandleCreatureKill, the same way the harvest claim is, so a respawned creature does not
+        /// carry a previous life's finish into its next death.
+        /// </summary>
+        public bool CritKilled { get; set; }
+
         public Creature(CreatureEntry data)
         {
             DbId = data.Id;

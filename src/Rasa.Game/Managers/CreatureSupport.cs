@@ -30,6 +30,10 @@ namespace Rasa.Managers
     ///    (3 s) later stands up at HEAL_PERCENT of its health and goes back to its fight; the next
     ///    death is a death.
     ///
+    /// A creature finished by a Critical Death is neither: the finishing move destroys the body,
+    /// "Your target can't self-resuscitate ... and allies can't bring back the target" (the
+    /// strategy guide). Creature.CritKilled.
+    ///
     /// Heal, repair and revive are wound up first (the windup the client plays), the creature
     /// standing still, and land when it is done - on whoever is there to take them then. A heal
     /// is only started for an ally below HurtPercent of its health (or, for the repair, short of
@@ -160,6 +164,10 @@ namespace Rasa.Managers
             if (corpse.Actions.Any(a => CreatureBombs.KindOf(a.ActionId) == CreatureBombs.Kind.DeathBomb))
                 return false;
 
+            // A finishing move destroyed the body: "allies can't bring back the target".
+            if (corpse.CritKilled)
+                return false;
+
             // Claimed by Reanimation, Cadaver Immolation, a Hortimonculus.
             return !AbilityManager.IsBiologicalCorpse(corpse) || AbilityManager.IsUsableCorpse(corpse);
         }
@@ -257,8 +265,23 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A creature finished by a Critical Death: it does not get up again, and whatever it had
+        /// or had not spent of its self revive is forgotten, so its next life gets one of its own
+        /// just as it would after an ordinary second death.
+        /// </summary>
+        public static void ForgetSelfRevive(Creature creature)
+        {
+            if (creature == null)
+                return;
+
+            lock (CastsLock)
+                SelfRevived.Remove(creature.EntityId);
+        }
+
+        /// <summary>
         /// A creature is about to die: if it is a Machina whose self revive is unspent this life,
-        /// it goes down instead, and gets up again. Whether the death was put off.
+        /// it goes down instead, and gets up again. Whether the death was put off. Not asked for
+        /// a Critical Death finish, which destroys the body (ForgetSelfRevive).
         /// </summary>
         public static bool DefersDeath(MapChannel mapChannel, Creature creature)
         {

@@ -123,7 +123,7 @@ namespace Rasa.Managers
             }
         }
 
-        /// <param name="critKill">A Critical Death finish: the experience is worth CritDeathManager.XpBonusPercent more, and the client is told how it was earned.</param>
+        /// <param name="critKill">A Critical Death finish: the experience and adrenaline are paid twice over, the client is told how the second award was earned, and the body cannot be revived.</param>
         internal void HandleCreatureKill(MapChannel mapChannel, Creature creature, Actor killedBy, CritKill critKill = CritKill.None)
         {
             if (creature.State == CharacterState.Dead)
@@ -151,9 +151,15 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A finishing move destroys the body. Recorded before anything else looks at the
+            // death, so the self revive below and a Caretaker's revive later both see it.
+            creature.CritKilled = critKill != CritKill.None;
+
             // A Machina's first death in a life is not its end (CreatureSupport): it goes down,
-            // and gets up again.
-            if (CreatureSupport.DefersDeath(mapChannel, creature))
+            // and gets up again - unless it was finished, which is its end whatever it had left.
+            if (creature.CritKilled)
+                CreatureSupport.ForgetSelfRevive(creature);
+            else if (CreatureSupport.DefersDeath(mapChannel, creature))
                 return;
 
             // Killed by something fighting for a player - a trap's shot, a creature turned by
@@ -209,15 +215,24 @@ namespace Rasa.Managers
                 var experienceRange = creature.Level * 10;
                 experience += (uint)(new Random().Next() % (experienceRange * 2 + 1)) - experienceRange;
 
-                if (critKill != CritKill.None)
-                    experience += experience * CritDeathManager.XpBonusPercent / 100;
-
                 // todo: Depending on level difference reduce experience
-                ManifestationManager.Instance.GainExperience(client, experience, critKill);
+                ManifestationManager.Instance.GainExperience(client, experience);
+
+                // A finishing move pays the kill over again: "You get full experience for killing
+                // the enemy, and you get full experience again at the end of the Finishing Move.
+                // This means you get double the experience and Adrenaline for the kill" (the
+                // strategy guide). Paid as a second award flagged as the crit kill, so the client
+                // prints the ordinary line and then its "by Crit Killing" line, one for each.
+                if (critKill != CritKill.None)
+                    ManifestationManager.Instance.GainExperience(client, experience, critKill);
 
                 // Adrenaline is earned here and nowhere else: it does not regenerate. See
-                // ManifestationManager.AdrenalinePerKillPercent.
-                ManifestationManager.Instance.GainAdrenaline(client, ManifestationManager.Instance.AdrenalineForKill(client));
+                // ManifestationManager.AdrenalinePerKillPercent. Doubled for a finish, in one
+                // award rather than two, so the bar shows one number rather than two on top of
+                // each other.
+                var adrenaline = ManifestationManager.Instance.AdrenalineForKill(client);
+
+                ManifestationManager.Instance.GainAdrenaline(client, critKill != CritKill.None ? adrenaline * 2 : adrenaline);
             }
 
             // The corpse is harvestable by whoever earned it, a fixed number of times. Set here

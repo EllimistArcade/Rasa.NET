@@ -30,18 +30,24 @@ namespace Rasa.Managers
     ///  - CRIT_POSTDEATH_EFFECT 193, also attached quietly beforehand, the corpse pose.
     ///
     /// The press itself is RequestCritDeathFinish(actionId, argId, targetId) with
-    /// CRITICAL_DEATH_FINISHER 10000002 (windup 299 ms, range 3 m). The reward is the kill's
-    /// experience with the XPInfo flag wasCritKill (or wasTeamCritKill for a squad mate's
-    /// setup) set, which the client words as "You gained %(xp)s experience points by Crit
-    /// Killing."
+    /// CRITICAL_DEATH_FINISHER 10000002 (windup 299 ms, range 3 m).
+    ///
+    /// The reward, from the strategy guide: "You get full experience for killing the enemy, and
+    /// you get full experience again at the end of the Finishing Move. This means you get double
+    /// the experience and Adrenaline for the kill." CreatureManager.HandleCreatureKill pays the
+    /// kill, then the same experience again with the XPInfo flag wasCritKill (or
+    /// wasTeamCritKill for a squad mate's setup) set, which the client words as "You gained
+    /// %(xp)s experience points by Crit Killing"; the adrenaline comes doubled. "Another
+    /// interesting point about Finishing Moves is that they destroy the enemy's body": a
+    /// finished creature is marked (Creature.CritKilled) and neither self revives nor can be
+    /// revived (CreatureSupport).
     ///
     /// The help text: "when an enemy is stunned and near death, a red skull icon may appear".
     /// The window opens when a creature a player is fighting is both stunned (Stuns) and alive at
     /// HealthThresholdPercent of its health or less - checked when the player's damage lands
-    /// and when a stun is put on it, so either may come first. Not in the client, and chosen
-    /// here: the threshold, and that a finish is worth XpBonusPercent more experience than the
-    /// kill. The window length (6900 ms) and each death
-    /// animation's length are critdeathdata's.
+    /// and when a stun is put on it, so either may come first - unless its class carries
+    /// NO_CRIT_KILL. Not in the client, and chosen here: the threshold. The window length
+    /// (6900 ms) and each death animation's length are critdeathdata's.
     /// </summary>
     public class CritDeathManager
     {
@@ -75,9 +81,6 @@ namespace Rasa.Managers
 
         /// <summary>Percent of its maximum health at or below which a creature a player hits enters its Critical Death window.</summary>
         public const int HealthThresholdPercent = 8;
-
-        /// <summary>Extra experience for finishing, in percent of the kill's.</summary>
-        public const int XpBonusPercent = 50;
 
         /// <summary>critdeathdata[1]: how long the window stays open, the same for every damage type.</summary>
         public const int WindowMs = 6900;
@@ -141,6 +144,12 @@ namespace Rasa.Managers
                 return false;
 
             if (creature.State == CharacterState.Dead || creature.State == CharacterState.Dying)
+                return false;
+
+            // NO_CRIT_KILL: a creature its class says is never finished just dies. The client does
+            // not read the flag - it only draws the skull the window's effect tells it to - so the
+            // server is the only place it can take effect.
+            if (CreatureManager.CreatureFlagsOf(creature).Contains((int)CreatureFlag.NoCritKill))
                 return false;
 
             if (!creature.Attributes.TryGetValue(Attributes.Health, out var health) || !IsNearDeath(health.Current, health.CurrentMax))

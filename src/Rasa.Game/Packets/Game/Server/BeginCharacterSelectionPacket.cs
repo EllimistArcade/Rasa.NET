@@ -31,7 +31,14 @@ namespace Rasa.Packets.Game.Server
         public override void Write(PythonWriter pw)
         {
             pw.WriteTuple(5);
-            pw.WriteUnicodeString(FamilyName);
+
+            // None for an account that has no family name yet, not an empty string: the client
+            // then creates its first character with CreateCharacter, asking the player first to
+            // confirm the last name every character will share (PM_CONFIRM_SET_CHARACTER_LAST_NAME).
+            if (string.IsNullOrWhiteSpace(FamilyName))
+                pw.WriteNoneStruct();
+            else
+                pw.WriteUnicodeString(FamilyName);
             pw.WriteBool(HasCharacters);
             pw.WriteUInt(AccountId);
 

@@ -497,6 +497,7 @@ namespace Rasa.Game
             GameOpcode.RequestCharacterName,
             GameOpcode.RequestFamilyName,
             GameOpcode.RequestCreateCharacterInSlot,
+            GameOpcode.CreateCharacter,
             GameOpcode.RequestCloneCharacterToSlot,
             GameOpcode.RequestDeleteCharacterInSlot,
             GameOpcode.RequestSwitchToCharacterInSlot,

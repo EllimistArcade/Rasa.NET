@@ -32,9 +32,17 @@ namespace Rasa.Packets.Game.Client
 
         public override void Read(PythonReader pr)
         {
+            ReadFields(pr, true);
+        }
+
+        /// <summary>The arguments after the tuple head: the slot first when the method has one (CreateCharacterPacket has none).</summary>
+        protected void ReadFields(PythonReader pr, bool withSlot)
+        {
             pr.ReadTuple();
 
-            SlotNum = (byte) pr.ReadInt();
+            if (withSlot)
+                SlotNum = (byte) pr.ReadInt();
+
             FamilyName = pr.ReadUnicodeString();
             CharacterName = pr.ReadUnicodeString();
             Gender = (byte) pr.ReadInt();

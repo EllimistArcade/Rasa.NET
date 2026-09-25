@@ -274,6 +274,40 @@ namespace Rasa.Managers
                     new CharacterTeleporterEntry(cloneId, teleporter.WaypointId, teleporter.WaypointType));
         }
 
+        /// <summary>
+        /// CreateCharacter(familyName, characterName, gender, height, appearanceData, raceId): the
+        /// first character of an account with no family name yet - the client sends it in place
+        /// of RequestCreateCharacterInSlot when character selection began with no family name
+        /// (BeginCharacterSelectionPacket), after the player has confirmed the last name every
+        /// character will share. It carries no slot, so the character goes in the first free pod
+        /// (FirstFreeSlot), and from there it is created exactly as RequestCreateCharacterInSlot
+        /// creates one - every check included - and the client is sent to that pod.
+        /// </summary>
+        public void CreateCharacter(Client client, CreateCharacterPacket packet)
+        {
+            var slot = FirstFreeSlot(s => client.AccountEntry?.GetCharacterBySlot(s) != null);
+
+            if (slot == 0)
+            {
+                SendCharacterCreateFailed(client, CreateCharacterResult.CharacterSlotInUse);
+                return;
+            }
+
+            packet.SlotNum = slot;
+
+            RequestCreateCharacterInSlot(client, packet);
+        }
+
+        /// <summary>The lowest pod, 1..MaxSelectionPods, that nothing occupies; 0 when all are taken.</summary>
+        public static byte FirstFreeSlot(Func<byte, bool> occupied)
+        {
+            for (byte slot = 1; slot <= MaxSelectionPods; slot++)
+                if (!occupied(slot))
+                    return slot;
+
+            return 0;
+        }
+
         public void RequestCreateCharacterInSlot(Client client, RequestCreateCharacterInSlotPacket packet)
         {
             // The selection screen is the only place the client sends this from. Nothing else here

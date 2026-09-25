@@ -54,7 +54,7 @@ namespace Rasa.Managers
          *  - LogosStoneTabula
          *  - LogosStoneAdded
          *  - LogosStoneRemoved
-         *  - ShowHelmetChanged
+         *  - ShowHelmetChanged                 => implemented
          *  - Titles
          *  - TitleChanged
          *  - TitleAdded
@@ -85,7 +85,7 @@ namespace Rasa.Managers
          *  
          *  Manifestation Handlrs:
          *  - AutoFireKeepAlive         => ToDo
-         *  - ChangeShowHelmet          => ToDo
+         *  - ChangeShowHelmet          => implemented
          *  - ChangeTitle               => implemented, but need more work on it
          *  - RespondToAddAndJoinFriend => ToDo
          *  - RespondToJoinFriend       => ToDo
@@ -217,9 +217,46 @@ namespace Rasa.Managers
                     timer.MaxAliveTime = aliveTime;
         }
 
+        /// <summary>
+        /// The player's "Show Helmet" option (User.Appearance.ShowHelmet, default True).
+        ///
+        /// The client applies it to its own model itself: manifestation.py UpdateAppearanceOptions,
+        /// run on entering the world and whenever an Appearance option changes, compares the option
+        /// with the actor's state, calls SetShowHelmet if they differ, and only then sends
+        /// ChangeShowHelmet((bShowHelmet,)). Every actor starts with the helmet shown, so in
+        /// practice it is sent once a login, with False, by a player who hides theirs.
+        ///
+        /// Everyone else is told with ShowHelmetChanged on the player's entity. AppearanceData still
+        /// carries the helmet; the receiving client leaves the HELMET slot out only when told to.
+        /// The player's own client is included: it already agrees, and SetShowHelmet does nothing
+        /// when the value has not changed.
+        /// </summary>
         public void ChangeShowHelmet(Client client, ChangeShowHelmetPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo ChangeShowHelmet");
+            if (client?.Player == null)
+                return;
+
+            var changed = ShowsHelmet(client) != packet.ShowHelmet;
+
+            client.Player.ShowHelmet = packet.ShowHelmet;
+
+            if (changed && client.Player.MapChannel != null)
+                client.CellCallMethod(client, client.Player.EntityId, new ShowHelmetChangedPacket(packet.ShowHelmet));
+        }
+
+        /// <summary>
+        /// Whether the player's helmet is drawn: what their client last said, or before it has said
+        /// anything this session, their saved User.Appearance.ShowHelmet option (UserOption 170,
+        /// loaded with the account's options at login), and True - the option's default - without one.
+        /// </summary>
+        public static bool ShowsHelmet(Client client)
+        {
+            if (client?.Player?.ShowHelmet is bool said)
+                return said;
+
+            var saved = client?.UserOptions?.FirstOrDefault(o => o.OptionId == UserOption.ShowHelmet)?.Value;
+
+            return !string.Equals(saved?.Trim(), "False", StringComparison.OrdinalIgnoreCase);
         }
 
         public void ChangeTitle(Client client, uint titleId)
@@ -1667,6 +1704,9 @@ namespace Rasa.Managers
                 new AttributeInfoPacket(player.Attributes),
                 new PreloadDataPacket(client.Player.Inventory.EquippedInventory[13], player.Abilities),
                 new AppearanceDataPacket(player.AppearanceData),
+                // With the appearance: a client that meets the player later has had no
+                // ShowHelmetChanged, and every actor starts with the helmet shown.
+                new ShowHelmetChangedPacket(ShowsHelmet(client)),
                 new ResistanceDataPacket(player.ResistanceData),
                 new ActorControllerInfoPacket(true),
                 new LevelPacket(player.Level),

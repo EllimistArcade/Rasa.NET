@@ -122,6 +122,13 @@ namespace Rasa.Structures
         /// </summary>
         public bool IsTrialAccount => false;
 
+        /// <summary>
+        /// Whether the player's helmet is drawn, as their client last said (ChangeShowHelmet); null
+        /// until it has said, when the saved User.Appearance.ShowHelmet option stands in
+        /// (ManifestationManager.ShowsHelmet).
+        /// </summary>
+        public bool? ShowHelmet { get; set; }
+
         // Inventory
         public Inventory Inventory { get; set; } = new Inventory();
 

@@ -35,7 +35,6 @@ namespace Rasa.Managers
          *  - AddOverflowItem
          *  - AddWagerItem
          *  - InventoryDestroy
-         *  - InventoryMoveFailed
          *  - InventoryReload
          *  - RemoveAuctionItem
          *  - RemoveInboxItem
@@ -56,6 +55,11 @@ namespace Rasa.Managers
          *                                             defined and posted, in the source and the shipped
          *                                             .pyo files). Whatever locked the inventory for it was
          *                                             removed before this build, so sending it does nothing.
+         *  - InventoryMoveFailed (464)             => the 1.16.5 client's Recv_InventoryMoveFailed is a bare
+         *                                             return. A refused move needs no answer: the client
+         *                                             changes its slots only on InventoryRemoveItem and
+         *                                             InventoryAddItem, so the item stays put. See
+         *                                             InventoryMoveFailedPacket.
          *  
          *    Inventory Handlers:
          *  - ClanLockbox_DepositItemInSlot         => implemented

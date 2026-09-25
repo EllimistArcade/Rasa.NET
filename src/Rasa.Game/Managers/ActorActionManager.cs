@@ -53,7 +53,15 @@ namespace Rasa.Managers
         public void RemoveActor(Actor actor)
         {
             foreach (var mapChannel in MapChannelManager.Instance.MapChannelArray.Values)
+            {
+                // A use they were partway through never gets its recovery, so its lock is let go
+                // here - otherwise the object would show them using it to everyone still in range.
+                foreach (var action in mapChannel.PerformRecovery)
+                    if (action.Actor == actor)
+                        DynamicObjectManager.Instance.ReleaseUseLock(action, true);
+
                 mapChannel.PerformRecovery.RemoveAll(action => action.Actor == actor);
+            }
         }
 
         public void DoWork(MapChannel mapChannel, long delta)
@@ -116,6 +124,11 @@ namespace Rasa.Managers
                     break;
                 case ActionId.UseObject:
                     CellManager.Instance.CellCallMethod(mapChannel, action.Actor, new PerformRecoveryPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
+
+                    // The use is over, finished or not: the object is nobody's before whatever it
+                    // does next (a control point changing hands) goes out.
+                    DynamicObjectManager.Instance.ReleaseUseLock(action, false);
+
                     switch (action.ActionArgId)
                     {
                         // A Hortimonculus plant is used with arg 1, as a footlocker is; the plant

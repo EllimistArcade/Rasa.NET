@@ -31,6 +31,14 @@ namespace Rasa.Structures
         public long RespawnTime { get; set; }
         public DynamicObjectType DynamicObjectType { get; set; }
         public List<Client> TriggeredByPlayers = new List<Client>();
+
+        /// <summary>
+        /// The actor partway through a timed use of this object - a control point capture, a logos
+        /// tablet being taken - or null. Clients are told with LockToActor; see
+        /// DynamicObjectManager.TryLockForUse.
+        /// </summary>
+        public Actor UsedBy { get; set; }
+
         public string Comment { get; set; }
 
         /// <summary>

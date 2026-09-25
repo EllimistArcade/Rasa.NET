@@ -168,9 +168,16 @@ namespace Rasa.Managers
             {
                 case DynamicObjectType.ControlPoint:
                     {
+                        if (!TryLockForUse(client, obj, packet))
+                            break;
+
+                        // The object's id rides on the action so its recovery can find the lock.
+                        var actionData = new ActionData(client.Player, packet.ActionId, packet.ActionArgId, 10000);
+                        actionData.SourceId = obj.EntityId;
+
                         client.CallMethod(client.Player.EntityId, new PerformWindupPacket(PerformType.TwoArgs, packet.ActionId, packet.ActionArgId));
                         client.CallMethod(packet.EntityId, new UsePacket(client.Player.EntityId, obj.StateId, 10000));
-                        client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, packet.ActionId, packet.ActionArgId, 10000));
+                        client.Player.MapChannel.PerformRecovery.Add(actionData);
 
                         obj.TriggeredByPlayers.Add(client);
                         break;
@@ -186,6 +193,9 @@ namespace Rasa.Managers
                     }
                 case DynamicObjectType.Logos:
                     {
+                        if (!TryLockForUse(client, obj, packet))
+                            break;
+
                         var actionData = new ActionData(client.Player, packet.ActionId, packet.ActionArgId, 10000);
                         actionData.SourceId = obj.EntityId;
 
@@ -390,6 +400,14 @@ namespace Rasa.Managers
             // A force field: its hit points, and whether it blocks this client's avatar.
             if (dynamicObject.DynamicObjectType == DynamicObjectType.ForceField)
                 ForceFields.ShowTo(client, dynamicObject);
+
+            // Someone is partway through using it. Players are introduced before objects, and the
+            // user is standing at it, so this client already has the actor the effect runs to.
+            if (dynamicObject.UsedBy != null)
+            {
+                client.CallMethod(dynamicObject.EntityId, new LockToActorPacket(dynamicObject.UsedBy.EntityId));
+                client.CallMethod(dynamicObject.EntityId, new UseInterruptiblePacket(dynamicObject.UsedBy.EntityId));
+            }
         }
 
         internal void CellDiscardDynamicObjectToClients(ulong entityId, List<Client> clients)
@@ -420,6 +438,81 @@ namespace Rasa.Managers
             // destroy callback
             Logger.WriteLog(LogType.Debug, "ToDO remove dynamic object from server");
         }
+
+        #region Use lock
+
+        /// <summary>
+        /// Starts a timed use of an object, or refuses it because someone else is partway through
+        /// one. Control points and logos objects only: a capture or a tablet is one player's at a
+        /// time, and both classes have an in-use effect for the client to play.
+        ///
+        /// Everyone in range, the user included, gets LockToActor(user) and then
+        /// UseInterruptible(user). The lock turns the HUD's use prompt into the in-use text for
+        /// everyone else and is what the client checks before it plays the effect; the effect runs
+        /// from the object to the user until the use ends (<see cref="ReleaseUseLock"/>).
+        ///
+        /// A holder that is no longer waiting on a use of this object - one whose action was
+        /// dropped without a recovery - does not keep it: the lock passes to the new user.
+        ///
+        /// A refusal is a UserActionFailed, which ends the client's windup and clears its pending
+        /// action. The client has no in-use message, so it shows its generic "cannot do that now".
+        /// </summary>
+        private bool TryLockForUse(Client client, DynamicObject obj, RequestUseObjectPacket packet)
+        {
+            var user = client.Player;
+            var holder = obj.UsedBy;
+
+            if (holder != null && IsUsing(user.MapChannel, holder, obj))
+            {
+                Logger.WriteLog(LogType.Debug, $"{user.FamilyName} asked to use object {obj.EntityId}, which {(holder == user ? "they are already using" : $"entity {holder.EntityId} is using")}. Refused.");
+                client.CallMethod(user.EntityId, new UserActionFailedPacket(packet.ActionId, packet.ActionArgId, PlayerMessage.PmCannotPerformActionNow));
+                return false;
+            }
+
+            obj.UsedBy = user;
+
+            CellManager.Instance.CellCallMethod(obj, new LockToActorPacket(user.EntityId));
+            CellManager.Instance.CellCallMethod(obj, new UseInterruptiblePacket(user.EntityId));
+
+            return true;
+        }
+
+        /// <summary>Whether <paramref name="actor"/> still has a use of <paramref name="obj"/> waiting to finish.</summary>
+        private static bool IsUsing(MapChannel mapChannel, Actor actor, DynamicObject obj)
+        {
+            return mapChannel != null
+                   && mapChannel.PerformRecovery.Any(a => a.Actor == actor && a.ActionId == ActionId.UseObject && a.SourceId == obj.EntityId);
+        }
+
+        /// <summary>
+        /// Ends the lock a use-object action holds, if it holds one: when the use finishes, when it
+        /// is interrupted, or when its actor leaves the map with it still pending. An interrupted
+        /// use - or one whose actor died, or left - gets UseInterrupted first, which takes the
+        /// in-use effect off; LockToActor(0) then clears the lock, which also takes the effect off
+        /// and puts the object's state effect back. Either way, nothing is left showing the object
+        /// as in use.
+        ///
+        /// The object is the action's SourceId, and it is only unlocked if this action's actor is
+        /// the one holding it, so a use of anything else - a footlocker, a station, a
+        /// Hortimonculus plant - passes through untouched.
+        /// </summary>
+        internal void ReleaseUseLock(ActionData action, bool interrupted)
+        {
+            if (action.ActionId != ActionId.UseObject || action.SourceId == 0)
+                return;
+
+            if (!EntityManager.Instance.TryGetObject(action.SourceId, out var obj) || obj.UsedBy != action.Actor)
+                return;
+
+            obj.UsedBy = null;
+
+            if (interrupted || action.IsInrerrupted || action.Actor.State == CharacterState.Dead)
+                CellManager.Instance.CellCallMethod(obj, new UseInterruptedPacket(action.Actor.EntityId));
+
+            CellManager.Instance.CellCallMethod(obj, new LockToActorPacket(0));
+        }
+
+        #endregion
 
         #region ControlPoint
 

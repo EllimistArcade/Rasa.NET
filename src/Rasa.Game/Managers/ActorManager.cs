@@ -68,7 +68,7 @@ namespace Rasa.Managers
          *  - RequestActionInterrupt    => ToDo
          *  - RequestDetachGameEffect   => gesture effects only, GestureManager
          *  - RequestVisualCombatMode   => ToDo
-         *  - SetDesiredCrouchState     => ToDo
+         *  - SetDesiredCrouchState     => implemented, ManifestationManager
          *  - TeleportAcknowledge       => ToDo
          */
 
@@ -113,11 +113,6 @@ namespace Rasa.Managers
         {
             client.Player.InCombatMode = combatMode;
             client.CellCallMethod(client, client.Player.EntityId, new RequestVisualCombatModePacket(combatMode));
-        }
-
-        public void SetDesiredCrouchState(Client client, CharacterState state)
-        {
-            client.CellIgnoreSelfCallMethod(client, new SetDesiredCrouchStatePacket(state));
         }
 
         #endregion

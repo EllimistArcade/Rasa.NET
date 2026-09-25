@@ -1664,7 +1664,11 @@ namespace Rasa.Managers
 
         public void CellIntroduceClientToSefl(Client client)
         {
-            client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(client.Player.EntityId, client.Player.EntityClass, CreatePlayerEntityData(client)));
+            // A new actor on the player's client stands, whatever they were doing before the map
+            // change or the login; the server has to agree until they crouch again.
+            client.Player.IsCrouching = false;
+
+            client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(client.Player.EntityId, client.Player.EntityClass, CreatePlayerEntityData(client, forSelf: true)));
         }
 
         public void CellIntroducePlayersToClient(Client client, List<Client> clientList)
@@ -1689,7 +1693,11 @@ namespace Rasa.Managers
             }
         }
 		
-		public List<PythonPacket> CreatePlayerEntityData(Client client)
+		/// <param name="forSelf">
+		/// The player's own client. Some of what others need about a player their own client must
+		/// not be sent: SetDesiredCrouchState raises AssertionError on the player's own manifestation.
+		/// </param>
+		public List<PythonPacket> CreatePlayerEntityData(Client client, bool forSelf = false)
         {
             var player = client.Player;
 
@@ -1724,6 +1732,11 @@ namespace Rasa.Managers
                 // nothing, so it goes out whether the list is empty or not.
                 new TierAdvancementInfoPacket(AvailableClassIds(player))
             };
+
+            // Someone who arrives while the player is crouched would otherwise draw them standing:
+            // nothing else here carries posture to other clients.
+            if (!forSelf && player.IsCrouching)
+                entityData.Add(new SetDesiredCrouchStatePacket(CharacterState.Crouched));
 
             return entityData;
         }
@@ -3081,14 +3094,41 @@ namespace Rasa.Managers
             unitOfWork.Complete();
         }
 
-        public void SetDesiredCrouchState(Client client, bool crouching)
+        /// <summary>
+        /// SetDesiredCrouchState((stateId,)): the player crouched or stood up.
+        ///
+        /// client/augmentations/actor.py ToggleCrouched is every posture change - the crouch key,
+        /// standing up to move (playermovementmgr), and standing up for an action that cannot be
+        /// done crouched - and it sends CROUCHED (14) or STANDING (1) once it has changed its own
+        /// actor. The server keeps it in Player.IsCrouching, which is what the crouching rules read:
+        /// the ranged crit bonus and the melee crit and damage taken (CriticalHits, MissileManager),
+        /// the shorter target and its sample points (Cover), and the bead's ceiling and rate
+        /// (Accuracy). Everyone else is told with the same message on the player's entity.
+        ///
+        /// Not the player's own client: Recv_SetDesiredCrouchState raises AssertionError for its own
+        /// manifestation, and for any state that is not crouched or standing - so anything else is
+        /// refused here rather than passed on.
+        /// </summary>
+        public void SetDesiredCrouchState(Client client, CharacterState state)
         {
-            client.Player.IsCrouching = crouching;
+            var player = client?.Player;
+
+            if (player == null)
+                return;
+
+            if (state != CharacterState.Crouched && state != CharacterState.Standing)
+            {
+                Logger.WriteLog(LogType.Security, $"{player.FamilyName} sent SetDesiredCrouchState {(int)state}, which is not crouched or standing. Ignored.");
+                return;
+            }
+
+            player.IsCrouching = state == CharacterState.Crouched;
 
             // Crouching lifts the bead's ceiling to full and doubles its rate; standing drops it.
-            Accuracy.UpdateRates(client.Player, AimRateOf(client), Environment.TickCount64);
+            Accuracy.UpdateRates(player, AimRateOf(client), Environment.TickCount64);
 
-            client.CallMethod(client.Player.EntityId, new SetDesiredCrouchStatePacket(client.Player.IsCrouching ? CharacterState.Crouched : CharacterState.Standing));
+            if (player.MapChannel != null)
+                client.CellIgnoreSelfCallMethod(client, new SetDesiredCrouchStatePacket(state));
         }
 
         public void SetTargetId(Client client, ulong entityId)

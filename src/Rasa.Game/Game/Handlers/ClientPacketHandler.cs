@@ -901,6 +901,57 @@
                 $"{Client.Player?.Name} sent OverflowTransfer (destType {packet.DestType}, entity {packet.EntityId}, quantity {packet.Quantity}, slot {packet.Slot}); there is no overflow inventory, nothing moved.");
         }
 
+        /// <summary>
+        /// RequestReturnItemToInventory (349) and RequestPlaceObject (344): taking a placed
+        /// decoration back into the inventory, and placing one. Player housing - apartment
+        /// decorating - which was cut. Deliberately placeholders that move nothing and send
+        /// nothing.
+        ///
+        /// client/augmentations/decoration.py is what is left of it:
+        ///  - OnDesignateCurrentItem picks an inventory item to place, spawns a half-transparent
+        ///    proxy of it on every free decoration socket its plug fits (sockets the map loader
+        ///    records from any entity that has them, gamemap.py), posts
+        ///    PM_DECORATION_SELECT_LOCATION or PM_DECORATION_NO_LOCATIONS_AVAILABLE, and switches to
+        ///    the homedecoration input state;
+        ///  - OnPlaceItemAtSelectedLocation, on a proxy, sends
+        ///    <c>RequestPlaceObject((itemId, destEntityId or None, socketId))</c>;
+        ///  - OnReturnItemToInventory, on a placed decoration, sends
+        ///    <c>RequestReturnItemToInventory((entityId,))</c>;
+        ///  - OnCancelPlacement posts PM_DECORATION_CANCELLED. Around it: apartment point and
+        ///    directional lights (APARTMENT_LIGHT_GROUP), the DECORATION and DECORATIONPROXY target
+        ///    categories (targeting.py refuses to target a decoration) and CUSTOMIZE_HUE_DECORATION
+        ///    in the customization window.
+        ///
+        /// In the 1.16.5 client none of it can be reached:
+        ///  - OnDesignateCurrentItem, OnPlaceItemAtSelectedLocation and OnReturnItemToInventory are
+        ///    defined and never called - in the decompiled source, or the 970 shipped .pyo files in
+        ///    trpython.zip, where only decoration.pyo has the names; tabula_rasa.exe and
+        ///    Tabula_Rasa_UI_EXPORT.xml have none of them;
+        ///  - client/inputstate/homedecoration.py only stores a cancel callback: it has no key or
+        ///    mouse handlers, so there is no way to pick a location in it;
+        ///  - no entity class in the client's data carries the DECORATION augmentation (36), so no
+        ///    entity is a Decoration to have the methods.
+        ///
+        /// This server has no apartments or decorations, and the C++ server only listed the ids.
+        ///
+        /// The handlers exist so that a client that does send one is not disconnected - an opcode
+        /// with no handler fails the packet terminator check and closes the connection.
+        /// </summary>
+        [PacketHandler(GameOpcode.RequestReturnItemToInventory)]
+        private void RequestReturnItemToInventory(RequestReturnItemToInventoryPacket packet)
+        {
+            Logger.WriteLog(LogType.Debug,
+                $"{Client.Player?.Name} sent RequestReturnItemToInventory (entity {packet.EntityId}); there are no decorations, nothing moved.");
+        }
+
+        /// <inheritdoc cref="RequestReturnItemToInventory"/>
+        [PacketHandler(GameOpcode.RequestPlaceObject)]
+        private void RequestPlaceObject(RequestPlaceObjectPacket packet)
+        {
+            Logger.WriteLog(LogType.Debug,
+                $"{Client.Player?.Name} sent RequestPlaceObject (item {packet.ItemId}, destination {packet.DestEntityId}, socket {packet.SocketId}); there are no decorations, nothing placed.");
+        }
+
         [PacketHandler(GameOpcode.PersonalInventory_DestroyItem)]
         private void PersonalInventory_DestroyItem(PersonalInventory_DestroyItemPacket packet)
         {

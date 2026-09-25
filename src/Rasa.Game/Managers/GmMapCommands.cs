@@ -12,7 +12,7 @@ namespace Rasa.Managers
     using Structures;
 
     /// <summary>
-    /// The client's GM map pickers, /gotomap and /gotostartgroup. Neither is a local slash
+    /// The client's GM map pickers, /gotomap, /gotostartgroup and /killmap. None is a local slash
     /// command, so both reach the server as PrivilegedCommand (ChatCommandsManager):
     ///
     ///  - /gotomap: no arg is a request for the map list, answered with GmGotoMapAck; the client
@@ -22,6 +22,9 @@ namespace Rasa.Managers
     ///  - /gotostartgroup: no arg is a request for the start groups on the GM's map, answered
     ///    with GmGotoStartGroupAck; the waypoint window lists them and sends the pick back as
     ///    ('gotostartgroup', name).
+    ///  - /killmap: no arg is a request for the map list, answered with GmKillMapAck and shown in
+    ///    the same picker (inputstate/killmap.py), which sends the pick back as ('killmap',
+    ///    '&lt;mapId&gt;'); the map is reset (MapReset).
     ///
     /// The maps' own start groups were authored in the map files and are not in anything we have,
     /// so a map's start groups are the places the server already knows a player arrives at on it,
@@ -172,17 +175,10 @@ namespace Rasa.Managers
                 return;
             }
 
-            var matching = MapsMatching(maps, mapToken);
+            var map = OneMap(client, maps, mapToken, "/gotomap");
 
-            if (matching.Count != 1)
-            {
-                Say(client, matching.Count == 0
-                    ? $"No map '{mapToken}' to go to. /gotomap with nothing after it lists them."
-                    : $"'{mapToken}' is in more than one map's name: {string.Join(", ", matching.Take(8).Select(m => $"{m.MapInfo.MapName} ({m.MapInfo.MapContextId})"))}{(matching.Count > 8 ? ", ..." : "")}.");
+            if (map == null)
                 return;
-            }
-
-            var map = matching[0];
 
             var groups = StartGroupsOf(map.MapInfo.MapContextId, map.Teleporters.Values, MapLinkManager.Instance.Links);
             var group = FindStartGroup(groups, groupName);
@@ -203,6 +199,37 @@ namespace Rasa.Managers
 
             if (!MapChannelManager.Instance.ChangeMap(client, map.MapInfo.MapContextId, group.Position, group.Rotation))
                 Say(client, "You cannot change maps right now.");
+        }
+
+        /// <summary>
+        /// PrivilegedCommand killmap: no arg is a request for the map list (GmKillMapAck, shown in
+        /// the same picker by inputstate/killmap.py), '&lt;map&gt;' the pick or one typed by hand -
+        /// the map reset (MapReset) on its next tick.
+        /// </summary>
+        public static void KillMap(Client client, string args)
+        {
+            var maps = Maps(MapChannelManager.Instance.MapChannelArray.Values);
+            var (mapToken, _) = SplitGotoMapArgs(args);
+
+            if (mapToken == null)
+            {
+                client.CallMethod(SysEntity.ClientMethodId, new GmKillMapAckPacket(maps.Select(m => m.MapInfo.MapContextId).ToList()));
+                return;
+            }
+
+            var map = OneMap(client, maps, mapToken, "/killmap");
+
+            if (map == null)
+                return;
+
+            if (MapReset.IsPending(map))
+            {
+                Say(client, $"{map.MapInfo.MapName} is already being reset.");
+                return;
+            }
+
+            MapReset.Request(map, client);
+            Say(client, $"Resetting {map.MapInfo.MapName} ({map.MapInfo.MapContextId}): its spawn pools' creatures go and the pools start over.");
         }
 
         /// <summary>PrivilegedCommand gotostartgroup.</summary>
@@ -230,6 +257,21 @@ namespace Rasa.Managers
             }
 
             MoveWithinMap(client, group);
+        }
+
+        /// <summary>The one map the token names, or null after saying there is none or which it could be.</summary>
+        private static MapChannel OneMap(Client client, List<MapChannel> maps, string mapToken, string command)
+        {
+            var matching = MapsMatching(maps, mapToken);
+
+            if (matching.Count == 1)
+                return matching[0];
+
+            Say(client, matching.Count == 0
+                ? $"No map '{mapToken}'. {command} with nothing after it lists them."
+                : $"'{mapToken}' is in more than one map's name: {string.Join(", ", matching.Take(8).Select(m => $"{m.MapInfo.MapName} ({m.MapInfo.MapContextId})"))}{(matching.Count > 8 ? ", ..." : "")}.");
+
+            return null;
         }
 
         /// <summary>Onto the start group on the map the GM is on, as .tele moves them.</summary>

@@ -2219,7 +2219,8 @@ namespace Rasa.Managers
         private static readonly Dictionary<string, PrivilegedChatCommand> PrivilegedCommands = new Dictionary<string, PrivilegedChatCommand>(StringComparer.OrdinalIgnoreCase)
         {
             ["gotomap"] = new PrivilegedChatCommand(GmLevel.GameMaster, GmMapCommands.GotoMap),
-            ["gotostartgroup"] = new PrivilegedChatCommand(GmLevel.GameMaster, GmMapCommands.GotoStartGroup)
+            ["gotostartgroup"] = new PrivilegedChatCommand(GmLevel.GameMaster, GmMapCommands.GotoStartGroup),
+            ["killmap"] = new PrivilegedChatCommand(GmLevel.Admin, GmMapCommands.KillMap)
         };
 
         /// <summary>

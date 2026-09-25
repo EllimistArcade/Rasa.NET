@@ -189,6 +189,9 @@ namespace Rasa.Managers
 
                 mapChannel.MapChannelElapsed += delta;
 
+                // A /killmap asked for since the last tick: done here, between thinks.
+                MapReset.Worker(mapChannel);
+
                 if (Timer.IsTriggered("CheckForLogingClients"))
                     if (mapChannel.QueuedClients.Count > 0)
                     {

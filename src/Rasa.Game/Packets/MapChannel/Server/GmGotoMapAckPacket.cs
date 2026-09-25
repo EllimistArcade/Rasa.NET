@@ -26,12 +26,15 @@ namespace Rasa.Packets.MapChannel.Server
             ContextIds = contextIds;
         }
 
-        public override void Write(PythonWriter pw)
+        public override void Write(PythonWriter pw) => WriteMapList(pw, ContextIds);
+
+        /// <summary>The one argument GmGotoMapAck and GmKillMapAck both carry.</summary>
+        public static void WriteMapList(PythonWriter pw, List<uint> contextIds)
         {
             pw.WriteTuple(1);
-            pw.WriteList(ContextIds.Count);
+            pw.WriteList(contextIds.Count);
 
-            foreach (var contextId in ContextIds)
+            foreach (var contextId in contextIds)
             {
                 pw.WriteTuple(4);
                 pw.WriteNoneStruct();       // ordinal

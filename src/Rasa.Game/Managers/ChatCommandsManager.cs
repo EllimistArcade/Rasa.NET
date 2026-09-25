@@ -154,6 +154,7 @@ namespace Rasa.Managers
             RegisterCommand(".emitter", GmLevel.GameMaster, EmitterCommand);
             RegisterCommand(".notify", GmLevel.GameMaster, NotifyCommand);
             RegisterCommand(".msg", GmLevel.GameMaster, MessageCommand);
+            RegisterCommand(".destination", GmLevel.GameMaster, DestinationCommand);
             RegisterCommand(".removeobj", GmLevel.GameMaster, RemoveObjectCommand);
             RegisterCommand(".rename", GmLevel.GameMaster, RenameCommand);
             RegisterCommand(".setkillstreak", GmLevel.GameMaster, SetKillStreakCommand);
@@ -541,6 +542,56 @@ namespace Rasa.Managers
                 communicator.NotifyCells(_client, type, (PlayerMessage)msgId, args);
             else
                 communicator.DisplayPlayerNotification(_client, type, (PlayerMessage)msgId, args);
+        }
+
+        /// <summary>
+        /// .destination &lt;contextId|map name&gt;: DisplayDestinationContextNotification to every
+        /// player in the world - the map's name on the sub-region strip of their screens. A number
+        /// is sent as it is, any of the client's game contexts; a name is looked up among the
+        /// loaded maps as /gotomap looks it up.
+        /// </summary>
+        private void DestinationCommand(string[] parts)
+        {
+            var communicator = CommunicatorManager.Instance;
+
+            if (parts.Length < 2)
+            {
+                communicator.SystemMessage(_client, "usage: .destination <contextId|map name> - shows that map's name to every player in the world");
+                return;
+            }
+
+            uint contextId;
+            string label;
+
+            if (uint.TryParse(parts[1], out contextId) && contextId != 0)
+                label = MapChannelManager.Instance.MapChannelArray.TryGetValue(contextId, out var known) ? known.MapInfo.MapName : $"context {contextId}";
+            else
+            {
+                var token = string.Join(" ", parts.Skip(1));
+                var matching = GmMapCommands.MapsMatching(GmMapCommands.Maps(MapChannelManager.Instance.MapChannelArray.Values), token);
+
+                if (matching.Count != 1)
+                {
+                    communicator.SystemMessage(_client, matching.Count == 0
+                        ? $"No loaded map '{token}'; a context id sends any map's name."
+                        : $"'{token}' is in more than one map's name: {string.Join(", ", matching.Take(8).Select(m => $"{m.MapInfo.MapName} ({m.MapInfo.MapContextId})"))}.");
+                    return;
+                }
+
+                contextId = matching[0].MapInfo.MapContextId;
+                label = matching[0].MapInfo.MapName;
+            }
+
+            List<Client> recipients;
+
+            lock (Server.Clients)
+                recipients = Server.Clients.Where(c => c.State == ClientState.Ingame && c.Player != null).ToList();
+
+            foreach (var recipient in recipients)
+                recipient.CallMethod(SysEntity.ClientMethodId, new Packets.ClientMethod.Server.DisplayDestinationContextNotificationPacket(contextId));
+
+            Logger.WriteLog(LogType.Command, $"AccountId = {_client.AccountEntry?.Id}: .destination {contextId} to {recipients.Count} player(s)");
+            communicator.SystemMessage(_client, $"Showed {label} ({contextId}) to {recipients.Count} player(s) in the world.");
         }
 
         /// <summary>Accepts the client's own tutorial name or its raw id.</summary>

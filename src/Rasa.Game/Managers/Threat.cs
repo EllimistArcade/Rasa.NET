@@ -210,7 +210,7 @@ namespace Rasa.Managers
 
                     return player != null && player.MapContextId == creature.MapContextId
                         && player.State != CharacterState.Dead && player.Attributes[Attributes.Health].Current > 0
-                        && !Detection.IsHidden(player);
+                        && !Detection.IsHidden(player) && !CameraScripts.IsWatching(player);
                 }
 
                 case EntityType.Creature:

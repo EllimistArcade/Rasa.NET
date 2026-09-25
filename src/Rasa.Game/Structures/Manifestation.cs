@@ -225,6 +225,12 @@ namespace Rasa.Structures
         // gm flags
         public bool GmFlagAlwaysFriendly { get; set; }
 
+        /// <summary>The camera script the player's client is running, 0 for none (CameraScripts).</summary>
+        public uint CameraScriptId { get; set; }
+
+        /// <summary>When the player stops counting as watching it if FinishedCameraScript never comes (TickCount64).</summary>
+        public long CameraScriptUntil { get; set; }
+
 
         public Manifestation()
         {

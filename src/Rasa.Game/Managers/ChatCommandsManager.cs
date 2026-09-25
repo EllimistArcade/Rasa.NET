@@ -131,6 +131,7 @@ namespace Rasa.Managers
             RegisterCommand(".where", GmLevel.Observer, WhereCommand);
             RegisterCommand(".cover", GmLevel.Observer, CoverCommand);
             RegisterCommand(".los", GmLevel.Observer, LosCommand);
+            RegisterCommand(".camerascript", GmLevel.Observer, CameraScriptCommand);
 
             // GameMaster: moves you, spawns and drives scenery and creatures, drives
             // your own client. A restart undoes all of it.
@@ -1520,6 +1521,44 @@ namespace Rasa.Managers
             }
 
             LosReport.Send(_client, targetId);
+        }
+
+        /// <summary>
+        /// .camerascript list | &lt;id&gt;: the camera scripts of the map you are on (CameraScriptTable),
+        /// or one of them played on your own client (CameraScripts). Space or escape cuts it short.
+        /// </summary>
+        private void CameraScriptCommand(string[] parts)
+        {
+            var mapInfo = _client.Player.MapChannel?.MapInfo;
+
+            if (mapInfo == null)
+                return;
+
+            var onMap = CameraScriptTable.OnMap(mapInfo.MapName).ToList();
+
+            if (parts.Length < 2 || parts[1].ToLowerInvariant() == "list")
+            {
+                if (onMap.Count == 0)
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, $"{mapInfo.MapName} has no camera scripts.");
+                    return;
+                }
+
+                CommunicatorManager.Instance.SystemMessage(_client, $"{mapInfo.MapName}: {onMap.Count} camera script(s). .camerascript <id> plays one; space or escape ends it.");
+
+                foreach (var s in onMap)
+                    CommunicatorManager.Instance.SystemMessage(_client, $"  {s.ScriptId}: {s.Keyframes} keyframe(s), {s.LengthMs / 1000.0:0.#} s");
+
+                return;
+            }
+
+            if (!uint.TryParse(parts[1], out var scriptId) || !CameraScripts.Run(_client, scriptId))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"{mapInfo.MapName} has no camera script {parts[1]}. .camerascript list shows its scripts.");
+                return;
+            }
+
+            CommunicatorManager.Instance.SystemMessage(_client, $"Playing camera script {scriptId}.");
         }
 
         private void NpcInfoCommand(string[] parts)

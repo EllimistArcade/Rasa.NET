@@ -199,8 +199,9 @@ namespace Rasa.Managers
                     if (client.Player.Attributes[Attributes.Health].Current <= 0)
                         continue;
 
-                    // Cloaked (Cloak Wave): it cannot be noticed however close it stands.
-                    if (Detection.IsHidden(client.Player))
+                    // Cloaked (Cloak Wave): it cannot be noticed however close it stands. Nor can
+                    // someone watching a camera script, who has no controls to answer with.
+                    if (Detection.IsHidden(client.Player) || CameraScripts.IsWatching(client.Player))
                         continue;
 
                     // check distance so creature attack closes target
@@ -659,8 +660,8 @@ namespace Rasa.Managers
                         return;
                     }
 
-                    // Cloaked: off the table, and on to whoever it hates next.
-                    if (Detection.IsHidden(player))
+                    // Cloaked, or watching a camera script: off the table, and on to whoever it hates next.
+                    if (Detection.IsHidden(player) || CameraScripts.IsWatching(player))
                     {
                         if (!Threat.Retarget(creature))
                             StopFighting(creature);

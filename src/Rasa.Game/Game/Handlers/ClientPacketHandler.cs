@@ -374,6 +374,12 @@
             ManifestationManager.Instance.RequestUseTransferCredit(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.FinishedCameraScript)]
+        private void FinishedCameraScript(FinishedCameraScriptPacket packet)
+        {
+            CameraScripts.Finished(Client, packet.ScriptId);
+        }
+
         [PacketHandler(GameOpcode.RequestAddLogosStoneToTabula)]
         private void RequestAddLogosStoneToTabula(RequestAddLogosStoneToTabulaPacket packet)
         {

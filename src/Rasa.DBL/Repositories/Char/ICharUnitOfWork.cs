@@ -15,6 +15,7 @@
     using CharacterInventory;
     using CharacterLockbox;
     using CharacterLogos;
+    using CharacterActionReuse;
     using CharacterMission;
     using CharacterOption;
     using CharacterTeleporter;
@@ -35,6 +36,7 @@
         ICharacterInventoryRepository CharacterInventories { get; }
         ICharacterLockboxRepository CharacterLockboxes { get; }
         ICharacterLogosRepository CharacterLogoses { get; }
+        ICharacterActionReuseRepository CharacterActionReuses { get; }
         ICharacterMissionRepository CharacterMissions { get; }
         ICharacterOptionRepository CharacterOptions { get; }
         ICharacterSkillsRepository CharacterSkills { get; }

@@ -98,6 +98,25 @@ namespace Rasa.Migrations.MySqlChar
                     b.ToTable("character_ability_drawer");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.Char.CharacterActionReuseEntry", b =>
+                {
+                    b.Property<uint>("CharacterId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("character_id");
+
+                    b.Property<uint>("ActionId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("action_id");
+
+                    b.Property<long>("ReadyAt")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ready_at");
+
+                    b.HasKey("CharacterId", "ActionId");
+
+                    b.ToTable("character_action_reuse");
+                });
+
             modelBuilder.Entity("Rasa.Structures.Char.CharacterAppearanceEntry", b =>
                 {
                     b.Property<uint>("CharacterId")

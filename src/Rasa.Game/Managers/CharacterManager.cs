@@ -674,6 +674,9 @@ namespace Rasa.Managers
                     var itemIds = unitOfWork.CharacterInventories.DeleteForCharacter(client.AccountEntry.Id, charactersBySlot.Id);
                     unitOfWork.Items.DeleteItems(itemIds);
 
+                    // And the cooldowns it logged out with.
+                    unitOfWork.CharacterActionReuses.DeleteForCharacter(charactersBySlot.Id);
+
                     // TODO delete ClanMember entry
                     unitOfWork.Characters.Delete(charactersBySlot.Id);
                     unitOfWork.Complete();
@@ -808,6 +811,11 @@ namespace Rasa.Managers
                 LoginTime = DateTime.Now,
                 Logos = logos
             };
+
+            // The cooldowns it logged out with, on the server's clock; ActionReuseTimes takes
+            // them to the client when it arrives in the world.
+            ActionReuse.Restore(newCharacter, unitOfWork.CharacterActionReuses.Take(character.Id),
+                Environment.TickCount64, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
             return newCharacter;
         }

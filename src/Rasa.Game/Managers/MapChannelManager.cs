@@ -625,6 +625,11 @@ namespace Rasa.Managers
             PartyManager.Instance.RemovePlayer(client);
             PetitionManager.Instance.RemovePlayer(client);
 
+            // Leaving the world, not the map: the cooldowns still running go to the database, to
+            // be picked up when the character is next loaded.
+            if (logout)
+                ActionReuse.Save(client);
+
             if (logout)
                 if (client.Player.Disconected == false)
                 {

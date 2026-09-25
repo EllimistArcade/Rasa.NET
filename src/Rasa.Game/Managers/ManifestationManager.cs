@@ -1572,6 +1572,9 @@ namespace Rasa.Managers
 
             client.CallMethod(player.EntityId, new ActorInfoPacket(player));
 
+            // Its cooldowns: the client's actor is new on every map and starts with none.
+            ActionReuse.SendTo(client);
+
             // The regions the player is standing in; re-sent by RegionManager.Worker as they move.
             RegionManager.Instance.PlayerEnteredMap(client);
             MapMarkerManager.Instance.PlayerEnteredMap(client);

@@ -16,6 +16,7 @@ namespace Rasa.Repositories.Char
     using CharacterInventory;
     using CharacterLockbox;
     using CharacterLogos;
+    using CharacterActionReuse;
     using CharacterMission;
     using CharacterOption;
     using CharacterSkills;
@@ -40,6 +41,7 @@ namespace Rasa.Repositories.Char
             ICharacterInventoryRepository characterInventories,
             ICharacterLockboxRepository characterLockboxes,
             ICharacterLogosRepository characterLogoses,
+            ICharacterActionReuseRepository characterActionReuses,
             ICharacterMissionRepository characterMissions,
             ICharacterOptionRepository characterOptions,
             ICharacterSkillsRepository characterSkills,
@@ -65,6 +67,7 @@ namespace Rasa.Repositories.Char
             CharacterInventories = characterInventories;
             CharacterLockboxes = characterLockboxes;
             CharacterLogoses = characterLogoses;
+            CharacterActionReuses = characterActionReuses;
             CharacterMissions = characterMissions;
             CharacterOptions = characterOptions;
             CharacterSkills = characterSkills;
@@ -89,6 +92,7 @@ namespace Rasa.Repositories.Char
         public ICharacterInventoryRepository CharacterInventories { get; }
         public ICharacterLockboxRepository CharacterLockboxes { get; }
         public ICharacterLogosRepository CharacterLogoses { get; }
+        public ICharacterActionReuseRepository CharacterActionReuses { get; }
         public ICharacterMissionRepository CharacterMissions { get; }
         public ICharacterOptionRepository CharacterOptions { get; }
         public ICharacterSkillsRepository CharacterSkills { get; }

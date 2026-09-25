@@ -33,6 +33,8 @@ namespace Rasa.Context.Char
         public DbSet<CharacterInventoryEntry> CharacterInventoryEntries { get; set; }
         public DbSet<CharacterLockboxEntry> CharacterLockboxEntries { get; set; }
         public DbSet<CharacterLogosEntry> CharacterLogosEntries { get; set; }
+
+        public DbSet<CharacterActionReuseEntry> CharacterActionReuseEntries { get; set; }
         public DbSet<CharacterMissionEntry> CharacterMissionEntries { get; set; }
         public DbSet<CharacterOptionEntry> CharacterOptionEntries { get; set; }
         public DbSet<CharacterSkillsEntry> CharacterSkillsEntries { get; set; }
@@ -61,6 +63,7 @@ namespace Rasa.Context.Char
             SetupCharacterTable(modelBuilder);
             SetupCharacterAppearanceTable(modelBuilder);
             SetupCharacterLogosTable(modelBuilder);
+            SetupCharacterActionReuseTable(modelBuilder);
             SetupCharacterSkillTable(modelBuilder);
             SetupCharacterTeleporterTable(modelBuilder);
             SetupCharacterOptionsTable(modelBuilder);
@@ -242,6 +245,12 @@ namespace Rasa.Context.Char
         {
             modelBuilder.Entity<CharacterLogosEntry>()
                 .HasKey(e => new { e.CharacterId, e.LogosId });
+        }
+
+        private void SetupCharacterActionReuseTable(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<CharacterActionReuseEntry>()
+                .HasKey(e => new { e.CharacterId, e.ActionId });
         }
 
         private void SetupCharacterOptionsTable(ModelBuilder modelBuilder)

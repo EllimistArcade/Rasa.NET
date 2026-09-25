@@ -27,7 +27,7 @@ namespace Rasa.Managers
          *  - UpdateChi(self, current, currentMax, refreshAmount, whoId)
          *  - UpdateAttributes(self, attributeDataList, whoId)
          *  - UpdateRegions(self, regionIdList)
-         *  - ActionBlockChange(self, actionId, isBlocked)
+         *  - ActionBlockChange(self, actionId, isBlocked)                   => implemented, ActionBlocks
          *  - PerformWindup(self, actionId, actionArgId, *args)
          *  - PerformRecovery(self, actionId, actionArgId, *args)
          *  - StateChange(self, stateIdList)

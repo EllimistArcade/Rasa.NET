@@ -1591,6 +1591,11 @@ namespace Rasa.Managers
 
             client.CallMethod(player.EntityId, new AbilitiesPacket(player.Skills));
 
+            // The client's manifestation is new, with no blocked actions: work out the ones this
+            // character's skills need and send every block it has.
+            AbilityManager.Instance.RefreshUnimplementedBlocks(client, false);
+            ActionBlocks.Resend(client);
+
             // don't send this packet if abilityDrawer is empty
             if (player.Abilities.Count > 0)
                 client.CallMethod(player.EntityId, new AbilityDrawerPacket(player.Abilities));
@@ -2192,6 +2197,7 @@ namespace Rasa.Managers
             {
                 client.CallMethod(player.EntityId, new SkillsPacket(player.Skills));
                 client.CallMethod(player.EntityId, new AbilitiesPacket(player.Skills));
+                AbilityManager.Instance.RefreshUnimplementedBlocks(client);
                 SyncSkillPassives(client);
             }
 
@@ -2445,6 +2451,7 @@ namespace Rasa.Managers
             client.CallMethod(client.Player.EntityId, new SkillsPacket(client.Player.Skills));
             // set abilities
             client.CallMethod(client.Player.EntityId, new AbilitiesPacket(client.Player.Skills));   // ToDo
+            AbilityManager.Instance.RefreshUnimplementedBlocks(client);
             // update allocation points
             SendAvailableAllocationPoints(client);
             // a pump in a weapon skill changes what the client's heat meter and reload bar do

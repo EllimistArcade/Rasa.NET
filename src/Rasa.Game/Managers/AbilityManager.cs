@@ -278,6 +278,14 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Blocked (ActionBlocks): the client greys it out and refuses it itself, and this holds
+            // to that for one that asks anyway.
+            if (ActionBlocks.IsBlocked(player, actionId))
+            {
+                Fail(client, actionId, level, PlayerMessage.PmCannotPerformActionNow);
+                return;
+            }
+
             // Is it theirs to use? A skill that grants the ability at this level, or a usable
             // item in their pack whose template performs exactly this action.
             var item = packet.ItemId != 0 ? EntityManager.Instance.GetItem((ulong)packet.ItemId) : null;
@@ -473,6 +481,45 @@ namespace Rasa.Managers
 
             return false;
         }
+
+        /// <summary>
+        /// Blocks (ActionBlocks.Unimplemented) every ability the player's skills grant that this
+        /// server cannot perform at any level they have - the ones RequestPerformAbility would
+        /// refuse as not implemented - and unblocks the rest, so the drawer shows them grey
+        /// instead of winding up for a refusal. Run when the character enters a map (with
+        /// <paramref name="send"/> false, ActionBlocks.Resend following) and when their skills
+        /// change.
+        /// </summary>
+        public void RefreshUnimplementedBlocks(Client client, bool send = true)
+        {
+            var player = client?.Player;
+
+            if (player == null)
+                return;
+
+            var blocked = new List<ActionId>();
+
+            foreach (var skill in player.Skills.Values)
+            {
+                if (skill.AbilityId <= 0 || skill.SkillLevel <= 0)
+                    continue;
+
+                var actionId = (ActionId)skill.AbilityId;
+
+                // An id the tables do not have is refused as bad data, not blocked: an empty table
+                // would otherwise grey out every ability there is.
+                if (!_actions.TryGetValue(actionId, out var action))
+                    continue;
+
+                if (!action.Levels.Any(l => l.Key <= (uint)skill.SkillLevel && CanResolve(action, l.Value)))
+                    blocked.Add(actionId);
+            }
+
+            ActionBlocks.SetAll(client, ActionBlocks.Unimplemented, blocked, send);
+        }
+
+        /// <summary>The action's name from the tables, or null for an id they do not have.</summary>
+        public string ActionName(ActionId actionId) => _actions.TryGetValue(actionId, out var action) ? action.Name : null;
 
         /// <summary>Whether this server knows how to apply the ability; see the class remarks.</summary>
         private static bool CanResolve(ActionInfo action, ActionLevelInfo info)

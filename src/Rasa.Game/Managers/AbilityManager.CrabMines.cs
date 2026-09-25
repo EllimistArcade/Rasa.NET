@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -170,6 +170,36 @@ namespace Rasa.Managers
                     ExpiresAt = Environment.TickCount64 + CrabMineLifetimeMs,
                     LastStepAt = Environment.TickCount64
                 });
+
+            UpdateCrabMineBlock(player);
+        }
+
+        /// <summary>
+        /// Blocks Crab Mines (ActionBlocks.CrabMineLimit) while the player has
+        /// <see cref="MaxCrabMines"/> mines in play, and unblocks it when one goes: the client has
+        /// no such limit (abilities/crabmines.py), so it asked for a fourth and wound up for the
+        /// refusal. Run whenever that count changes - a mine put down, blown up or cleared away.
+        /// </summary>
+        private static void UpdateCrabMineBlock(Manifestation owner)
+        {
+            if (owner == null)
+                return;
+
+            var client = Server.Clients.Find(c => c.Player == owner);
+
+            if (client == null)
+                return;
+
+            var atLimit = CrabMinesOf(owner) >= MaxCrabMines;
+
+            foreach (var actionId in Instance.CrabMineActionIds())
+                ActionBlocks.Set(client, actionId, ActionBlocks.CrabMineLimit, atLimit);
+        }
+
+        /// <summary>The actions that put a crab mine down: every action of the crab mines module.</summary>
+        private IEnumerable<ActionId> CrabMineActionIds()
+        {
+            return _actions.Values.Where(a => a.Module == CrabMinesModule).Select(a => a.ActionId).ToList();
         }
 
         /// <summary>Runs the crab mines on this map for a tick: seek, run, detonate, time out, clear away.</summary>
@@ -285,6 +315,7 @@ namespace Rasa.Managers
             var owner = mine.Owner;
 
             mine.RemoveAt = Environment.TickCount64 + CrabMineBlastLingerMs;
+            UpdateCrabMineBlock(owner);
             creature.KnockbackTo = null;
             creature.State = CharacterState.Dead;
             creature.Attributes[Attributes.Health].Current = 0;     // off every scan and every fight
@@ -334,6 +365,8 @@ namespace Rasa.Managers
         {
             lock (CrabMinesLock)
                 CrabMines.Remove(mine);
+
+            UpdateCrabMineBlock(mine.Owner);
 
             if (mine.MapChannel != null)
                 CellManager.Instance.RemoveCreatureFromWorld(mine.MapChannel, mine.Creature);

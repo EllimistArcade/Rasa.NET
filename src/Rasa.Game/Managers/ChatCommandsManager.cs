@@ -166,6 +166,7 @@ namespace Rasa.Managers
             RegisterCommand(".teleport", GmLevel.GameMaster, TeleportCommand);
             RegisterCommand(".teleup", GmLevel.GameMaster, TeleUpCommand);
             RegisterCommand(".targetcategory", GmLevel.GameMaster, TargetCategoryCommand);
+            RegisterCommand(".blockaction", GmLevel.GameMaster, BlockActionCommand);
 
             // Admin: hands out progression, changes who a player is, reloads server data.
             // A restart does not undo these.
@@ -1300,6 +1301,52 @@ namespace Rasa.Managers
             var given = DynamicObjectManager.Instance.GainAllDropshipPads(_client);
 
             CommunicatorManager.Instance.SystemMessage(_client, $"{given} dropship pad{(given == 1 ? "" : "s")} gained; step onto a pad to see them.");
+        }
+
+        /// <summary>
+        /// .blockaction [actionId [off]]: blocks an action for yourself, or unblocks it, the way
+        /// the server blocks an unimplemented ability or a fourth crab mine (ActionBlocks) - the
+        /// client greys it out in the ability drawer and refuses it itself. Alone, lists what is
+        /// blocked for you and why. Only the GM's own block is taken away by off; the others stay
+        /// as long as their reasons do.
+        /// </summary>
+        private void BlockActionCommand(string[] parts)
+        {
+            var player = _client.Player;
+
+            if (parts.Length == 1)
+            {
+                if (player.ActionBlocks.Count == 0)
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, "No actions are blocked for you.");
+                    return;
+                }
+
+                foreach (var entry in player.ActionBlocks.OrderBy(e => (uint)e.Key))
+                    CommunicatorManager.Instance.SystemMessage(_client,
+                        $"{(uint)entry.Key} {AbilityManager.Instance.ActionName(entry.Key) ?? entry.Key.ToString()}: {string.Join(", ", entry.Value)}");
+
+                return;
+            }
+
+            var off = parts.Length == 3 && string.Equals(parts[2], "off", StringComparison.OrdinalIgnoreCase);
+
+            if ((parts.Length != 2 && !off) || !uint.TryParse(parts[1], out var id))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "usage: .blockaction [actionId [off]]");
+                return;
+            }
+
+            var actionId = (ActionId)id;
+            var name = AbilityManager.Instance.ActionName(actionId) ?? $"action {id}";
+
+            ActionBlocks.Set(_client, actionId, ActionBlocks.Gm, !off);
+
+            var reasons = ActionBlocks.ReasonsFor(player, actionId);
+
+            CommunicatorManager.Instance.SystemMessage(_client, reasons.Count == 0
+                ? $"{name} is not blocked."
+                : $"{name} is blocked: {string.Join(", ", reasons)}.");
         }
 
         /// <summary>

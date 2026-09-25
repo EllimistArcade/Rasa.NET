@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Rasa.Managers
 {
@@ -394,6 +396,59 @@ namespace Rasa.Managers
                 CellManager.Instance.CellCallMethod(mapChannel, target, new UpdateArmorPacket(armor, target.EntityId));
 
             return applied;
+        }
+
+        #endregion
+
+        #region State correction
+
+        /// <summary>
+        /// Puts the actor's states right on everyone who can see it, its own client included
+        /// (StateCorrection, which the client applies without the filters StateChange has).
+        ///
+        /// Of the server's own copy only the posture is kept here - CROUCHED or STANDING sets
+        /// IsCrouching - since that is all a correction on its own can mean to the rules. Alive
+        /// or dead is the business of whoever brings an actor back or kills it, with its health;
+        /// a DEAD or NORMAL sent through this changes how the actor looks, not what it is.
+        /// </summary>
+        public static void CorrectState(MapChannel mapChannel, Actor actor, IEnumerable<CharacterState> states)
+        {
+            if (mapChannel == null || actor == null)
+                return;
+
+            var list = states?.Distinct().ToList() ?? new List<CharacterState>();
+
+            if (list.Count == 0)
+                return;
+
+            if (list.Contains(CharacterState.Crouched))
+                actor.IsCrouching = true;
+            else if (list.Contains(CharacterState.Standing))
+                actor.IsCrouching = false;
+
+            CellManager.Instance.CellCallMethod(mapChannel, actor, new StateCorrectionPacket(list));
+        }
+
+        /// <summary>
+        /// A state by the client's name for it (STANDING, lying_down, "Combat Engaged") or its id;
+        /// false for anything the client has not got.
+        /// </summary>
+        public static bool TryParseState(string value, out CharacterState state)
+        {
+            state = 0;
+
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            if (uint.TryParse(value, out var id))
+            {
+                state = (CharacterState)id;
+                return Enum.IsDefined(typeof(CharacterState), state);
+            }
+
+            var name = value.Replace("_", "").Replace(" ", "");
+
+            return Enum.TryParse(name, true, out state) && Enum.IsDefined(typeof(CharacterState), state);
         }
 
         #endregion

@@ -3176,6 +3176,15 @@ namespace Rasa.Managers
                 return;
             }
 
+            // No crouching for someone dead, stunned or watching a camera script: their client has
+            // crouched already, so it is put back standing (StateCorrection), and nobody else hears.
+            if (state == CharacterState.Crouched && !MayCrouch(player))
+            {
+                player.IsCrouching = false;
+                client.CallMethod(player.EntityId, new StateCorrectionPacket(new List<CharacterState> { CharacterState.Standing }));
+                return;
+            }
+
             player.IsCrouching = state == CharacterState.Crouched;
 
             // Crouching lifts the bead's ceiling to full and doubles its rate; standing drops it.
@@ -3184,6 +3193,12 @@ namespace Rasa.Managers
             if (player.MapChannel != null)
                 client.CellIgnoreSelfCallMethod(client, new SetDesiredCrouchStatePacket(state));
         }
+
+        /// <summary>Whether the player can crouch now: alive, not stunned, not watching a camera script.</summary>
+        public static bool MayCrouch(Manifestation player) =>
+            player != null && player.State != CharacterState.Dead && player.State != CharacterState.Dying
+            && (!player.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current > 0)
+            && !Stuns.IsStunned(player) && !CameraScripts.IsWatching(player);
 
         public void SetTargetId(Client client, ulong entityId)
         {

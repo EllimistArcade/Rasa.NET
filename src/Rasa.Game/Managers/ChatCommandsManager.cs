@@ -204,24 +204,60 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// .actorstate &lt;state&gt; [state ...] [#entityId]: a StateCorrection on yourself, or on the
+        /// creature or player the #entityId names, to everyone who can see it
+        /// (ActorManager.CorrectState). States by the client's name (standing, sitting,
+        /// lying_down, flailing, crouched, dead, stunned, combat_engaged ...) or id. What it looks
+        /// like, not what it is: see CorrectState. .speed sets the movement speed this used to.
+        /// </summary>
         private void ActorStateCommand(string[] parts)
         {
-            if (parts.Length == 1)
+            var idPart = parts.Skip(1).FirstOrDefault(p => p.StartsWith("#"));
+            var stateParts = parts.Skip(1).Where(p => p != idPart).ToList();
+
+            if (stateParts.Count == 0)
             {
-                CommunicatorManager.Instance.SystemMessage(_client, "usage: .actorstate stateId speed");
+                CommunicatorManager.Instance.SystemMessage(_client, "usage: .actorstate <state> [state ...] [#entityId] - states by name or id: "
+                    + string.Join(", ", Enum.GetNames(typeof(CharacterState)).Select(n => n.ToLowerInvariant())));
                 return;
             }
 
-            if (parts.Length == 3)
+            var states = new List<CharacterState>();
+
+            foreach (var part in stateParts)
             {
-                if (Enum.TryParse(parts[1], out CharacterState stateId))
-                    if (double.TryParse(parts[2], out var speed))
-                    {
-                        _client.Player.State = stateId;
-                        _client.Player.MovementSpeed = speed;
-                        _client.CallMethod(_client.Player.EntityId, new ActorInfoPacket(_client.Player));
-                    }
+                if (!ActorManager.TryParseState(part, out var state))
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, $"No character state '{part}'.");
+                    return;
+                }
+
+                states.Add(state);
             }
+
+            Actor actor = _client.Player;
+
+            if (idPart != null)
+            {
+                actor = ulong.TryParse(idPart.Substring(1), out var entityId)
+                    ? EntityManager.Instance.GetEntityType(entityId) switch
+                    {
+                        EntityType.Creature => EntityManager.Instance.GetCreature(entityId),
+                        EntityType.Character => EntityManager.Instance.GetPlayer(entityId),
+                        _ => null
+                    }
+                    : null;
+
+                if (actor == null || actor.MapContextId != _client.Player.MapContextId)
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, $"No creature or player {idPart} on this map.");
+                    return;
+                }
+            }
+
+            ActorManager.CorrectState(_client.Player.MapChannel, actor, states);
+            CommunicatorManager.Instance.SystemMessage(_client, $"{actor.EntityId}: {string.Join(", ", states)}.");
         }
 
         private void BarkCommand(string[] parts)

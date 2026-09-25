@@ -41,7 +41,7 @@ namespace Rasa.Packets.Game.Server
              *     - WorldLocationDescriptor
              *     - WorldPlacementDescriptor
              *     - IsTargetable
-             *     - ServerSkeleton
+             *     - ServerSkeleton (not usable: the retail body has no SetServerSkeleton; see ServerSkeletonPacket)
              *     - ExamineResults
              *     - GameEffectAttached
              *     - GameEffectAttachFailed

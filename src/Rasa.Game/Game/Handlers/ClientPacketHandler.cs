@@ -149,6 +149,28 @@
         {
             Logger.WriteLog(LogType.Debug, $"{Client.Player?.Name} sent ExamineHack for entity {packet.EntityId}; ExamineResults is not sent (developer-only, and the retail client does not display it).");
         }
+
+        /// <summary>
+        /// GetServerSkeleton (281), and the ServerSkeleton (361) it would be answered with: an
+        /// entity's server-side physics skeleton, for a developer to draw over the client's own
+        /// collision. Deliberately a placeholder that sends nothing.
+        ///
+        /// The request is client/physicalentity.py GetServerSkeleton, marked "DEVELOPMENT ONLY":
+        /// <c>SendCallUserMethod('GetServerSkeleton', (self.entityId,))</c>. Nothing calls it -
+        /// only physicalentity.pyo in trpython.zip has the name, and tabula_rasa.exe does not - so,
+        /// like ExamineHack and the server collision overlay, it was reached from developer tools
+        /// the retail client does not ship. The answer could not be used anyway: the exe's entity
+        /// body has no SetServerSkeleton, so a skeleton with data raises AttributeError (see
+        /// ServerSkeletonPacket). This server has no skeletons to send either.
+        ///
+        /// The handler exists so that a client that does send it is not disconnected - an opcode
+        /// with no handler fails the packet terminator check and closes the connection.
+        /// </summary>
+        [PacketHandler(GameOpcode.GetServerSkeleton)]
+        private void GetServerSkeleton(GetServerSkeletonPacket packet)
+        {
+            Logger.WriteLog(LogType.Debug, $"{Client.Player?.Name} sent GetServerSkeleton for entity {packet.EntityId}; ServerSkeleton is not sent (developer-only, and the retail client cannot load it).");
+        }
         
         [PacketHandler(GameOpcode.GetCustomizationChoices)]
         private void GetCustomizationChoices(GetCustomizationChoicesPacket packet)

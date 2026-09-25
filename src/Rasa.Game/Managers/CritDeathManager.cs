@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -276,7 +276,12 @@ namespace Rasa.Managers
                     window.FinisherId = 0;
 
                 if (client != null)
-                    Fail(client, action.ActionArgId, action.IsInrerrupted ? (PlayerMessage?)null : PlayerMessage.PmTargetInvalid);
+                {
+                    if (action.IsInrerrupted)
+                        ActorManager.ResolveInterruptedRequest(client, ActionId.CriticalDeathFinisher, action.ActionArgId);
+                    else
+                        Fail(client, action.ActionArgId, PlayerMessage.PmTargetInvalid);
+                }
 
                 return;
             }
@@ -345,7 +350,7 @@ namespace Rasa.Managers
 
         private static void Fail(Client client, uint argId, PlayerMessage? message)
         {
-            client.CallMethod(client.Player.EntityId, new UserActionFailedPacket(ActionId.CriticalDeathFinisher, argId, message));
+            ActorManager.RefuseRequest(client, ActionId.CriticalDeathFinisher, argId, message);
         }
     }
 

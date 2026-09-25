@@ -2773,7 +2773,7 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Firing an armed ability. AbilityManager checks it - ownership, cooldown, target, range,
-        /// cost - answers a refusal with UserActionFailed, and queues an accepted one for the
+        /// cost - answers a refusal with ActorManager.RefuseRequest, and queues an accepted one for the
         /// windup; ActorActionManager hands the recovery back to it. The position of a
         /// ground-targeted ability travels in ActionData.TargetLocation.
         /// </summary>
@@ -2956,24 +2956,24 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Ends a reload the server is not going to finish.
+        /// Refuses a reload the player asked for.
         ///
-        /// The client plays the reload animation as a windup and waits to be told how it ended:
-        /// the recovery resolves it, or an interrupt cancels it. Returning without either leaves
-        /// the animation running until some other action happens to interrupt it, which is what
+        /// The client plays the reload animation as a windup and waits to be told how it ended
+        /// (WeaponReload has no local recovery, doLocalDoAction False). Returning without an answer
+        /// left the animation running until some other action happened to end it, which is what
         /// an out-of-ammo reload did - it failed correctly and then span forever.
         ///
-        /// Recv_ActionInterrupt matches the action and its arg against the actor's current
-        /// action, so the arg has to be the one the windup was started with. It goes to everyone
-        /// in range, not just the player: onlookers were shown the windup too.
+        /// ActorManager.RefuseRequest answers it: UserActionFailed shows the reason and takes the
+        /// request off the client's unresolved list, ActionFailed cancels the windup. The arg has
+        /// to be the one the windup was started with - both match on action and arg. This used to
+        /// be an ActionInterrupt to everyone in range plus a separate client message: that left
+        /// the request pending, floated "Interrupted" over the player's head as well as the
+        /// reason, and told onlookers about a windup they were never sent - theirs goes out only
+        /// once the reload is under way.
         /// </summary>
         private void CancelReload(Client client, uint reloadActionId, PlayerMessage reason)
         {
-            client.CellCallMethod(client, client.Player.EntityId,
-                new ActionInterruptPacket(client.Player.EntityId, ActionId.WeaponReload, reloadActionId));
-
-            client.CallMethod(SysEntity.CommunicatorId,
-                new DisplayClientMessagePacket(reason, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+            ActorManager.RefuseRequest(client, ActionId.WeaponReload, reloadActionId, reason);
         }
 
         public void RequestWeaponReload(Client client, bool isRequested)
@@ -3581,10 +3581,12 @@ namespace Rasa.Managers
             // an interrupt cleared a jam in one tick, so the jam never cost anything.
             //
             // It loads nothing, and the jam stays. Everyone in range was shown the windup and is
-            // told it ended; the player's own client already cancelled it.
+            // told it ended; the player's own client already cancelled it, and is told the request
+            // is closed.
             if (action.IsInrerrupted)
             {
                 client.CellIgnoreSelfCallMethod(client, new ActionInterruptPacket(client.Player.EntityId, ActionId.WeaponReload, action.ActionArgId));
+                ActorManager.ResolveInterruptedRequest(client, ActionId.WeaponReload, action.ActionArgId);
                 return;
             }
 

@@ -320,6 +320,7 @@ namespace Rasa.Managers
             {
                 SendToOthers(mapChannel, action.Actor,
                     new ActionInterruptPacket(action.Actor.EntityId, action.ActionId, action.ActionArgId));
+                ActorManager.ResolveInterruptedRequest(client, action.ActionId, action.ActionArgId);
                 return;
             }
 
@@ -908,8 +909,7 @@ namespace Rasa.Managers
 
         private static void Fail(Client client, RequestToolActionPacket packet, PlayerMessage? message)
         {
-            client.CallMethod(client.Player.EntityId,
-                new UserActionFailedPacket(packet.ActionId, packet.ActionArgId, message));
+            ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, message);
         }
     }
 }

@@ -24,8 +24,9 @@ namespace Rasa.Managers
     ///  1. The client checks the ability itself - cooldown, cost, target - then plays its own
     ///     windup and sends RequestPerformAbility(actionId, level, target, itemId). It does not
     ///     wait for the server to start the windup.
-    ///  2. The server checks the same things and, if any fails, answers UserActionFailed with
-    ///     the reason; the client shows it and cancels its windup. Otherwise everyone else is
+    ///  2. The server checks the same things and, if any fails, answers with the reason
+    ///     (ActorManager.RefuseRequest: UserActionFailed, which the client shows, and
+    ///     ActionFailed, which cancels its windup). Otherwise everyone else is
     ///     sent PerformWindup so they see the animation, and the action is queued for the
     ///     windup time.
     ///  3. When the windup has run the server resolves the ability: takes the cost, starts the
@@ -593,7 +594,7 @@ namespace Rasa.Managers
 
         private static void Fail(Client client, ActionId actionId, uint level, PlayerMessage? message)
         {
-            client.CallMethod(client.Player.EntityId, new UserActionFailedPacket(actionId, level, message));
+            ActorManager.RefuseRequest(client, actionId, level, message);
         }
 
         #endregion
@@ -621,6 +622,8 @@ namespace Rasa.Managers
 
                 if (!action.IsInrerrupted)
                     Fail(client, action.ActionId, action.ActionArgId, PlayerMessage.PmActionFailedActorDead);
+                else
+                    ActorManager.ResolveInterruptedRequest(client, action.ActionId, action.ActionArgId);
 
                 return;
             }

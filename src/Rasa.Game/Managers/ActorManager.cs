@@ -35,7 +35,7 @@ namespace Rasa.Managers
          *  - Abilities(self, abilityList)
          *  - Skills(self, skillList)
          *  - UserActionFailed(self, actionId, actionArgId, msgId)
-         *  - ActionFailed(self, actionId, actionArgId)
+         *  - ActionFailed(self, actionId, actionArgId)                        => implemented, RefuseRequest
          *  - PreTeleport(self, teleportType = None)
          *  - TeleportFailed(self)
          *  - PostTeleport(self)
@@ -96,6 +96,37 @@ namespace Rasa.Managers
 
         private ActorManager()
         {
+        }
+
+        /// <summary>
+        /// Refuses a request the player made: UserActionFailed to show why (or nothing, for a null
+        /// message) and take the request off the client's unresolved list, then ActionFailed to
+        /// cancel the action their client started on its own - its windup, or the recovery it
+        /// plays locally once the windup has run. The one without the other either left the
+        /// character performing an action that never happened or left the request pending.
+        /// Only the player is told: nobody else is shown an action before the server accepts it.
+        /// </summary>
+        public static void RefuseRequest(Client client, ActionId actionId, uint actionArgId, PlayerMessage? message)
+        {
+            if (client?.Player == null)
+                return;
+
+            client.CallMethod(client.Player.EntityId, new UserActionFailedPacket(actionId, actionArgId, message));
+            client.CallMethod(client.Player.EntityId, new ActionFailedPacket(actionId, actionArgId));
+        }
+
+        /// <summary>
+        /// Closes a request the player interrupted. Their client cancelled the action itself when
+        /// it sent RequestActionInterrupt, but keeps the request on its unresolved list until the
+        /// server answers it; a silent UserActionFailed is that answer. No ActionFailed: there is
+        /// nothing left to cancel, and it could only catch a newer action with the same id.
+        /// </summary>
+        public static void ResolveInterruptedRequest(Client client, ActionId actionId, uint actionArgId)
+        {
+            if (client?.Player == null)
+                return;
+
+            client.CallMethod(client.Player.EntityId, new UserActionFailedPacket(actionId, actionArgId, null));
         }
         #region Handlers
 

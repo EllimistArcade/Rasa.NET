@@ -454,8 +454,9 @@ namespace Rasa.Managers
         /// A holder that is no longer waiting on a use of this object - one whose action was
         /// dropped without a recovery - does not keep it: the lock passes to the new user.
         ///
-        /// A refusal is a UserActionFailed, which ends the client's windup and clears its pending
-        /// action. The client has no in-use message, so it shows its generic "cannot do that now".
+        /// A refusal is ActorManager.RefuseRequest - UserActionFailed and ActionFailed - which ends
+        /// the client's windup and clears its pending action. The client has no in-use message, so
+        /// it shows its generic "cannot do that now".
         /// </summary>
         private bool TryLockForUse(Client client, DynamicObject obj, RequestUseObjectPacket packet)
         {
@@ -465,7 +466,7 @@ namespace Rasa.Managers
             if (holder != null && IsUsing(user.MapChannel, holder, obj))
             {
                 Logger.WriteLog(LogType.Debug, $"{user.FamilyName} asked to use object {obj.EntityId}, which {(holder == user ? "they are already using" : $"entity {holder.EntityId} is using")}. Refused.");
-                client.CallMethod(user.EntityId, new UserActionFailedPacket(packet.ActionId, packet.ActionArgId, PlayerMessage.PmCannotPerformActionNow));
+                ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, PlayerMessage.PmCannotPerformActionNow);
                 return false;
             }
 

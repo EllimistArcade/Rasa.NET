@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -137,6 +137,8 @@ namespace Rasa.Managers
         {
             var amount = GameEffectManager.ApplyResist(victim, damage, out var resisted, damageType);
             var taken = ActorManager.Instance.Damage(mapChannel, victim, amount, attacker, damageType);
+
+            Reflection.Reflect(mapChannel, victim, attacker, amount, damageType);
 
             return new TickEntry
             {

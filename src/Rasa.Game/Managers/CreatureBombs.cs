@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -422,6 +422,7 @@ namespace Rasa.Managers
                 var (amount, resisted, crit) = Roll(bomb.Source, victim, bomb.Action, bomb.DamageType);
 
                 ActorManager.Instance.Damage(mapChannel, victim, amount, bomb.Source, bomb.DamageType);
+                Reflection.Reflect(mapChannel, victim, bomb.Source, amount, bomb.DamageType);
 
                 blast.Hits.Add(new TickEntry { EntityId = victim.EntityId, Amount = amount, Resisted = resisted, DamageType = bomb.DamageType, IsCritical = crit });
             }
@@ -723,6 +724,7 @@ namespace Rasa.Managers
                 var (amount, resisted, crit) = Roll(bomb.Source, victim, bomb.Action, bomb.DamageType);
 
                 ActorManager.Instance.Damage(mapChannel, victim, amount, bomb.Source, bomb.DamageType);
+                Reflection.Reflect(mapChannel, victim, bomb.Source, amount, bomb.DamageType);
 
                 blast.Hits.Add(new TickEntry { EntityId = victim.EntityId, Amount = amount, Resisted = resisted, DamageType = bomb.DamageType, IsCritical = crit });
 
@@ -763,6 +765,7 @@ namespace Rasa.Managers
                 var (amount, resisted, crit) = Roll(source, victim, action, type);
 
                 ActorManager.Instance.Damage(mapChannel, victim, amount, source, type);
+                Reflection.Reflect(mapChannel, victim, source, amount, type);
 
                 recovery.Hits.Add(new AbilityHit { EntityId = victim.EntityId, Amount = amount, Resisted = resisted, DamageType = type, IsCritical = crit });
             }

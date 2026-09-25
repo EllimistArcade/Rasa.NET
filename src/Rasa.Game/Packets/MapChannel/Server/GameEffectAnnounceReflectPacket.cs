@@ -1,4 +1,4 @@
-namespace Rasa.Packets.MapChannel.Server
+﻿namespace Rasa.Packets.MapChannel.Server
 {
     using Data;
     using Memory;
@@ -8,7 +8,7 @@ namespace Rasa.Packets.MapChannel.Server
     /// the reflecting effect on this entity (Reflective Armor's MEDIUM_ARMOR_SKILL, the Guardian's
     /// REFLECTION) sent damage back at entityId. The effect's Recv_AnnounceReflect schedules
     /// DoReflection, which flies the reflection from the wearer to the attacker and announces the
-    /// damage on the attacker when it arrives.
+    /// damage on the attacker when it arrives. Sent by Managers.Reflection.
     /// </summary>
     public class GameEffectAnnounceReflectPacket : ServerPythonPacket
     {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -170,6 +170,7 @@ namespace Rasa.Managers
                     var amount = GameEffectManager.ApplyResist(victim, rolled, out var resisted, type);
 
                     ActorManager.Instance.Damage(mapChannel, victim, amount, miasma, type);
+                    Reflection.Reflect(mapChannel, victim, miasma, amount, type);
 
                     var hit = new AbilityHit { EntityId = victim.EntityId, Amount = amount, Resisted = resisted, DamageType = type, IsCritical = crit };
                     var (extraType, extraRolled) = ExtraOf(rolled, info);
@@ -179,6 +180,7 @@ namespace Rasa.Managers
                         var extra = GameEffectManager.ApplyResist(victim, extraRolled, out var extraResisted, extraType);
 
                         ActorManager.Instance.Damage(mapChannel, victim, extra, miasma, extraType);
+                        Reflection.Reflect(mapChannel, victim, miasma, extra, extraType);
                         hit.Extra = new AbilityHit { EntityId = victim.EntityId, Amount = extra, Resisted = extraResisted, DamageType = extraType };
                     }
 

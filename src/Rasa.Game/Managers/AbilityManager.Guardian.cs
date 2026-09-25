@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -32,7 +32,7 @@ namespace Rasa.Managers
     /// </summary>
     public partial class AbilityManager
     {
-        private const int ReflectionTypeId = 93;        // REFLECTION
+        private const int ReflectionTypeId = Reflection.ReflectionTypeId;        // REFLECTION
         private const int ConversionTypeId = 199;       // CONVERSION
 
         /// <summary>The types Reflection has reached, in pump order; each pump adds the next.</summary>

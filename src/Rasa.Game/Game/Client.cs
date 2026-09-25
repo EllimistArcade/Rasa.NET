@@ -450,7 +450,7 @@ namespace Rasa.Game
                     }
 
                     // Nothing that acts on the world runs for a connection that is not in it.
-                    if (!IsExpected(csmPacket.MethodId))
+                    if (!IsExpected(csmPacket.MethodId, csmPacket.Packet))
                         return;
 
                     // MethodId, not Packet.Opcode: an opcode with no handler leaves Packet null.
@@ -501,18 +501,74 @@ namespace Rasa.Game
         };
 
         /// <summary>
+        /// Methods the real client sends on its own as it leaves the world, after the server has
+        /// already moved it to Loading. They are refused like anything else out of the world, but
+        /// they are expected, so they are not reported as a security event.
+        ///
+        /// RequestVisualCombatMode: tabula_rasa.exe sends it, not the Python.
+        /// TRasa::UserControllerStateNormal::LoadTargetProfileData, which loads the camera profile
+        /// ("Default", "-zoom"), ends with ClientMovingEntityController::NotifyPythonForLockFacing,
+        /// and that calls the manifestation's RequestVisualCombatMode("(b)": whether the profile
+        /// locks facing). The profile is reloaded from five of the normal state's virtual methods
+        /// - entering the state, switching or reapplying a profile, zoom - so it goes out on every
+        /// camera profile change. After PreWonkavate the client leaves the game input state,
+        /// exits chat mode and clears the map, which removes its own manifestation and destroys
+        /// the user controller. One of those steps reloads the profile, and its report arrives
+        /// once the server has set Loading. Dropping it is right: the player is in no cells to
+        /// relay it to, and MapChannelManager.RemovePlayer clears the flag it would have set.
+        /// </summary>
+        private static readonly HashSet<GameOpcode> TransitionStragglers = new()
+        {
+            GameOpcode.RequestVisualCombatMode
+        };
+
+        /// <summary>
         /// Whether this connection may call that method now. There was no such check: every one
         /// of the handlers was reachable in any state, which is what made the stale inventory
         /// lists of a logged-out or mid-zone client worth anything to whoever kept them.
         /// </summary>
-        private bool IsExpected(GameOpcode methodId)
+        private bool IsExpected(GameOpcode methodId, PythonPacket packet)
         {
             if (IsInWorld || WorldlessMethods.Contains(methodId))
                 return true;
 
-            ReportOutOfState(methodId);
+            if (TransitionStragglers.Contains(methodId))
+                ReportStraggler(methodId, packet);
+            else
+                ReportOutOfState(methodId);
 
             return false;
+        }
+
+        private bool _stragglerLogged;
+        private long _stragglersSinceLog;
+        private long _nextStragglerLogTick;
+
+        /// <summary>
+        /// A <see cref="TransitionStragglers"/> method dropped out of the world: a Debug line with
+        /// what it carried, rate-limited the same way as <see cref="ReportOutOfState"/>, since
+        /// Debug goes to the log file even when it is not shown.
+        /// </summary>
+        private void ReportStraggler(GameOpcode methodId, PythonPacket packet)
+        {
+            _stragglersSinceLog++;
+
+            var now = Environment.TickCount64;
+
+            if (_stragglerLogged && now < _nextStragglerLogTick)
+                return;
+
+            var call = packet is Packets.MapChannel.Client.RequestVisualCombatModePacket combatMode
+                ? $"{methodId}({(combatMode.CombatMode ? "True" : "False")})"
+                : methodId.ToString();
+
+            var repeat = _stragglersSinceLog > 1 ? $" ({_stragglersSinceLog} dropped since the last of these)" : "";
+
+            Logger.WriteLog(LogType.Debug, $"{Player?.FamilyName ?? Socket.RemoteAddress.ToString()} sent {call} in state {State}, as the client does while leaving a map; dropped{repeat}.");
+
+            _stragglerLogged = true;
+            _stragglersSinceLog = 0;
+            _nextStragglerLogTick = now + RefusalLogQuietMs;
         }
 
         /// <summary>How long this client's refusals stay quiet after one has been logged.</summary>

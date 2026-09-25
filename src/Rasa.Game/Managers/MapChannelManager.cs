@@ -601,6 +601,14 @@ namespace Rasa.Managers
             // checks IsWeaponReady) and skipped the draw the fire path performs for itself.
             client.Player.WeaponReady = false;
 
+            // The combat stance goes the same way. The client's manifestation arrives at peace -
+            // ClearMap removed it and the new map creates it afresh - but the flag stayed as it
+            // was, and AssignPlayer sends it back in ActorInfo (isHoldingCombatMode). A player who
+            // zoned in stance was put back into it with a hold, which outlasts the client's own
+            // 2.5 s return to peace. The RequestVisualCombatMode that would have cleared it is one
+            // the client sends after the server has already set Loading, which is dropped.
+            client.Player.InCombatMode = false;
+
             // Before the player leaves the cells, while their minions can still be told to go:
             // "Player-controlled subordinates will teleport with their masters, but not change
             // maps." Leaving the map is leaving them behind, so they are dismissed, not orphaned.

@@ -55,7 +55,7 @@ namespace Rasa.Managers
          *  - ClanLockbox_WithdrawItem              => implemented
          *  - HomeInventory_DestroyItem             => implemented
          *  - HomeInventory_MoveItem                => implemented
-         *  - OverflowTransfer                      => ToDo
+         *  - OverflowTransfer                      => placeholder (no overflow inventory; see ClientPacketHandler)
          *  - PersonalInventory_DestroyItem         => implemented
          *  - PersonalInventory_MoveItem            => implemented
          *  - PurchaseClanLockboxTab                => ToDo

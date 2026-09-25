@@ -853,7 +853,41 @@
             InventoryManager.Instance.HomeInventory_MoveItem(Client, packet);
         }
 
-        // ToDo: OverflowTransfer(destType, entityId, quantity, slot)
+        /// <summary>
+        /// OverflowTransfer (308): taking an item out of the overflow inventory. Deliberately a
+        /// placeholder that moves nothing and sends nothing.
+        ///
+        /// The overflow inventory is inventory type 7 (InventoryType.OverflowInventory), a list
+        /// without slots. The server would fill it with AddOverflowItem, RemoveOverflowItem and
+        /// ResetOverflowInventory, and client/inventory.py keeps the ids in g_overflowItems - a
+        /// holding area for items the server could not fit in the pack.
+        /// _TransferOverflowItem(entityId, quantity, slot, destType) takes one out, sending
+        /// <c>OverflowTransfer((destType, entityId, quantity, slot))</c>, and refuses any destination
+        /// but PERSONALINVENTORY (">>> Can only transfer overflow items to personal storage!").
+        ///
+        /// In the 1.16.5 client none of it can be used:
+        ///  - nothing calls _TransferOverflowItem, in the decompiled source or the shipped
+        ///    inventory.pyo in trpython.zip;
+        ///  - no window lists overflow items and nothing calls HaveOverflow() (the only "Overflow"
+        ///    widget in Tabula_Rasa_UI_EXPORT.xml is the status updater's "more" button);
+        ///  - _SendServerRequest, which picks the request for a drag between two inventories, has
+        ///    no case for OVERFLOWINVENTORY as the source, so a drag out of it fails on the client.
+        /// A server that filled the list would leave items the player could neither see nor
+        /// retrieve. The feature was abandoned before this build.
+        ///
+        /// This server has no overflow inventory. A full pack is handled where the item comes
+        /// from: a harvest is refused with "Your inventory is full", crafting keeps what did not fit
+        /// on the job, and a purchase or buyback charges only for what fitted.
+        ///
+        /// The handler exists so that a client that does send it is not disconnected - an opcode
+        /// with no handler fails the packet terminator check and closes the connection.
+        /// </summary>
+        [PacketHandler(GameOpcode.OverflowTransfer)]
+        private void OverflowTransfer(OverflowTransferPacket packet)
+        {
+            Logger.WriteLog(LogType.Debug,
+                $"{Client.Player?.Name} sent OverflowTransfer (destType {packet.DestType}, entity {packet.EntityId}, quantity {packet.Quantity}, slot {packet.Slot}); there is no overflow inventory, nothing moved.");
+        }
 
         [PacketHandler(GameOpcode.PersonalInventory_DestroyItem)]
         private void PersonalInventory_DestroyItem(PersonalInventory_DestroyItemPacket packet)

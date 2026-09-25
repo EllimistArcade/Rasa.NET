@@ -69,7 +69,7 @@ namespace Rasa.Managers
          *  - ReviveMe                  => ToDo
          *  - RequestActionInterrupt    => ToDo
          *  - RequestDetachGameEffect   => gesture effects only, GestureManager
-         *  - RequestVisualCombatMode   => ToDo
+         *  - RequestVisualCombatMode   => implemented, RequestVisualCombatMode (relayed to the others)
          *  - SetDesiredCrouchState     => implemented, ManifestationManager
          *  - TeleportAcknowledge       => ToDo
          */
@@ -142,10 +142,47 @@ namespace Rasa.Managers
                         }
         }
 
+        /// <summary>
+        /// RequestVisualCombatMode from the player's own client: the stance it asks to hold. The
+        /// engine sends it on every camera profile change - whether the profile locks facing - and
+        /// the client has already taken the stance itself ("Notify server so that it can notify
+        /// other clients").
+        /// </summary>
         public void RequestVisualCombatMode(Client client, bool combatMode)
         {
-            client.Player.InCombatMode = combatMode;
-            client.CellCallMethod(client, client.Player.EntityId, new RequestVisualCombatModePacket(combatMode));
+            client.Player.RequestedCombatMode = combatMode;
+            UpdateCombatMode(client);
+        }
+
+        /// <summary>Auto-fire starting or stopping: the trigger held is a stance held, to the others who see the player.</summary>
+        public void SetAutoFireCombatMode(Client client, bool firing)
+        {
+            client.Player.AutoFireCombatMode = firing;
+            UpdateCombatMode(client);
+        }
+
+        /// <summary>The stance a player holds: the one their client asked for, or the trigger held down.</summary>
+        public static bool CombatModeOf(Manifestation player) => player.RequestedCombatMode || player.AutoFireCombatMode;
+
+        /// <summary>
+        /// Keeps InCombatMode - what ActorInfo gives a newcomer as isHoldingCombatMode - to
+        /// CombatModeOf, and tells everyone else who can see the player when it changes. Never the
+        /// player: their client holds its own stance, and the auto-fire half of it arriving there
+        /// once took away the hold its camera had set (Recv_RequestVisualCombatMode(False) removes
+        /// the one hold there is).
+        /// </summary>
+        private static void UpdateCombatMode(Client client)
+        {
+            var player = client.Player;
+            var mode = CombatModeOf(player);
+
+            if (mode == player.InCombatMode)
+                return;
+
+            player.InCombatMode = mode;
+
+            if (client.State == ClientState.Ingame && player.MapChannel != null)
+                client.CellIgnoreSelfCallMethod(client, new RequestVisualCombatModePacket(mode));
         }
 
         #endregion

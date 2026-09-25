@@ -1521,7 +1521,7 @@ namespace Rasa.Managers
             switch (TryFireWeapon(client))
             {
                 case FireResult.Fired:
-                    ActorManager.Instance.RequestVisualCombatMode(client, true);
+                    ActorManager.Instance.SetAutoFireCombatMode(client, true);
                     RegisterAutoFire(client);
                     break;
 
@@ -1531,14 +1531,14 @@ namespace Rasa.Managers
                 // until the player let go and pressed again.
                 case FireResult.TooSoon:
                     if (RegisterAutoFire(client, ShotWait(client.Player, Environment.TickCount64)))
-                        ActorManager.Instance.RequestVisualCombatMode(client, true);
+                        ActorManager.Instance.SetAutoFireCombatMode(client, true);
                     break;
             }
         }
 
         public void StopAutoFire(Client client)
         {
-            ActorManager.Instance.RequestVisualCombatMode(client, false);
+            ActorManager.Instance.SetAutoFireCombatMode(client, false);
 
             RemoveAutoFire(client);
 

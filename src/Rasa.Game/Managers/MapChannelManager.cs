@@ -608,6 +608,8 @@ namespace Rasa.Managers
             // 2.5 s return to peace. The RequestVisualCombatMode that would have cleared it is one
             // the client sends after the server has already set Loading, which is dropped.
             client.Player.InCombatMode = false;
+            client.Player.RequestedCombatMode = false;
+            client.Player.AutoFireCombatMode = false;
 
             // And whatever it was following or walking up to: that is on the map being left.
             client.Player.TrackingTargetEntityId = 0;

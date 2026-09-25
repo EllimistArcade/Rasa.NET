@@ -689,9 +689,8 @@ namespace Rasa.Managers
                         if (Threat.Retarget(creature))
                             return;
 
-                        // exit visual combat mode
-                        CellManager.Instance.CellCallMethod(mapChannel, creature, new RequestVisualCombatModePacket(false));
-
+                        // GiveUp stows the weapon, which takes the stance down with it
+                        // (CreatureWeaponDraw); a creature with no weapon never held one.
                         GiveUp(creature);
                         return;
                     }
@@ -1636,7 +1635,6 @@ namespace Rasa.Managers
                 foreach (var effect in creature.ActiveEffects.Values.Where(e => !e.IsBuff && !e.IsSkillPassive).ToList())
                     GameEffectManager.Instance.DettachEffect(mapChannel, creature, effect);
 
-                CellManager.Instance.CellCallMethod(mapChannel, creature, new RequestVisualCombatModePacket(false));
                 CreatureWeaponDraw.Stow(mapChannel, creature);
             }
 

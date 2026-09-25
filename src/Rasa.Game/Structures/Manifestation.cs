@@ -157,6 +157,12 @@ namespace Rasa.Structures
         /// </summary>
         public bool InCombat { get; set; }
 
+        /// <summary>The combat stance the player's own client asked to hold (RequestVisualCombatMode); see ActorManager.CombatModeOf.</summary>
+        public bool RequestedCombatMode { get; set; }
+
+        /// <summary>Whether the player is holding auto-fire down, which holds the stance for the others who see them.</summary>
+        public bool AutoFireCombatMode { get; set; }
+
         /// <summary>Environment.TickCount64 at which combat lapses, refreshed by every hit.</summary>
         public long CombatExpiresAt { get; set; }
 

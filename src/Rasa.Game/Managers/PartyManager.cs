@@ -647,6 +647,13 @@ namespace Rasa.Managers
             if (party == null)
                 return;
 
+            // The client offers Free For All and Rotation; the packet can say anything.
+            if (!Enum.IsDefined(typeof(PartyLootMethod), packet.PartyLootMethod))
+            {
+                Message(client, PlayerMessage.PmInvalidLootMethod);
+                return;
+            }
+
             party.LootMethod = packet.PartyLootMethod;
 
             foreach (var member in OnlineClients(party))
@@ -659,6 +666,15 @@ namespace Rasa.Managers
 
             if (party == null)
                 return;
+
+            // One of the five qualities the client offers, or nothing: the threshold picks what
+            // is rolled for (LootRolls), and an unknown one would rank above everything.
+            if (!Enum.IsDefined(typeof(PartyLootThreshold), packet.PartyLootThreshold))
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry?.Id} sent squad loot threshold {(int)packet.PartyLootThreshold}, which is not a quality.");
+                return;
+            }
 
             party.LootThreshold = packet.PartyLootThreshold;
 
@@ -1356,14 +1372,16 @@ namespace Rasa.Managers
         /// - Rotation: the whole corpse goes to the next of those members in join order, the
         ///   rotation moving on one member a corpse.
         /// Random and Dice Roll cannot be chosen in the client and are treated as Free For All.
-        /// The flag is whether the corpse is shared (partyId on its items).
+        /// The flag is whether the corpse is shared (partyId on its items). Party and Eligible -
+        /// every member who shares in the corpse, whoever Rotation hands it to - are for the
+        /// items at or over the squad's threshold, which are rolled for among them (LootRolls).
         /// </summary>
-        internal (List<Client> Looters, uint PartyId) LootersFor(Client killer, System.Numerics.Vector3 corpse)
+        internal (List<Client> Looters, uint PartyId, Party Party, List<Client> Eligible) LootersFor(Client killer, System.Numerics.Vector3 corpse)
         {
             var party = PartyOf(killer);
 
             if (party == null || party.LootMethod == PartyLootMethod.Individual)
-                return (new List<Client> { killer }, 0);
+                return (new List<Client> { killer }, 0, null, new List<Client> { killer });
 
             var mapChannel = killer.Player.MapChannel;
             var eligible = new List<Client>();
@@ -1394,14 +1412,37 @@ namespace Rasa.Managers
 
                 party.LootRotation++;
 
-                return (new List<Client> { next }, 0);
+                return (new List<Client> { next }, 0, party, eligible);
             }
 
             // Free For All (and the two the client never sends): the killer first, then the rest.
             eligible.Remove(killer);
             eligible.Insert(0, killer);
 
-            return (eligible, party.Id);
+            return (eligible, party.Id, party, eligible);
+        }
+
+        /// <summary>
+        /// PartyMemberLoot: the rest of a squad hears what one of them took from a corpse the squad
+        /// shared in (any loot method but Individual) - "X looted 1 Y." Not the taker, whose own
+        /// client says it from GotLoot and would say it twice.
+        /// </summary>
+        internal void AnnounceLoot(Client taker, ulong creatureEntityId, List<LootItem> taken, int credits)
+        {
+            if (taker?.AccountEntry == null || taken == null || taken.Count == 0 && credits <= 0)
+                return;
+
+            var party = PartyOf(taker);
+
+            if (party == null || party.LootMethod == PartyLootMethod.Individual)
+                return;
+
+            var packet = new PartyMemberLootPacket(taker.AccountEntry.Id, creatureEntityId,
+                taken.Select(i => (i.ItemClassId, i.ItemQuantity, i.EntityId)).ToList(), credits);
+
+            foreach (var other in OnlineClients(party))
+                if (other != taker)
+                    other.CallMethod(SysEntity.ClientPartyManagerId, packet);
         }
 
         private Party FindPartyOfAccount(uint accountId) => Parties.Values.FirstOrDefault(p => p.Find(accountId) != null);

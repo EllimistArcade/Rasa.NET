@@ -3,6 +3,7 @@
 namespace Rasa.Structures
 {
     using Data;
+    using Managers;
 
     public class Party
     {
@@ -25,6 +26,9 @@ namespace Rasa.Structures
             Id = partyId;
             PartyLeaderId = partyLeaderId;
             Members = partyMembers;
+
+            // Rolls from Uncommon up until the leader says otherwise (LootRolls).
+            LootThreshold = (PartyLootThreshold)(int)LootRolls.DefaultThreshold;
         }
 
         internal PartyMember Find(uint userId) => Members.Find(m => m.UserId == userId);

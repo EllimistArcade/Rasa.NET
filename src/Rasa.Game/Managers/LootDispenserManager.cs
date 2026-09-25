@@ -73,10 +73,19 @@ namespace Rasa.Managers
             client.CallMethod(loot.EntityId, new OverallQualityPacket(loot.LootQuality));
         }
 
+        /// <summary>
+        /// What this looter may take: the corpse window draws only the items named here
+        /// (IsItemLootable), so a squad mate's rolled item, or under Rotation the holder's, is
+        /// left out of everyone else's.
+        /// </summary>
         internal void CanLootItems(Client client, LootDispenser loot)
         {
-            client.CallMethod(loot.EntityId, new CanLootItemsPacket(loot.IsLootable, loot.LootItems));
+            client.CallMethod(loot.EntityId, new CanLootItemsPacket(loot.IsLootable, LootableBy(loot, client.Player.EntityId)));
         }
+
+        /// <summary>The corpse's items this manifestation may take (LootItem.MayTake).</summary>
+        public static List<LootItem> LootableBy(LootDispenser loot, ulong entityId) =>
+            loot.LootItems.FindAll(i => i.MayTake(entityId));
 
         internal void GotLoot(Client client, LootDispenser loot)
         {
@@ -191,10 +200,18 @@ namespace Rasa.Managers
         /// </summary>
         internal void Loot(Client client, Creature creature)
         {
-            var (looters, partyId) = PartyManager.Instance.LootersFor(client, creature.Position);
+            var (looters, partyId, party, eligible) = PartyManager.Instance.LootersFor(client, creature.Position);
             var loot = Create(client, creature, looters, partyId);
 
-            foreach (var looter in looters)
+            // What is at or over the squad's threshold is rolled for among everyone sharing in
+            // the corpse; a winner the method had left out is shown it too.
+            var shownTo = new List<Client>(looters);
+
+            foreach (var winner in LootRolls.Distribute(loot, party, eligible))
+                if (!shownTo.Contains(winner))
+                    shownTo.Add(winner);
+
+            foreach (var looter in shownTo)
             {
                 looter.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(loot.EntityId, loot.EntityClassId));
 
@@ -350,10 +367,20 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Someone else's: a squad mate won it, or Rotation gave the corpse to someone else.
+            // The window never showed it; the list of what this player may take goes again.
+            if (!lootItem.MayTake(client.Player.EntityId))
+            {
+                CanLootItems(client, loot);
+                return;
+            }
+
             if (!TakeItem(client, loot, lootItem, packet.DestSlot))
                 return;
 
-            Settle(client, loot);
+            var credits = Settle(client, loot);
+
+            PartyManager.Instance.AnnounceLoot(client, loot.AttachedTo, new List<LootItem> { lootItem }, credits);
         }
 
         /// <summary>
@@ -380,6 +407,7 @@ namespace Rasa.Managers
                 return;
 
             var threshold = client.Player?.AutoLootThreshold ?? LootQuality.Junk;
+            var taken = new List<LootItem>();
 
             // Through the same path as taking one at a time, so both keep the same books. It
             // used to build a second item from each template and add that, leaving the rolled
@@ -390,12 +418,19 @@ namespace Rasa.Managers
                 if (packet.AutoLootOnly && !WithinThreshold(lootItem, threshold))
                     continue;
 
-                TakeItem(client, loot, lootItem, null);
+                // Only what is theirs to take: a squad mate's rolled item stays for them.
+                if (!lootItem.MayTake(client.Player.EntityId))
+                    continue;
+
+                if (TakeItem(client, loot, lootItem, null))
+                    taken.Add(lootItem);
             }
 
             // Credits come along either way: they have no quality to weigh against a threshold,
             // and leaving a handful behind would keep an otherwise empty corpse standing.
-            Settle(client, loot);
+            var credits = Settle(client, loot);
+
+            PartyManager.Instance.AnnounceLoot(client, loot.AttachedTo, taken, credits);
         }
 
         /// <summary>Whether walking past a corpse should pick this item up unasked.</summary>
@@ -437,7 +472,7 @@ namespace Rasa.Managers
         /// </summary>
         private bool TakeItem(Client client, LootDispenser loot, LootItem lootItem, uint? destSlot)
         {
-            if (lootItem.Taken || lootItem.Item == null)
+            if (lootItem.Taken || lootItem.Item == null || !lootItem.MayTake(client.Player.EntityId))
                 return false;
 
             var placed = destSlot.HasValue
@@ -462,8 +497,8 @@ namespace Rasa.Managers
             return true;
         }
 
-        /// <summary>Pays out the credits and closes the corpse once nothing is left on it.</summary>
-        private void Settle(Client client, LootDispenser loot)
+        /// <summary>Pays out the credits and closes the corpse once nothing is left on it. Returns the credits paid.</summary>
+        private int Settle(Client client, LootDispenser loot)
         {
             // Items only. The credits are paid out *by* this method, so asking whether the corpse
             // still holds anything - which counts them - would be circular: the credits would
@@ -472,8 +507,10 @@ namespace Rasa.Managers
             {
                 // Still something on it: refresh what can be taken and leave it open.
                 CanLootItems(client, loot);
-                return;
+                return 0;
             }
+
+            var paid = loot.Credits;
 
             if (loot.Credits > 0)
             {
@@ -492,6 +529,8 @@ namespace Rasa.Managers
 
             CanLootItems(client, loot);
             GotLoot(client, loot);
+
+            return paid;
         }
 
         /// <summary>The rows TakenInfo should mark; the client keys off the ones it is sent.</summary>

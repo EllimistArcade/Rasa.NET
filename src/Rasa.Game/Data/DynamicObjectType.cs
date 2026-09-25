@@ -13,6 +13,7 @@
         Kraftwerks          = 9,
         DropshipPad         = 10,   // the hovering dropship and beam over a transport pad
         Hortimonculus       = 11,   // the plant Hortimonculus grows from a corpse
-        Emitter             = 12    // an FXPackageEmitter playing an FX package (EmitterManager)
+        Emitter             = 12,   // an FXPackageEmitter playing an FX package (EmitterManager)
+        ForceField          = 13    // a force field a GM has placed (ForceFields)
     }
 }

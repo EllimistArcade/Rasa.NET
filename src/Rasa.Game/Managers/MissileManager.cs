@@ -599,43 +599,64 @@ namespace Rasa.Managers
                     // entity does not exist
                     return;
                 }
-                switch (targetType)
+
+                // A force field (ForceFields): only one that stops the shooter, and the missile
+                // lands on the field's own hit points; there is no actor to it.
+                if (targetType == EntityType.Object)
                 {
-                    case EntityType.Creature:
-                        {
-                            targetActor = EntityManager.Instance.GetCreature(action.TargetId);
-                            missile.TargetEntityId = action.TargetId;
-                        }
-                        break;
-                    case EntityType.Character:
-                        {
-                            targetActor = EntityManager.Instance.GetPlayer(action.TargetId);
-                            missile.TargetEntityId = action.TargetId;
-                        }
-                        break;
-                    default:
-                        Logger.WriteLog(LogType.Error, $"Can't shoot that object");
+                    var field = ForceFields.Find(action.TargetId);
+
+                    if (field == null || field.MapChannel != mapChannel || !ForceFields.MayShoot(field, action.Actor))
                         return;
-                };
 
-                if (targetActor == null || targetActor.State == CharacterState.Dead || targetActor.State == CharacterState.Dying)
-                    return; // actor is dead (or dying in its Critical Death window), cannot be shot at
+                    var fieldDistance = Vector3.Distance(field.Position, action.Actor.Position);
 
-                if (!IsOnMap(mapChannel, targetActor))
-                {
-                    Logger.WriteLog(LogType.Debug, $"MissileLaunch: {action.Actor.EntityId} aimed at {action.TargetId}, which is on map {targetActor.MapContextId}, not {mapChannel.MapInfo.MapContextId}");
-                    return;
+                    if (fieldDistance > MaxTargetDistance)
+                        return;
+
+                    missile.TargetEntityId = action.TargetId;
+                    triggerTime = (int)(fieldDistance * 0.5f);
                 }
-
-                var distance = Vector3.Distance(targetActor.Position, action.Actor.Position);
-
-                if (distance > MaxTargetDistance)
+                else
                 {
-                    Logger.WriteLog(LogType.Debug, $"MissileLaunch: {action.Actor.EntityId} aimed at {action.TargetId} from {distance:F0} units away");
-                    return;
-                }
+                    switch (targetType)
+                    {
+                        case EntityType.Creature:
+                            {
+                                targetActor = EntityManager.Instance.GetCreature(action.TargetId);
+                                missile.TargetEntityId = action.TargetId;
+                            }
+                            break;
+                        case EntityType.Character:
+                            {
+                                targetActor = EntityManager.Instance.GetPlayer(action.TargetId);
+                                missile.TargetEntityId = action.TargetId;
+                            }
+                            break;
+                        default:
+                            Logger.WriteLog(LogType.Error, $"Can't shoot that object");
+                            return;
+                    };
 
-                triggerTime = (int)(distance * 0.5f);
+                    if (targetActor == null || targetActor.State == CharacterState.Dead || targetActor.State == CharacterState.Dying)
+                        return; // actor is dead (or dying in its Critical Death window), cannot be shot at
+
+                    if (!IsOnMap(mapChannel, targetActor))
+                    {
+                        Logger.WriteLog(LogType.Debug, $"MissileLaunch: {action.Actor.EntityId} aimed at {action.TargetId}, which is on map {targetActor.MapContextId}, not {mapChannel.MapInfo.MapContextId}");
+                        return;
+                    }
+
+                    var distance = Vector3.Distance(targetActor.Position, action.Actor.Position);
+
+                    if (distance > MaxTargetDistance)
+                    {
+                        Logger.WriteLog(LogType.Debug, $"MissileLaunch: {action.Actor.EntityId} aimed at {action.TargetId} from {distance:F0} units away");
+                        return;
+                    }
+
+                    triggerTime = (int)(distance * 0.5f);
+                }
             }
             else
             {
@@ -883,7 +904,7 @@ namespace Rasa.Managers
 
             // Checked again here: the missile was queued a tick ago, and the target can have
             // left the map (or the world) since.
-            if (missile.TargetEntityId != 0 && !IsOnMap(mapChannel, missile.TargetActor))
+            if (missile.TargetEntityId != 0 && targetType != EntityType.Object && !IsOnMap(mapChannel, missile.TargetActor))
                 targetType = 0;
 
             // A staff drawn may deflect it (Staff, from pump 3): no damage at all, and the clients
@@ -988,6 +1009,9 @@ namespace Rasa.Managers
                     break;
                 case EntityType.Character:
                     DoDamageToPlayer(mapChannel, missile);
+                    break;
+                case EntityType.Object:
+                    ForceFields.TakeHit(missile);
                     break;
                 default:
                     Logger.WriteLog(LogType.Error, $"WeaponAttackRecovery: Unsuported targetType {targetType}.");

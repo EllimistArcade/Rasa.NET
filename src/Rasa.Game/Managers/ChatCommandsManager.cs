@@ -155,6 +155,7 @@ namespace Rasa.Managers
             RegisterCommand(".notify", GmLevel.GameMaster, NotifyCommand);
             RegisterCommand(".msg", GmLevel.GameMaster, MessageCommand);
             RegisterCommand(".destination", GmLevel.GameMaster, DestinationCommand);
+            RegisterCommand(".placefield", GmLevel.GameMaster, PlaceFieldCommand);
             RegisterCommand(".removeobj", GmLevel.GameMaster, RemoveObjectCommand);
             RegisterCommand(".rename", GmLevel.GameMaster, RenameCommand);
             RegisterCommand(".setkillstreak", GmLevel.GameMaster, SetKillStreakCommand);
@@ -593,6 +594,242 @@ namespace Rasa.Managers
 
             Logger.WriteLog(LogType.Command, $"AccountId = {_client.AccountEntry?.Id}: .destination {contextId} to {recipients.Count} player(s)");
             communicator.SystemMessage(_client, $"Showed {label} ({contextId}) to {recipients.Count} player(s) in the world.");
+        }
+
+        /// <summary>How far .placefield looks for the nearest field when no id is given.</summary>
+        private const float NearestFieldRange = 50f;
+
+        /// <summary>
+        /// .placefield: force fields (ForceFields), placed by hand to see what they did.
+        ///   .placefield &lt;kind|classId&gt; [a|b] [hp]   - at your feet, facing the way you face
+        ///   .placefield kinds | list
+        ///   .placefield remove|repair [#id]
+        ///   .placefield side &lt;a|b&gt; [#id]
+        ///   .placefield turn &lt;degrees&gt; [#id]
+        ///   .placefield nudge &lt;along&gt; &lt;through&gt; [up] [#id]   - metres, in the field's own frame
+        ///   .placefield damage &lt;amount&gt; [#id]
+        /// Without a #id, the nearest field within NearestFieldRange.
+        /// </summary>
+        private void PlaceFieldCommand(string[] parts)
+        {
+            var communicator = CommunicatorManager.Instance;
+            var player = _client.Player;
+            var mapChannel = player.MapChannel;
+            var sub = parts.Length > 1 ? parts[1].ToLowerInvariant() : string.Empty;
+
+            void Say(string text) => communicator.SystemMessage(_client, text);
+
+            string Describe(ForceFields.Field f) =>
+                $"#{f.Id} {f.Class.Key} ({f.Class.ClassId}) side {f.Side}, {f.Health}/{f.MaxHealth} hp, {ForceFields.StateOf(f)}, "
+                + $"{Vector3.Distance(f.Position, player.Position):0.0} m away, yaw {f.Yaw * 180 / Math.PI:0}"
+                + $", {(ForceFields.StopsPlayer(f) ? "stops players" : "lets players through")}";
+
+            // The field a "#id" names, or the nearest one when there is no #id.
+            var idPart = parts.Skip(2).FirstOrDefault(p => p.StartsWith("#"));
+
+            parts = parts.Where(p => p != idPart).ToArray();
+
+            ForceFields.Field Target()
+            {
+                if (idPart != null)
+                {
+                    if (!int.TryParse(idPart.Substring(1), out var id))
+                    {
+                        Say($"{idPart} is not a field id; .placefield list shows them.");
+                        return null;
+                    }
+
+                    var byId = ForceFields.FindById(id);
+
+                    if (byId == null || byId.MapChannel != mapChannel)
+                        Say($"No force field #{id} on this map.");
+
+                    return byId?.MapChannel == mapChannel ? byId : null;
+                }
+
+                var nearest = ForceFields.OnMap(mapChannel)
+                    .OrderBy(f => Vector3.DistanceSquared(f.Position, player.Position))
+                    .FirstOrDefault(f => Vector3.Distance(f.Position, player.Position) <= NearestFieldRange);
+
+                if (nearest == null)
+                    Say($"No force field within {NearestFieldRange:0} m. .placefield list shows this map's.");
+
+                return nearest;
+            }
+
+            bool TryParseSide(string value, out ForceFields.Side side)
+            {
+                side = ForceFields.Side.A;
+
+                switch (value?.ToLowerInvariant())
+                {
+                    case "a": case "afs": side = ForceFields.Side.A; return true;
+                    case "b": case "bane": side = ForceFields.Side.B; return true;
+                    default: return false;
+                }
+            }
+
+            switch (sub)
+            {
+                case "":
+                    Say("usage: .placefield <kind|classId> [a|b] [hp] - at your feet, facing your way; a = AFS, b = Bane");
+                    Say("       .placefield kinds | list | remove [#id] | repair [#id] | side <a|b> [#id]");
+                    Say("       .placefield turn <degrees> [#id] | nudge <along> <through> [up] [#id] | damage <amount> [#id]");
+                    return;
+
+                case "kinds":
+                    foreach (var c in ForceFields.Classes)
+                        Say($"{c.Key} ({c.ClassId}, {c.Kind}): {c.Gate}, {c.Max.X - c.Min.X:0.#} x {c.Max.Y - c.Min.Y:0.#} m");
+                    return;
+
+                case "list":
+                    {
+                        var onMap = ForceFields.OnMap(mapChannel);
+
+                        if (onMap.Count == 0)
+                            Say("No force fields on this map.");
+
+                        foreach (var f in onMap)
+                            Say(Describe(f));
+
+                        return;
+                    }
+
+                case "remove":
+                    {
+                        var f = Target();
+
+                        if (f == null)
+                            return;
+
+                        ForceFields.Remove(f);
+                        Say($"Removed force field #{f.Id}.");
+                        return;
+                    }
+
+                case "repair":
+                    {
+                        var f = Target();
+
+                        if (f == null)
+                            return;
+
+                        ForceFields.Repair(f, player.EntityId);
+                        Say(Describe(f));
+                        return;
+                    }
+
+                case "side":
+                    {
+                        if (parts.Length < 3 || !TryParseSide(parts[2], out var side))
+                        {
+                            Say("usage: .placefield side <a|b> [#id]");
+                            return;
+                        }
+
+                        var f = Target();
+
+                        if (f == null)
+                            return;
+
+                        ForceFields.SetSide(f, side);
+                        Say(Describe(f));
+                        return;
+                    }
+
+                case "turn":
+                    {
+                        if (parts.Length < 3 || !float.TryParse(parts[2], out var degrees))
+                        {
+                            Say("usage: .placefield turn <degrees> [#id]");
+                            return;
+                        }
+
+                        var f = Target();
+
+                        if (f == null)
+                            return;
+
+                        ForceFields.Move(f, f.Position, f.Yaw + degrees * (float)Math.PI / 180f);
+                        Say(Describe(f));
+                        return;
+                    }
+
+                case "nudge":
+                    {
+                        if (parts.Length < 4 || !float.TryParse(parts[2], out var along) || !float.TryParse(parts[3], out var through))
+                        {
+                            Say("usage: .placefield nudge <along> <through> [up] [#id] - metres along the field's width, through it, and up");
+                            return;
+                        }
+
+                        var up = 0f;
+
+                        if (parts.Length > 4 && !float.TryParse(parts[4], out up))
+                        {
+                            Say("usage: .placefield nudge <along> <through> [up] [#id]");
+                            return;
+                        }
+
+                        var f = Target();
+
+                        if (f == null)
+                            return;
+
+                        var offset = Vector3.Transform(new Vector3(along, up, through), Quaternion.CreateFromYawPitchRoll(f.Yaw, 0f, 0f));
+
+                        ForceFields.Move(f, f.Position + offset, f.Yaw);
+                        Say(Describe(f));
+                        return;
+                    }
+
+                case "damage":
+                    {
+                        if (parts.Length < 3 || !int.TryParse(parts[2], out var amount) || amount <= 0)
+                        {
+                            Say("usage: .placefield damage <amount> [#id]");
+                            return;
+                        }
+
+                        var f = Target();
+
+                        if (f == null)
+                            return;
+
+                        var taken = ForceFields.Damage(f, amount, player.EntityId);
+                        Say($"#{f.Id} took {taken}. " + Describe(f));
+                        return;
+                    }
+            }
+
+            var fieldClass = ForceFields.ClassOf(parts[1]);
+
+            if (fieldClass == null)
+            {
+                Say($"No force field kind '{parts[1]}'. .placefield kinds lists them.");
+                return;
+            }
+
+            var placeSide = ForceFields.Side.A;
+
+            if (parts.Length > 2 && !TryParseSide(parts[2], out placeSide))
+            {
+                Say("The side is a (AFS) or b (Bane).");
+                return;
+            }
+
+            var health = ForceFields.DefaultHealth;
+
+            if (parts.Length > 3 && (!int.TryParse(parts[3], out health) || health <= 0))
+            {
+                Say("The hit points are a whole number above 0.");
+                return;
+            }
+
+            var placed = ForceFields.Place(mapChannel, fieldClass, placeSide, player.Position, _client.Movement.ViewDirection.X, health);
+
+            Logger.WriteLog(LogType.Command, $"AccountId = {_client.AccountEntry?.Id}: .placefield {fieldClass.Key} {placeSide} at {player.Position} on {mapChannel.MapInfo.MapContextId}");
+            Say("Placed " + Describe(placed));
         }
 
         /// <summary>Accepts the client's own tutorial name or its raw id.</summary>

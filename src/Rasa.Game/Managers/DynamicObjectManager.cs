@@ -386,6 +386,10 @@ namespace Rasa.Managers
             // A Hortimonculus plant: its owner and its hit points.
             if (dynamicObject.DynamicObjectType == DynamicObjectType.Hortimonculus)
                 AbilityManager.ShowPlantTo(client, dynamicObject);
+
+            // A force field: its hit points, and whether it blocks this client's avatar.
+            if (dynamicObject.DynamicObjectType == DynamicObjectType.ForceField)
+                ForceFields.ShowTo(client, dynamicObject);
         }
 
         internal void CellDiscardDynamicObjectToClients(ulong entityId, List<Client> clients)

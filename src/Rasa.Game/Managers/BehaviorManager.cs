@@ -1925,6 +1925,15 @@ namespace Rasa.Managers
             // so a large step cannot carry the creature past its node.
             var step = (float)Math.Min(velocity * elapsedMs / 1000.0d, remaining);
 
+            // A force field that stops it (ForceFields): no further, walking or carried.
+            if (isMoved && step > 0f && ForceFields.Stops(mapChannel, creature, creature.Position,
+                    creature.Position + new Vector3((float)(difX * step), (float)(difY * step), (float)(difZ * step))))
+            {
+                isMoved = false;
+                velocity = 0f;
+                step = 0f;
+            }
+
             if (isMoved)
             {
                 creature.Position += new Vector3((float)(difX * step), (float)(difY * step), (float)(difZ * step));

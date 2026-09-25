@@ -47,6 +47,10 @@ namespace Rasa.Packets.MapChannel.Server
         public ActorInfoPacket(Actor actor)
         {
             StateIds.Add(actor.State);
+
+            // A creature with its weapon out (CreatureWeaponDraw): drawn for whoever meets it now.
+            if (actor is Creature { WeaponDrawn: true })
+                StateIds.Add(CharacterState.ToolReady);
             TrackingTarget = actor.Target;
             Yaw = actor.Rotation;
             MovementMode = actor.MovementSpeed;

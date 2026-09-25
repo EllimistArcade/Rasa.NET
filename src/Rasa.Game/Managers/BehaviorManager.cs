@@ -1516,6 +1516,9 @@ namespace Rasa.Managers
 
             // Whatever brought it here - the scan, a hit, an assist - the target is on its table.
             Threat.Noticed(creature, targetEntityId);
+
+            // Its weapon out for the fight, if it carries one.
+            CreatureWeaponDraw.Draw(MapChannelManager.Instance.FindByContextId(creature.MapContextId), creature);
         }
 
         /// <summary>
@@ -1631,6 +1634,7 @@ namespace Rasa.Managers
                     GameEffectManager.Instance.DettachEffect(mapChannel, creature, effect);
 
                 CellManager.Instance.CellCallMethod(mapChannel, creature, new RequestVisualCombatModePacket(false));
+                CreatureWeaponDraw.Stow(mapChannel, creature);
             }
 
             var distance = Vector3.Distance(creature.Position, creature.HomePos.Position);
@@ -1775,6 +1779,9 @@ namespace Rasa.Managers
         {
             if (creature.Controller == null)
                 return;
+
+            // The fight is over: the weapon goes away (CreatureWeaponDraw).
+            CreatureWeaponDraw.Stow(MapChannelManager.Instance.FindByContextId(creature.MapContextId), creature);
 
             // A creature with a master that was following someone, or holding a spot, goes back
             // to that rather than wandering off where the fight left it.

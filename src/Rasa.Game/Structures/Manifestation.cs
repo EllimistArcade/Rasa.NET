@@ -163,6 +163,12 @@ namespace Rasa.Structures
         /// <summary>Whether the player is holding auto-fire down, which holds the stance for the others who see them.</summary>
         public bool AutoFireCombatMode { get; set; }
 
+        /// <summary>
+        /// The buffs taken off at the last map change that go on again on arrival, their clocks
+        /// stopped in between, and whether each was already paused before (Managers.EffectCarry).
+        /// </summary>
+        public List<(GameEffect Effect, bool WasPaused)> CarriedEffects { get; } = new();
+
         /// <summary>Environment.TickCount64 at which combat lapses, refreshed by every hit.</summary>
         public long CombatExpiresAt { get; set; }
 

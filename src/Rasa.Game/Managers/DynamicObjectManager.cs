@@ -738,7 +738,9 @@ namespace Rasa.Managers
             // introduced the player to everyone without it, their own client included, while
             // the arrival's ActorInfo gave that client the sprint's speed and its drain picked
             // up again, under an effect id handed out by the map they had left and with no
-            // buff on any screen to show for it.
+            // buff on any screen to show for it. The timed buffs are kept aside, clocks stopped,
+            // and go on again when the ride lands them (EffectCarry).
+            EffectCarry.Stash(player);
             GameEffectManager.Instance.ClearEffects(player.MapChannel, player);
 
             CommunicatorManager.Instance.LeaveMapChannels(client);

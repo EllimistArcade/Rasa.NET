@@ -6,6 +6,7 @@ namespace Rasa.Managers
 {
     using Data;
     using Game;
+    using Packets;
     using Packets.MapChannel.Server;
     using Structures;
 
@@ -184,7 +185,9 @@ namespace Rasa.Managers
         /// the same attach for a whole list but announces every one of them unconditionally and
         /// has no guard against an effect the client already holds. Announced as the effect
         /// asks (AnnounceToNewcomers). A skill's standing effects only ever go to their own
-        /// player, and an effect whose time has run out is left for the worker to take off.
+        /// player, and an effect whose time has run out is left for the worker to take off. An
+        /// effect whose clock is stopped is followed by its OnPaused, so the newcomer's tooltip
+        /// says so too; its attach already carries the time it has left.
         /// </summary>
         public static void ShowEffectsTo(Client viewer, Actor actor)
         {
@@ -194,14 +197,14 @@ namespace Rasa.Managers
             if (actor is Manifestation player)
                 AbilityManager.ShowMorphWeaponTo(viewer, player);
 
-            foreach (var attached in EffectsForNewcomer(actor, viewer.Player))
-                viewer.CallMethod(actor.EntityId, attached);
+            foreach (var packet in NewcomerPackets(actor, viewer.Player))
+                viewer.CallMethod(actor.EntityId, packet);
         }
 
-        /// <summary>What ShowEffectsTo sends of the actor's effects to a client whose player is viewer, in order.</summary>
-        public static List<GameEffectAttachedPacket> EffectsForNewcomer(Actor actor, Actor viewer)
+        /// <summary>What ShowEffectsTo sends of the actor's effects to a client whose player is viewer, in order: each attach, and the pause of a paused one straight after it.</summary>
+        public static List<PythonPacket> NewcomerPackets(Actor actor, Actor viewer)
         {
-            var packets = new List<GameEffectAttachedPacket>();
+            var packets = new List<PythonPacket>();
 
             foreach (var effect in actor.ActiveEffects.Values.OrderBy(e => e.EffectId))
             {
@@ -212,10 +215,17 @@ namespace Rasa.Managers
                     continue;
 
                 packets.Add(AttachedPacket(effect, effect.AnnounceToNewcomers));
+
+                if (effect.IsPaused)
+                    packets.Add(new GameEffectPausePacket(effect.EffectId, true));
             }
 
             return packets;
         }
+
+        /// <summary>The attaches of <see cref="NewcomerPackets"/>.</summary>
+        public static List<GameEffectAttachedPacket> EffectsForNewcomer(Actor actor, Actor viewer) =>
+            NewcomerPackets(actor, viewer).OfType<GameEffectAttachedPacket>().ToList();
 
         /// <summary>
         /// The Recv_GameEffectAttached for an effect already on its holder: what Attach sent,
@@ -379,6 +389,79 @@ namespace Rasa.Managers
 
             foreach (var effect in cleared)
                 effect.OnDetached?.Invoke(mapChannel, actor, effect);
+        }
+
+        #endregion
+
+        #region Pause and restart
+
+        /// <summary>
+        /// Stops an effect's clock: it neither runs out nor ticks until it is restarted, and
+        /// whatever it changes while it is on stays changed. Told to whoever was told of the
+        /// effect (OnPaused), whose tooltip then says "Paused" in place of its timer. An aura's
+        /// copies on the squad stop with it - they share its end, and its tick is what keeps
+        /// them - and no new ones go out while it is stopped. False when the effect is not on
+        /// the actor or was already stopped.
+        /// </summary>
+        public bool Pause(MapChannel mapChannel, Actor actor, GameEffect effect)
+        {
+            if (actor == null || effect == null || !actor.ActiveEffects.ContainsKey(effect.EffectId))
+                return false;
+
+            if (!effect.Freeze(Environment.TickCount64))
+                return false;
+
+            if (mapChannel != null)
+                TellHolder(mapChannel, actor, effect, new GameEffectPausePacket(effect.EffectId, true));
+
+            foreach (var child in effect.Children.ToList())
+                if (child.Holder != null)
+                    Pause(mapChannel, child.Holder, child);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Starts a stopped effect's clock again with the time it had left when it stopped, and
+        /// its next tick as far off as it was. Told as OnRestart, and then - for an effect that
+        /// runs out - a GameEffectUpdateTooltip carrying that time: the client's timer is set
+        /// from a tooltip and from nothing else, and without one would run on from the moment
+        /// the effect was attached as if the pause had never been. The aura's copies go with it.
+        /// False when the effect is not on the actor or was not stopped.
+        /// </summary>
+        public bool Restart(MapChannel mapChannel, Actor actor, GameEffect effect)
+        {
+            if (actor == null || effect == null || !actor.ActiveEffects.ContainsKey(effect.EffectId))
+                return false;
+
+            if (!effect.Thaw(Environment.TickCount64))
+                return false;
+
+            if (mapChannel != null)
+            {
+                TellHolder(mapChannel, actor, effect, new GameEffectPausePacket(effect.EffectId, false));
+
+                if (effect.HasDuration)
+                    TellHolder(mapChannel, actor, effect, new GameEffectUpdateTooltipPacket(AttachedPacket(effect, false)));
+            }
+
+            foreach (var child in effect.Children.ToList())
+                if (child.Holder != null)
+                    Restart(mapChannel, child.Holder, child);
+
+            return true;
+        }
+
+        /// <summary>Sends something about an effect to whoever its attach went to: nobody for a server-only one, its own player for a skill's, everyone who can see the holder otherwise.</summary>
+        private static void TellHolder(MapChannel mapChannel, Actor actor, GameEffect effect, PythonPacket packet)
+        {
+            if (effect.ServerOnly)
+                return;
+
+            if (effect.IsSkillPassive)
+                ClientOf(mapChannel, actor)?.CallMethod(actor.EntityId, packet);
+            else
+                CellManager.Instance.CellCallMethod(mapChannel, actor, packet);
         }
 
         #endregion

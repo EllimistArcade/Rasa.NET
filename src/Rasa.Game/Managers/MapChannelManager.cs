@@ -405,6 +405,10 @@ namespace Rasa.Managers
                 CellManager.Instance.CellCallMethod(dropship.Client.Player.MapChannel, dropship.Client.Player, new TeleportArrivalPacket());
                 client.CallMethod(SysEntity.ClientMethodId, new RequestMovementBlockPacket());
                 ManifestationManager.Instance.AssignPlayer(client);
+
+                // The buffs brought from the map left, now there is somebody to show them to.
+                EffectCarry.Restore(client);
+
                 CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Position);
                 CommunicatorManager.Instance.PlayerEnterMap(dropship.Client);
 
@@ -446,6 +450,11 @@ namespace Rasa.Managers
             // the gate on this side, and must walk out of it before it can send them back.
             MapLinkManager.Instance.PlayerEnteredMap(client);
             ManifestationManager.Instance.AssignPlayer(client);
+
+            // The buffs brought from the map left (nothing on a login): after the player is in
+            // the cells and their own client has its actor's info, so the attach reaches it and
+            // everyone around.
+            EffectCarry.Restore(client);
 
             ClanManager.Instance.InitializePlayerClanData(client);
             InventoryManager.Instance.InitClanInventory(client);
@@ -590,6 +599,13 @@ namespace Rasa.Managers
 
             // Effects are per map as far as the clients know - nobody on the next map was told
             // about them - and a sprint left running would keep draining adrenaline unseen.
+            // A map change keeps the timed buffs aside, clocks stopped, to go on again on arrival
+            // (EffectCarry); a logout keeps nothing.
+            if (logout)
+                EffectCarry.Drop(client.Player);
+            else
+                EffectCarry.Stash(client.Player);
+
             GameEffectManager.Instance.ClearEffects(client.Player.MapChannel, client.Player);
 
             // The weapon is put away with them. A manifestation arriving on a map starts with

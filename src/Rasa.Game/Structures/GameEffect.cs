@@ -405,14 +405,64 @@ namespace Rasa.Structures
 
         #endregion
 
-        public bool IsExpired => Environment.TickCount64 >= ExpiresTick;
+        #region Paused
 
-        public bool TickDue => TickIntervalMs > 0 && Environment.TickCount64 >= NextTickTick;
+        /// <summary>
+        /// Its clock is stopped (GameEffectManager.Pause): it does not run out and does not tick,
+        /// and the client's tooltip says "Paused" in place of the timer. What it changes while it
+        /// is on stays changed.
+        /// </summary>
+        public bool IsPaused { get; private set; }
+
+        /// <summary>While paused: the milliseconds it had left when it was stopped; -1 for an effect with no end.</summary>
+        public long PausedRemainingMs { get; private set; }
+
+        /// <summary>While paused: the milliseconds to its next tick when it was stopped.</summary>
+        public long PausedNextTickMs { get; private set; }
+
+        /// <summary>Stops the clock at now. False if it was already stopped.</summary>
+        public bool Freeze(long now)
+        {
+            if (IsPaused)
+                return false;
+
+            PausedRemainingMs = HasDuration ? Math.Max(0, ExpiresTick - now) : -1;
+            PausedNextTickMs = TickIntervalMs > 0 ? Math.Max(0, NextTickTick - now) : 0;
+            IsPaused = true;
+
+            return true;
+        }
+
+        /// <summary>Starts the clock again at now with the time it had left. False if it was not stopped.</summary>
+        public bool Thaw(long now)
+        {
+            if (!IsPaused)
+                return false;
+
+            if (PausedRemainingMs >= 0)
+                ExpiresTick = now + PausedRemainingMs;
+
+            if (TickIntervalMs > 0)
+                NextTickTick = now + PausedNextTickMs;
+
+            IsPaused = false;
+
+            return true;
+        }
+
+        #endregion
+
+        public bool IsExpired => !IsPaused && Environment.TickCount64 >= ExpiresTick;
+
+        public bool TickDue => !IsPaused && TickIntervalMs > 0 && Environment.TickCount64 >= NextTickTick;
 
         public bool HasDuration => ExpiresTick != long.MaxValue;
 
+        /// <summary>Milliseconds left - held while paused; 0 for an effect with no end.</summary>
+        public long RemainingMs => !HasDuration ? 0 : IsPaused ? PausedRemainingMs : Math.Max(0, ExpiresTick - Environment.TickCount64);
+
         /// <summary>Whole seconds left, for the client's tooltip; 0 for an effect with no end.</summary>
-        public int RemainingSeconds => HasDuration ? (int)Math.Max(0, (ExpiresTick - Environment.TickCount64) / 1000) : 0;
+        public int RemainingSeconds => (int)(RemainingMs / 1000);
 
         /// <summary>Whether a tick of this effect does anything besides announce itself.</summary>
         public bool TicksDoWork => OnTick != null || AdrenalineDrainPercentPerSecond > 0 || TickDamageMax > 0 || TickHealMax > 0 || TickAdrenaline > 0 || AuraRadius > 0;

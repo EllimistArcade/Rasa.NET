@@ -138,6 +138,7 @@ namespace Rasa.Managers
             RegisterCommand(".actorstate", GmLevel.GameMaster, ActorStateCommand);
             RegisterCommand(".track", GmLevel.GameMaster, TrackCommand);
             RegisterCommand(".vamp", GmLevel.GameMaster, VampCommand);
+            RegisterCommand(".effect", GmLevel.GameMaster, EffectCommand);
             RegisterCommand(".bark", GmLevel.GameMaster, BarkCommand);
             RegisterCommand(".comehere", GmLevel.GameMaster, ComeHereCommand);
             RegisterCommand(".createobj", GmLevel.GameMaster, CreateObjectCommand);
@@ -390,6 +391,89 @@ namespace Rasa.Managers
             CommunicatorManager.Instance.SystemMessage(_client, lost > 0
                 ? $"Stole {lost} {args[0].ToLowerInvariant()} from {victim.EntityId}."
                 : $"Nothing to steal from {victim.EntityId}: it has none, is down, or turned the effect away.");
+        }
+
+        /// <summary>
+        /// .effect [list] [#entityId|#target]: the effects on you, or on the creature or player
+        /// named - id, type, level, buff or debuff, who put it there, time left, paused or not.
+        /// .effect pause|restart &lt;effectId|all&gt; [#entityId|#target]: stops or starts an
+        /// effect's clock (GameEffectManager.Pause / Restart), with the client's "Paused" tooltip.
+        /// </summary>
+        private void EffectCommand(string[] parts)
+        {
+            var player = _client.Player;
+            var mapChannel = player.MapChannel;
+            var idPart = parts.Skip(1).FirstOrDefault(p => p.StartsWith("#"));
+            var args = parts.Skip(1).Where(p => p != idPart).ToList();
+            const string usage = "usage: .effect [list] [#entityId|#target] | .effect pause|restart <effectId|all> [#entityId|#target]";
+
+            Actor actor = player;
+
+            if (idPart != null)
+            {
+                var entityId = idPart.Equals("#target", StringComparison.OrdinalIgnoreCase)
+                    ? player.Target
+                    : ulong.TryParse(idPart.Substring(1), out var named) ? named : 0;
+
+                actor = EntityManager.Instance.GetEntityType(entityId) switch
+                {
+                    EntityType.Creature => EntityManager.Instance.GetCreature(entityId),
+                    EntityType.Character => EntityManager.Instance.GetPlayer(entityId),
+                    _ => null
+                };
+
+                if (actor == null || actor.MapContextId != player.MapContextId)
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, $"No creature or player {idPart} on this map.");
+                    return;
+                }
+            }
+
+            var verb = args.Count > 0 ? args[0].ToLowerInvariant() : "list";
+
+            if (verb == "list")
+            {
+                var effects = actor.ActiveEffects.Values.OrderBy(e => e.EffectId).ToList();
+
+                CommunicatorManager.Instance.SystemMessage(_client, $"{actor.EntityId}: {effects.Count} effect(s)");
+
+                foreach (var e in effects)
+                    CommunicatorManager.Instance.SystemMessage(_client,
+                        $"  #{e.EffectId} type {e.TypeId} L{e.EffectLevel} {(e.IsBuff ? "buff" : "debuff")} from {e.SourceId}"
+                        + (e.HasDuration ? $", {e.RemainingMs / 1000.0:0.0} s left" : ", no end")
+                        + (e.IsPaused ? ", PAUSED" : "")
+                        + (e.ServerOnly ? ", server only" : e.IsSkillPassive ? ", skill passive" : "")
+                        + (actor is Manifestation holder && EffectCarry.Carries(holder, e) ? ", carried across maps" : ""));
+
+                return;
+            }
+
+            if ((verb != "pause" && verb != "restart") || args.Count < 2)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, usage);
+                return;
+            }
+
+            var all = args[1].Equals("all", StringComparison.OrdinalIgnoreCase);
+            var chosen = all
+                ? actor.ActiveEffects.Values.Where(e => e.Parent?.Holder != actor).OrderBy(e => e.EffectId).ToList()   // an aura of its own takes its copies with it
+                : int.TryParse(args[1], out var effectId) && actor.ActiveEffects.TryGetValue(effectId, out var one)
+                    ? new List<GameEffect> { one }
+                    : null;
+
+            if (chosen == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"No effect {args[1]} on {actor.EntityId}; .effect list{(idPart != null ? " " + idPart : "")} shows them.");
+                return;
+            }
+
+            var changed = chosen.Count(e => verb == "pause"
+                ? GameEffectManager.Instance.Pause(mapChannel, actor, e)
+                : GameEffectManager.Instance.Restart(mapChannel, actor, e));
+
+            CommunicatorManager.Instance.SystemMessage(_client, verb == "pause"
+                ? $"Paused {changed} effect(s) on {actor.EntityId}{(changed < chosen.Count ? $"; {chosen.Count - changed} already paused" : "")}."
+                : $"Restarted {changed} effect(s) on {actor.EntityId}{(changed < chosen.Count ? $"; {chosen.Count - changed} not paused" : "")}.");
         }
 
         private void BarkCommand(string[] parts)

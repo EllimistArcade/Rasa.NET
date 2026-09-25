@@ -1620,5 +1620,95 @@ namespace Rasa.Managers
         }
 
         #endregion
+
+        #region Clan warfare search
+
+        /// <summary>Ours: the most clans one clan war search lists.</summary>
+        public const int ClanWarfareSearchMaxResults = 50;
+
+        /// <summary>
+        /// ClanWarfareSearch, from the clan war search window a leader opens with Declare War: the
+        /// PvP clans other than their own whose name holds the word typed (any case), with the
+        /// average level of their members inside the range - 0 is no limit on that side - listed by
+        /// member count, average level and whether anyone in them is online. Online clans first,
+        /// then by name, up to ClanWarfareSearchMaxResults.
+        ///
+        /// Always answered, with an empty list when there is nothing to show: the window disables
+        /// its Search button until an answer comes (or 1.5 seconds pass). A player in no clan, or
+        /// below CLAN_RANK_TO_CHALLENGE - who the client never offers the window - gets the empty
+        /// one. The window leaves out the searcher's own clan itself; so does this.
+        ///
+        /// Only PvP clans: a feud is clan PvP, and the window's own docstring calls its list "the
+        /// list of PvP clans". Whether the searcher's clan has to be PvP as well is not known, and
+        /// is not asked. A clan with no members is left out; it has no level to average.
+        ///
+        /// Declaring war from the list sends ChallengeClanToFeud, which is not implemented yet.
+        /// </summary>
+        internal void ClanWarfareSearch(Client client, ClanWarfareSearchPacket packet)
+        {
+            var player = client?.Player;
+
+            if (player == null)
+                return;
+
+            var matches = new List<ClanWarfareSearchResultsPacket.Match>();
+            var member = player.ClanId == 0 ? null : GetClanMember(player.ClanId, player.Id);
+
+            if (member == null || member.Rank < ClanRank.MinRankToChallenge)
+                Logger.WriteLog(LogType.Debug,
+                    $"{player.Name} searched for clans to fight without leading a clan; answered with none.");
+            else
+            {
+                try
+                {
+                    matches = FindWarfareMatches(player.ClanId, packet.NameContains?.Trim() ?? "", packet.MinLevel, packet.MaxLevel);
+                }
+                catch (Exception e)
+                {
+                    // A search that fails is an empty list, not a lost connection.
+                    Logger.WriteLog(LogType.Error, $"Clan war search for {player.Name} failed: {e.Message}");
+                }
+            }
+
+            client.CallMethod(SysEntity.ClientWargameManagerId, new ClanWarfareSearchResultsPacket(packet.RequestId, matches));
+        }
+
+        private List<ClanWarfareSearchResultsPacket.Match> FindWarfareMatches(uint ownClanId, string nameContains, int minLevel, int maxLevel)
+        {
+            var candidates = Clans.Values
+                .Select(c => c.Value)
+                .Where(c => c != null && c.IsPvP && c.Id != ownClanId
+                    && (nameContains.Length == 0 || (c.Name ?? "").IndexOf(nameContains, StringComparison.OrdinalIgnoreCase) >= 0))
+                .ToDictionary(c => c.Id);
+
+            if (candidates.Count == 0)
+                return new List<ClanWarfareSearchResultsPacket.Match>();
+
+            List<ClanRosterEntry> rosters;
+
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+                rosters = unitOfWork.ClanMembers.GetRosters(candidates.Keys);
+
+            var online = OnlineCharacters();
+
+            return rosters
+                .GroupBy(r => r.ClanId)
+                .Where(g => candidates.ContainsKey(g.Key))
+                .Select(g => new ClanWarfareSearchResultsPacket.Match
+                {
+                    ClanId = g.Key,
+                    ClanName = candidates[g.Key].Name,
+                    MemberCount = g.Count(),
+                    AverageLevel = (int)Math.Round(g.Average(r => (double)r.Level), MidpointRounding.AwayFromZero),
+                    IsOnline = g.Any(r => online.ContainsKey(r.CharacterId))
+                })
+                .Where(m => (minLevel <= 0 || m.AverageLevel >= minLevel) && (maxLevel <= 0 || m.AverageLevel <= maxLevel))
+                .OrderByDescending(m => m.IsOnline)
+                .ThenBy(m => m.ClanName, StringComparer.OrdinalIgnoreCase)
+                .Take(ClanWarfareSearchMaxResults)
+                .ToList();
+        }
+
+        #endregion
     }
 }

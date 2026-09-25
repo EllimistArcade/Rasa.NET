@@ -707,6 +707,12 @@
             ClanManager.Instance.ClanPromotePlayer(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.ClanWarfareSearch)]
+        private void ClanWarfareSearch(ClanWarfareSearchPacket packet)
+        {
+            ClanManager.Instance.ClanWarfareSearch(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.DisbandClan)]
         private void DisbandClan(DisbandClanPacket packet)
         {

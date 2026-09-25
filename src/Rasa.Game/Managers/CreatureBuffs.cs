@@ -148,7 +148,7 @@ namespace Rasa.Managers
                 new PerformWindupPacket(PerformType.ThreeArgs, action.ActionId, action.ActionArgId, creature.EntityId));
 
             CreatureWindups.After(mapChannel, creature, CreatureWindups.WindupMsOf(action, info),
-                () => Recover(mapChannel, creature, action, resolve()));
+                () => Recover(mapChannel, creature, action, resolve()), action);
         }
 
         /// <summary>The recovery, which lists who the action reached.</summary>
@@ -369,9 +369,13 @@ namespace Rasa.Managers
                 var linker = channel.Channeler;
                 var fed = channel.Fed;
 
-                // Killed, stunned or knocked out of it, or nothing left to feed: it comes to nothing.
+                // Killed, stunned or knocked out of it, or nothing left to feed: it comes to nothing,
+                // and a Linker still standing is told so (an interrupt; a dead one is done anyway).
                 if (!Standing(linker) || Stuns.IsStunned(linker) || !Standing(fed))
+                {
+                    CreatureWindups.Interrupt(mapChannel, linker, channel.Action.ActionId, channel.Action.ActionArgId);
                     continue;
+                }
 
                 var recovery = new AbilityRecoveryPacket(channel.Action.ActionId, channel.Action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None);
                 recovery.Hits.Add(new AbilityHit { EntityId = fed.EntityId });

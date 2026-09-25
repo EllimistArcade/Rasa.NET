@@ -74,7 +74,7 @@ namespace Rasa.Managers
 
             // The shriek goes out when the windup is done, on whoever is about then (CreatureWindups).
             CreatureWindups.After(mapChannel, creature, CreatureWindups.WindupMsOf(action, info),
-                () => Shrieked(mapChannel, creature, action, info, amount, radius));
+                () => Shrieked(mapChannel, creature, action, info, amount, radius), action);
 
             return true;
         }

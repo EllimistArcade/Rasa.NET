@@ -349,7 +349,7 @@ namespace Rasa.Managers
             CellManager.Instance.CellCallMethod(mapChannel, necromite,
                 new PerformWindupPacket(PerformType.ThreeArgs, action.ActionId, action.ActionArgId, corpse.EntityId));
 
-            CreatureWindups.After(mapChannel, necromite, windupMs, () => PlantOnCorpse(mapChannel, necromite, corpse, action, info, radius));
+            CreatureWindups.After(mapChannel, necromite, windupMs, () => PlantOnCorpse(mapChannel, necromite, corpse, action, info, radius), action);
 
             return true;
         }

@@ -528,12 +528,16 @@ namespace Rasa.Managers
                 mapChannel.QueuedMissiles.RemoveAt(i);
 
                 // A creature killed while winding an ability up does not land it, nor one stunned
-                // or knocked down out of it.
+                // or knocked down out of it - and one still alive has the windup called off on the
+                // clients, which would otherwise hold it wound up (CreatureWindups.Interrupt).
                 if (missile.AfterWindup && missile.Source is Creature winder
                     && (winder.State == CharacterState.Dead || winder.State == CharacterState.Dying
                         || !winder.Attributes.TryGetValue(Attributes.Health, out var winderHealth) || winderHealth.Current <= 0
                         || Stuns.IsStunned(winder)))
+                {
+                    CreatureWindups.Interrupt(mapChannel, winder, missile.ActionId, missile.ActionArgId);
                     continue;
+                }
 
                 try
                 {

@@ -5,6 +5,7 @@ using System.Linq;
 namespace Rasa.Managers
 {
     using Data;
+    using Packets.MapChannel.Server;
     using Structures;
 
     /// <summary>
@@ -96,6 +97,23 @@ namespace Rasa.Managers
             public Creature Creature;
             public long At;
             public Action Resolve;
+            public CreatureAction Action;
+        }
+
+        /// <summary>
+        /// A wound-up action that comes to nothing, put right on the clients: ActionInterrupt,
+        /// which Actor.Recv_ActionInterrupt answers by cancelling the action when it is the one
+        /// the actor is performing - its windup animation and FX stopped, and the actor out of
+        /// WINDUP. Every creature ability waits on the server for its recovery (delayResolution),
+        /// so one that never gets one otherwise stays wound up until its next action. Not for a
+        /// creature dead or dying: DEAD is the end of whatever it was doing already.
+        /// </summary>
+        public static void Interrupt(MapChannel mapChannel, Creature creature, ActionId actionId, uint actionArgId)
+        {
+            if (mapChannel == null || creature == null || creature.State == CharacterState.Dead || creature.State == CharacterState.Dying)
+                return;
+
+            CellManager.Instance.CellCallMethod(mapChannel, creature, new ActionInterruptPacket(creature.EntityId, actionId, actionArgId));
         }
 
         private static readonly List<Deferred> Pending = new List<Deferred>();
@@ -104,9 +122,11 @@ namespace Rasa.Managers
         /// <summary>
         /// A creature action that is not a missile, wound up: the creature stops and stands for
         /// windupMs, and resolve runs when it is done - unless the creature is dead, dying or
-        /// stunned by then, when nothing comes of it. No windup, and it runs now.
+        /// stunned by then, when nothing comes of it and the action is interrupted on the clients.
+        /// No windup, and it runs now.
         /// </summary>
-        public static void After(MapChannel mapChannel, Creature creature, int windupMs, Action resolve)
+        /// <param name="action">The action wound up, to interrupt if it comes to nothing.</param>
+        public static void After(MapChannel mapChannel, Creature creature, int windupMs, Action resolve, CreatureAction action = null)
         {
             if (resolve == null)
                 return;
@@ -125,7 +145,7 @@ namespace Rasa.Managers
             BehaviorManager.Instance?.StopMoving(creature);
 
             lock (PendingLock)
-                Pending.Add(new Deferred { MapChannel = mapChannel, Creature = creature, At = at, Resolve = resolve });
+                Pending.Add(new Deferred { MapChannel = mapChannel, Creature = creature, At = at, Resolve = resolve, Action = action });
         }
 
         /// <summary>Whether this creature has a wound-up action waiting on its windup.</summary>
@@ -155,9 +175,17 @@ namespace Rasa.Managers
 
                 if (creature.State == CharacterState.Dead || creature.State == CharacterState.Dying
                     || creature.MapContextId != mapChannel.MapInfo.MapContextId
-                    || !creature.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0
-                    || Stuns.IsStunned(creature))
+                    || !creature.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
                     continue;
+
+                // Stunned or knocked down out of it: nothing comes of it, and the clients are told.
+                if (Stuns.IsStunned(creature))
+                {
+                    if (deferred.Action != null)
+                        Interrupt(mapChannel, creature, deferred.Action.ActionId, deferred.Action.ActionArgId);
+
+                    continue;
+                }
 
                 try
                 {
@@ -166,6 +194,9 @@ namespace Rasa.Managers
                 catch (Exception e)
                 {
                     Logger.WriteLog(LogType.Error, $"CreatureWindups: {creature.EntityId}'s wound-up action threw and was dropped: {e}");
+
+                    if (deferred.Action != null)
+                        Interrupt(mapChannel, creature, deferred.Action.ActionId, deferred.Action.ActionArgId);
                 }
             }
         }

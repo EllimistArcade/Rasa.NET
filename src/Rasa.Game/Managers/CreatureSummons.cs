@@ -257,7 +257,7 @@ namespace Rasa.Managers
             // What it summons comes when the windup is done (CreatureWindups): the turret set
             // down, the Howler called.
             CreatureWindups.After(mapChannel, summoner, CreatureWindups.WindupMsOf(action, info),
-                () => Bring(mapChannel, summoner, action, info, templateId, target));
+                () => Bring(mapChannel, summoner, action, info, templateId, target), action);
 
             return true;
         }
@@ -271,8 +271,12 @@ namespace Rasa.Managers
 
             var summon = CreatureManager.Instance.CreateCreature(templateId, null);
 
+            // Nothing to bring: the windup the clients were shown is called off.
             if (summon == null)
+            {
+                CreatureWindups.Interrupt(mapChannel, summoner, action.ActionId, action.ActionArgId);
                 return;
+            }
 
             CellManager.Instance.CellCallMethod(mapChannel, summoner,
                 new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));

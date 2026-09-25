@@ -266,7 +266,7 @@ namespace Rasa.Managers
                 new PerformWindupPacket(PerformType.ThreeArgs, habit.ActionId, habit.ActionArgId, corpse.EntityId));
 
             // The loot goes when the windup is done (CreatureWindups), if it is still there to take.
-            CreatureWindups.After(mapChannel, filcher, info?.WindupMs ?? 0, () => TakeLoot(mapChannel, filcher, habit, corpse));
+            CreatureWindups.After(mapChannel, filcher, info?.WindupMs ?? 0, () => TakeLoot(mapChannel, filcher, habit, corpse), habit);
         }
 
         /// <summary>The Filcher's windup is done: the loot, if nobody has opened the corpse or cleared it meanwhile, and the recovery either way.</summary>

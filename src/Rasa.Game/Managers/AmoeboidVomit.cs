@@ -131,7 +131,7 @@ namespace Rasa.Managers
                 new PerformWindupPacket(PerformType.TwoArgs, action.ActionId, action.ActionArgId));
 
             CreatureWindups.After(mapChannel, parent, CreatureWindups.WindupMsOf(action, level),
-                () => Regurgitate(mapChannel, parent, action, level));
+                () => Regurgitate(mapChannel, parent, action, level), action);
         }
 
         private static void Regurgitate(MapChannel mapChannel, Creature parent, CreatureAction action, ActionLevelInfo level)

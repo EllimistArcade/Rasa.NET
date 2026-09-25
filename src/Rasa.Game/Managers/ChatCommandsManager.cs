@@ -137,6 +137,7 @@ namespace Rasa.Managers
             // your own client. A restart undoes all of it.
             RegisterCommand(".actorstate", GmLevel.GameMaster, ActorStateCommand);
             RegisterCommand(".track", GmLevel.GameMaster, TrackCommand);
+            RegisterCommand(".vamp", GmLevel.GameMaster, VampCommand);
             RegisterCommand(".bark", GmLevel.GameMaster, BarkCommand);
             RegisterCommand(".comehere", GmLevel.GameMaster, ComeHereCommand);
             RegisterCommand(".createobj", GmLevel.GameMaster, CreateObjectCommand);
@@ -342,6 +343,53 @@ namespace Rasa.Managers
             CommunicatorManager.Instance.SystemMessage(_client, targetId == 0
                 ? $"{Describe(actor)} tracks nothing."
                 : $"{Describe(actor)} tracks {targetId}.");
+        }
+
+        /// <summary>
+        /// .vamp &lt;health|power|armor|adrenaline&gt; &lt;amount&gt; [#entityId]: you steal up to the
+        /// amount from your target, or the creature or player named (VampiricDamage.Steal) - what
+        /// the Vamp item modules will do on a hit, with the client's AnnounceVamp floats.
+        /// </summary>
+        private void VampCommand(string[] parts)
+        {
+            var player = _client.Player;
+            var idPart = parts.Skip(1).FirstOrDefault(p => p.StartsWith("#"));
+            var args = parts.Skip(1).Where(p => p != idPart).ToList();
+
+            Attributes? attribute = args.Count > 0 ? args[0].ToLowerInvariant() switch
+            {
+                "health" => Attributes.Health,
+                "power" => Attributes.Power,
+                "armor" or "armour" => Attributes.Armor,
+                "adrenaline" or "chi" => Attributes.Chi,
+                _ => null
+            } : null;
+
+            if (attribute == null || args.Count < 2 || !int.TryParse(args[1], out var amount) || amount <= 0)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "usage: .vamp <health|power|armor|adrenaline> <amount> [#entityId] - from your target, or the one named");
+                return;
+            }
+
+            var victimId = idPart != null && ulong.TryParse(idPart.Substring(1), out var named) ? named : player.Target;
+            var victim = EntityManager.Instance.GetEntityType(victimId) switch
+            {
+                EntityType.Creature => (Actor)EntityManager.Instance.GetCreature(victimId),
+                EntityType.Character => EntityManager.Instance.GetPlayer(victimId),
+                _ => null
+            };
+
+            if (victim == null || victim == player || victim.MapContextId != player.MapContextId)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, idPart != null ? $"No creature or player {idPart} on this map." : "Target a creature or another player first.");
+                return;
+            }
+
+            var lost = VampiricDamage.Steal(player.MapChannel, player, victim, attribute.Value, amount);
+
+            CommunicatorManager.Instance.SystemMessage(_client, lost > 0
+                ? $"Stole {lost} {args[0].ToLowerInvariant()} from {victim.EntityId}."
+                : $"Nothing to steal from {victim.EntityId}: it has none, is down, or turned the effect away.");
         }
 
         private void BarkCommand(string[] parts)

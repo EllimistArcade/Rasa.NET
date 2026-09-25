@@ -79,7 +79,7 @@ namespace Rasa.Managers
         }
 
         /// <summary>The client of a player on this map, or null for a creature or a player who has gone.</summary>
-        private static Client ClientOf(MapChannel mapChannel, Actor actor)
+        internal static Client ClientOf(MapChannel mapChannel, Actor actor)
         {
             if (!(actor is Manifestation player))
                 return null;

@@ -335,6 +335,12 @@
             ManifestationManager.Instance.RequestUseCloneCredit(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.RequestUseTransferCredit)]
+        private void RequestUseTransferCredit(RequestUseTransferCreditPacket packet)
+        {
+            ManifestationManager.Instance.RequestUseTransferCredit(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestSetAbilitySlot)]
         private void RequestSetAbilitySlot(RequestSetAbilitySlotPacket packet)
         {

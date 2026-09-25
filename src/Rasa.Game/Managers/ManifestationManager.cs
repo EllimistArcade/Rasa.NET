@@ -1185,6 +1185,77 @@ namespace Rasa.Managers
             client.CallMethod(client.Player.EntityId, new CloneCreditsPacket(client.Player.CloneCredits));
         }
 
+        /// <summary>
+        /// Pays a stack of transfer credit slips into its owner's purse, a credit a slip.
+        ///
+        /// Nothing in the client says what a slip is worth, but everything about it says one
+        /// credit: the one template (10000003) is priced at 1 to buy and 1 to sell, its class's
+        /// loot_value is 1, and the class stacks to 1,000,000,000 - a purse's worth. So a stack of
+        /// 25,000 slips is 25,000 credits in item form, which can be traded, mailed or put in a
+        /// lockbox, and using it turns it back into credits. The client expects nothing back but
+        /// the purse (UpdateCreditsPacket) and the item going (SetStackCount or
+        /// InventoryRemoveItem); GainCredits also posts "You received N credits."
+        ///
+        /// A purse holds int.MaxValue. What does not fit stays on the stack rather than being
+        /// clamped away by UpdateCharacter, and a full purse redeems nothing.
+        ///
+        /// Everything is checked here rather than trusted: the client only offers the right-click
+        /// on an item with the TransferCredit augmentation, but the entity id arrived over the wire.
+        /// </summary>
+        public void RequestUseTransferCredit(Client client, RequestUseTransferCreditPacket packet)
+        {
+            if (client?.Player == null)
+                return;
+
+            // Theirs, and in the pack rather than a lockbox or someone else's window.
+            if (!client.Player.Inventory.PersonalInventory.Contains(packet.EntityId))
+                return;
+
+            var item = EntityManager.Instance.GetItem(packet.EntityId);
+
+            if (item?.ItemTemplate == null)
+                return;
+
+            var classInfo = EntityClassManager.Instance.GetClassInfo(item.ItemTemplate.Class);
+
+            // The augmentation is what makes an item a slip - not its template id.
+            if (classInfo == null || !classInfo.Augmentations.Contains(AugmentationType.TransferCredit))
+            {
+                Logger.WriteLog(LogType.Error,
+                    $"RequestUseTransferCredit: {client.Player.Name} used item {packet.EntityId} (class {item.ItemTemplate.Class}), which is not a transfer credit");
+                return;
+            }
+
+            if (item.StackSize == 0)
+                return;
+
+            var purse = client.Player.Credits.TryGetValue(CurencyType.Credits, out var credits) ? credits : 0;
+            var room = (long)int.MaxValue - purse;
+
+            if (room <= 0)
+            {
+                CommunicatorManager.Instance.SystemMessage(client, "Your purse cannot hold any more credits.");
+                return;
+            }
+
+            var redeemed = (uint)Math.Min(item.StackSize, room);
+            var left = item.StackSize - redeemed;
+
+            // Spent before it is paid, so that a failure here cannot mint credits from nothing.
+            // ReduceStackCount's own preconditions - a live player, a non-null item, a non-zero
+            // count, and the item being in the named inventory - are all established above, so
+            // once it is reached it consumes.
+            InventoryManager.Instance.ReduceStackCount(client, InventoryType.Personal, item, redeemed);
+            GainCredits(client, (int)redeemed);
+
+            Logger.WriteLog(LogType.Security,
+                $"Transfer credit used: {client.Player.FamilyName} redeemed {redeemed} slip(s) from item {item.Id} for {redeemed} credits"
+                + (left > 0 ? $", {left} left on the stack (purse full)" : ""));
+
+            if (left > 0)
+                CommunicatorManager.Instance.SystemMessage(client, $"Your purse is full. {left} transfer credits are left on the slip.");
+        }
+
         public void RequestArmAbility(Client client, int abilityDrawerSlot)
         {
             client.Player.CurrentAbilityDrawer = abilityDrawerSlot;

@@ -46,6 +46,16 @@ namespace Rasa.Managers
          *  - ResetInboxInventory
          *  - ResetOverflowInventory
          *  - ResetWagerInventory
+         *
+         *      Intentionally not sent:
+         *  - InventoryDisabled (291)               => the 1.16.5 client ignores it. clientmethod.py
+         *                                             Recv_InventoryDisabled(bDisabled) only posts
+         *                                             UI_DISABLE_INVENTORY, and no window registers a
+         *                                             handler for that event (inventory, lockbox and clan
+         *                                             lockbox included; the name appears only where it is
+         *                                             defined and posted, in the source and the shipped
+         *                                             .pyo files). Whatever locked the inventory for it was
+         *                                             removed before this build, so sending it does nothing.
          *  
          *    Inventory Handlers:
          *  - ClanLockbox_DepositItemInSlot         => implemented

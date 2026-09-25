@@ -139,6 +139,8 @@ namespace Rasa.Managers
             RegisterCommand(".track", GmLevel.GameMaster, TrackCommand);
             RegisterCommand(".vamp", GmLevel.GameMaster, VampCommand);
             RegisterCommand(".effect", GmLevel.GameMaster, EffectCommand);
+            RegisterCommand(".moveflags", GmLevel.GameMaster, MoveFlagsCommand);
+            RegisterCommand(".falldamage", GmLevel.GameMaster, FallDamageCommand);
             RegisterCommand(".bark", GmLevel.GameMaster, BarkCommand);
             RegisterCommand(".comehere", GmLevel.GameMaster, ComeHereCommand);
             RegisterCommand(".createobj", GmLevel.GameMaster, CreateObjectCommand);
@@ -475,6 +477,46 @@ namespace Rasa.Managers
             CommunicatorManager.Instance.SystemMessage(_client, verb == "pause"
                 ? $"Paused {changed} effect(s) on {actor.EntityId}{(changed < chosen.Count ? $"; {chosen.Count - changed} already paused" : "")}."
                 : $"Restarted {changed} effect(s) on {actor.EntityId}{(changed < chosen.Count ? $"; {chosen.Count - changed} not paused" : "")}.");
+        }
+
+        /// <summary>
+        /// .moveflags: shows your Move packets' flags byte and leading bytes whenever they change,
+        /// with your height, the step, and whether you are in one of the map's water planes. Run
+        /// it again to stop. For finding out whether the client marks being in the air or swimming.
+        /// </summary>
+        private void MoveFlagsCommand(string[] parts)
+        {
+            var tracker = _client.Player.Fall;
+
+            tracker.WatchFlags = !tracker.WatchFlags;
+            tracker.LastFlags = -1;
+
+            CommunicatorManager.Instance.SystemMessage(_client, tracker.WatchFlags
+                ? "Watching your move flags: jump, fall and swim, and each change is shown. .moveflags again to stop."
+                : "Stopped watching your move flags.");
+        }
+
+        /// <summary>
+        /// .falldamage &lt;metres&gt;: takes what a fall of that height would (FallDamage), straight off
+        /// your health, announced as map damage - to see what the client shows. Says whether you
+        /// are standing in water, where a real fall would have done nothing.
+        /// </summary>
+        private void FallDamageCommand(string[] parts)
+        {
+            var player = _client.Player;
+
+            if (parts.Length < 2 || !float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var metres) || metres <= 0)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client,
+                    $"usage: .falldamage <metres> - a fall does {FallDamage.PercentPerMetre}% of maximum health a metre past {FallDamage.SafeDrop:0} m");
+                return;
+            }
+
+            var water = FallDamage.InWater(player.MapChannel?.MapInfo?.MapName, player.Position);
+            var taken = FallDamage.Apply(player.MapChannel, player, metres);
+
+            CommunicatorManager.Instance.SystemMessage(_client,
+                $"A {metres:0.#} m fall: {taken} health taken{(water ? "; you are in water, where a real fall would have taken nothing" : "")}.");
         }
 
         private void BarkCommand(string[] parts)

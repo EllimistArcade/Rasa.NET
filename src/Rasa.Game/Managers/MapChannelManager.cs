@@ -306,6 +306,9 @@ namespace Rasa.Managers
 
                         // Amoeboids: the regurgitated children whose time is up.
                         AmoeboidVomit.Worker(mapChannel);
+
+                        // Falls that ended with the player standing still: no Move to end them.
+                        FallDamage.Worker(mapChannel);
                     }
 
                     // a second's health, armour, power and chi for everyone here

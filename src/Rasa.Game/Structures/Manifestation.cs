@@ -114,7 +114,13 @@ namespace Rasa.Structures
             Position = position;
             MoveBudget = 0;
             MoveBudgetTick = Environment.TickCount64;
+
+            // Put somewhere, not fallen there: whatever descent was under way is over.
+            Fall.Reset();
         }
+
+        /// <summary>The descent under way, if any, for falling damage (Managers.FallDamage).</summary>
+        public FallTracker Fall { get; } = new FallTracker();
 
         /// <summary>
         /// Always false: this server has no trial accounts. The single source for every packet

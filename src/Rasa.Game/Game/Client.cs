@@ -428,7 +428,13 @@ namespace Rasa.Game
                     if (!ManifestationManager.Instance.AcceptMove(this, moveMessage.Movement))
                         return;
 
+                    var movedFrom = Player.Position;
+
                     Player.Position = moveMessage.Movement.Position;
+
+                    // A fall, if this Move ended one (FallDamage), and the flags for a GM watching them.
+                    FallDamage.OnMove(this, movedFrom, Player.Position, Environment.TickCount64);
+                    FallDamage.ShowMoveFlags(this, moveMessage, movedFrom);
                     Player.Rotation = moveMessage.Movement.ViewDirection.X;
                     Movement = moveMessage.Movement;
 

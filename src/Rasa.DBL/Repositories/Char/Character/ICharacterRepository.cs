@@ -27,6 +27,7 @@ namespace Rasa.Repositories.Char.Character
         void UpdateCharacterLogin(uint id, uint totalTimePlayed, uint numLogins);
         void UpdateCharacterPosition(uint id, double x, double y, double z, double rotation, uint mapContextId);
         void UpdateCharacterActiveWeapon(uint id, byte activeWeapon);
+        void UpdateCharacterActiveAbilitySlot(uint id, byte activeAbilitySlot);
         void UpdateCharacterName(uint id, string name);
 
         /// <summary>Whether another character already has this name, matched case-insensitively.</summary>

@@ -998,6 +998,11 @@ namespace Rasa.Managers
                     client.Player.ActiveWeapon = (byte)value;
                     unitOfWork.Characters.UpdateCharacterActiveWeapon(client.Player.Id, client.Player.ActiveWeapon);
                     break;
+
+                case CharacterUpdate.ActiveAbilitySlot:
+                    client.Player.CurrentAbilityDrawer = (byte)value;
+                    unitOfWork.Characters.UpdateCharacterActiveAbilitySlot(client.Player.Id, (byte)value);
+                    break;
                 case CharacterUpdate.Teleporter:
                     var teleporter = (CharacterTeleporterEntry)value;
 

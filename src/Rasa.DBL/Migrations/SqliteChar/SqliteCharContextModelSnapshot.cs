@@ -150,6 +150,10 @@ namespace Rasa.Migrations.SqliteChar
                         .HasColumnType("integer")
                         .HasColumnName("account_id");
 
+                    b.Property<byte>("ActiveAbilitySlot")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("active_ability_slot");
+
                     b.Property<byte>("ActiveWeapon")
                         .HasColumnType("INTEGER")
                         .HasColumnName("active_weapon");

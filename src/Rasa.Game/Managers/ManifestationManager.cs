@@ -32,8 +32,8 @@ namespace Rasa.Managers
          *  - WeaponDrawerSlot                  => implemented
          *  - AbilityDrawerSlot                 => implemented
          *  - AbilityDrawer                     => implemented
-         *  - ArmWeaponFailed                   => ToDo
-         *  - ArmAbilityFailed                  => ToDo
+         *  - ArmWeaponFailed                   => implemented
+         *  - ArmAbilityFailed                  => implemented
          *  - AdvancementStats                  => implemented
          *  - ExperienceChanged                 => ToDo
          *  - LevelChanged                      => implemented (.setlevel)
@@ -1344,18 +1344,59 @@ namespace Rasa.Managers
             Logger.WriteLog(LogType.Security, $"Logos stone used: {client.Player.FamilyName} learned Logos {logosId} from item {item.Id}");
         }
 
+        /// <summary>shared/gameconstants.py NUM_ABILITY_DRAWER_SLOTS: slots in one ability drawer loadout.</summary>
+        public const int AbilityDrawerSlotsPerLoadout = 5;
+
+        /// <summary>shared/gameconstants.py NUM_ABILITY_DRAWER_LOADOUTS: loadouts the drawer pages through.</summary>
+        public const int AbilityDrawerLoadouts = 5;
+
+        /// <summary>Ability drawer slots in all, 0 to 24.</summary>
+        public const int AbilityDrawerSlots = AbilityDrawerSlotsPerLoadout * AbilityDrawerLoadouts;
+
+        /// <summary>
+        /// Arms an ability drawer slot. The client asks for one on every slot or loadout it picks,
+        /// and again whenever it sets or swaps a slot with its requested one not armed yet.
+        ///
+        /// Only slots 0 to 24 are drawer slots; anything else - which no honest client sends -
+        /// is refused with ArmAbilityFailed, which puts the client's requested slot back to the
+        /// armed one. The slot is saved (active_ability_slot) and restored in AssignPlayer, as
+        /// the armed weapon is: the client's manifestation is new on every map entry and starts
+        /// on slot 0 of the first loadout. It used to be neither saved nor restored, so every map
+        /// change and every login put the drawer back to its first slot.
+        /// </summary>
         public void RequestArmAbility(Client client, int abilityDrawerSlot)
         {
-            client.Player.CurrentAbilityDrawer = abilityDrawerSlot;
-            // ToDo do we need upate Database???
+            if (client.Player == null)
+                return;
+
+            if (abilityDrawerSlot < 0 || abilityDrawerSlot >= AbilityDrawerSlots)
+            {
+                Logger.WriteLog(LogType.Security, $"{client.Player.Name} asked to arm ability drawer slot {abilityDrawerSlot}; there are {AbilityDrawerSlots}. Refused.");
+                client.CallMethod(client.Player.EntityId, new ArmAbilityFailedPacket(abilityDrawerSlot));
+                return;
+            }
+
+            // The client asks again for the slot it has armed often; only a change is saved.
+            if (client.Player.CurrentAbilityDrawer != abilityDrawerSlot)
+                CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.ActiveAbilitySlot, (byte)abilityDrawerSlot);
+
             client.CallMethod(client.Player.EntityId, new AbilityDrawerSlotPacket(abilityDrawerSlot));
         }
 
         public void RequestArmWeapon(Client client, uint requestedWeaponDrawerSlot)
         {
-            // The drawer has five slots; the index came straight from the client.
-            if (client.Player == null || requestedWeaponDrawerSlot >= client.Player.Inventory.WeaponDrawer.Count)
+            if (client.Player == null)
                 return;
+
+            // The drawer has five slots; the index came straight from the client. Refused with
+            // ArmWeaponFailed, which puts the client's requested slot back to the armed one - a
+            // refusal said nothing before, and left the two apart.
+            if (requestedWeaponDrawerSlot >= client.Player.Inventory.WeaponDrawer.Count)
+            {
+                Logger.WriteLog(LogType.Security, $"{client.Player.Name} asked to arm weapon drawer slot {requestedWeaponDrawerSlot}; there are {client.Player.Inventory.WeaponDrawer.Count}. Refused.");
+                client.CallMethod(client.Player.EntityId, new ArmWeaponFailedPacket(requestedWeaponDrawerSlot));
+                return;
+            }
 
             client.Player.ActiveWeapon = (byte)requestedWeaponDrawerSlot;
 
@@ -1560,6 +1601,10 @@ namespace Rasa.Managers
             client.CallMethod(SysEntity.ClientMethodId, new SetControlledActorIdPacket(player.EntityId));
 
             client.CallMethod(player.EntityId, new WeaponDrawerSlotPacket(player.ActiveWeapon, false));
+
+            // The armed ability too, with its loadout page: not requested, so the client takes it
+            // as its requested slot as well.
+            client.CallMethod(player.EntityId, new AbilityDrawerSlotPacket(player.CurrentAbilityDrawer, false));
 
             client.CallMethod(SysEntity.ClientGameMapId, new SetSkyTimePacket { RunningTime = 6666666 });   // ToDo add actual time how long map is running
 

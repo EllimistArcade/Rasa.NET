@@ -297,6 +297,18 @@ namespace Rasa.Repositories.Char.Character
             _charContext.SaveChanges();
         }
 
+        public void UpdateCharacterActiveAbilitySlot(uint id, byte activeAbilitySlot)
+        {
+            var entry = GetWritable(id);
+
+            if (entry == null)
+                return;
+
+            entry.ActiveAbilitySlot = activeAbilitySlot;
+
+            _charContext.SaveChanges();
+        }
+
         public void UpdateCharacterName(uint id, string name)
         {
             var entry = GetWritable(id);

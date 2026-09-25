@@ -254,6 +254,9 @@ namespace Rasa.Structures
             Credits.Add(CurencyType.Credits, character.Credit);
             Credits.Add(CurencyType.Prestige, character.Prestige);
             ActiveWeapon = character.ActiveWeapon;
+            // A saved slot the drawer does not have (none can be saved, but the column is only a
+            // byte) is the first one.
+            CurrentAbilityDrawer = character.ActiveAbilitySlot < Managers.ManifestationManager.AbilityDrawerSlots ? character.ActiveAbilitySlot : 0;
             NumLogins = character.NumLogins + 1;
             TotalTimePlayed = character.TotalTimePlayed;
             TimeSinceLastPlayed = character.LastLogin;

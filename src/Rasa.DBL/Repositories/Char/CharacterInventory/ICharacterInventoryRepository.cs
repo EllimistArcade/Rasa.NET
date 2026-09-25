@@ -11,5 +11,6 @@ namespace Rasa.Repositories.Char.CharacterInventory
         List<uint> DeleteForCharacter(uint accountId, uint characterId);
         List<CharacterInventoryEntry> GetItems(uint accountId);
         void MoveInvItem(uint accountId, uint characteId, uint inventoryType, uint slotId, uint itemId);
+        bool IsHeldBy(uint itemId, uint accountId, uint characterId);
     }
 }

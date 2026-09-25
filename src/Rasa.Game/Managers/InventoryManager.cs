@@ -295,6 +295,18 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Index 13 is not an armour slot: it mirrors WeaponDrawer[ActiveWeapon], the weapon in
+            // hand. Taken out through here, the dequip branch below cleared the mirror and put the
+            // weapon in the pack while the drawer still held it - one item in two inventories,
+            // which could be sold from one and re-equipped from the other as often as liked, or
+            // handed over from one and its row moved back from the other.
+            if (packet.DestSlot == (uint)EquipmentData.Weapon)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry.Id} sent RequestEquipArmor for slot {packet.DestSlot}, the weapon in hand; ignored.");
+                return;
+            }
+
             var entityIdEquippedItem = client.Player.Inventory.EquippedInventory[(int)packet.DestSlot]; // the old equipped item (can be none)
             var entityIdInventoryItem = client.Player.Inventory.PersonalInventory[(int)packet.SrcSlot]; // the new equipped item (can be none)
 
@@ -1337,6 +1349,24 @@ namespace Rasa.Managers
 
             if (tempItem == null)
                 return;
+
+            // A move rewrites the row it finds by item id, whoever it belongs to. Every item in
+            // this player's lists has its row on this account, with this character's id or the
+            // home lockbox's 0; one that does not has been handed over, sold, or never had a row,
+            // and moving it would take that row over. Checked before anything changes, so a refusal
+            // leaves both the lists and the database as they were.
+            if (updateDB && !actuallyAdd && inventoryType != InventoryType.ClanInventory)
+            {
+                using var check = _gameUnitOfWorkFactory.CreateChar();
+
+                if (!check.CharacterInventories.IsHeldBy(tempItem.Id, client.AccountEntry.Id, client.Player.Id))
+                {
+                    Logger.WriteLog(LogType.Security,
+                        $"AccountId = {client.AccountEntry.Id} ({client.Player.FamilyName}) moved item {tempItem.Id} (entity {entityId}) to {inventoryType} slot {slotId}, "
+                        + "but its inventory row is not theirs; refused.");
+                    return;
+                }
+            }
 
             // set entityId in slot
             switch (inventoryType)

@@ -781,6 +781,20 @@ namespace Rasa.Managers
             if (packet.Quantity <= 0)
                 return;
 
+            // Sold already, or also held somewhere a sale does not clear. An item is in one list
+            // at a time; one that is in the pack and on the buyback list, the drawer or the
+            // equipped list at once would be paid for here and still be there afterwards.
+            var inventory = client.Player.Inventory;
+
+            if (inventory.BuybackItems.Contains(itemEntityId)
+                || inventory.WeaponDrawer.Contains(itemEntityId)
+                || inventory.EquippedInventory.Contains(itemEntityId))
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry.Id} ({client.Player.FamilyName}) tried to sell entity {itemEntityId}, which is on the buyback list or equipped; refused.");
+                return;
+            }
+
             // note: Players can only sell items directly from their personal inventory
             //       so we only have to scan there for the item entityId
             var slotIndex = 250U;

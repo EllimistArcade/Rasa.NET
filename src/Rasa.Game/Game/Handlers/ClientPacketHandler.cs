@@ -116,6 +116,39 @@
         {
             ClanManager.Instance.CreateClan(Client, packet);
         }
+
+        /// <summary>
+        /// ExamineHack (67), and the ExamineResults (68) it would be answered with: a developer's
+        /// readout of an entity. Deliberately a placeholder that sends nothing.
+        ///
+        /// The request is client/physicalentity.py OnExamine:
+        /// <c>SendCallUserMethod('ExamineHack', (self.entityId,))</c>, for any entity. Nothing in the
+        /// retail client calls OnExamine - no slash command, key binding, menu or UI element, and the
+        /// string "examine" appears nowhere in tabula_rasa.exe - so, like the developer commands in
+        /// client_nca_internal, which the retail client does not ship, it was reached from tools the
+        /// players never had. The only reference is the method's own definition.
+        ///
+        /// The answer is Recv_ExamineResults(resultDict) on the examined entity. The dict it reads:
+        ///  - every entity: 'repr', 'classId', 'classCollisionRole', 'collisionRole',
+        ///    'position' (x, y, z) and 'quaternion' (x, y, z, w);
+        ///  - an actor, when 'isActor' is present: 'isPlayer', 'level', 'xp', 'abilities',
+        ///    'targetId', 'factions' and 'attributes'.
+        /// It formats them under "===[SERVER]===", adds the client's own position and rotation under
+        /// "===[CLIENT]===" and the server-to-client position delta and distance - a check for
+        /// position drift. Then it fetches the OK button's text and returns: in the shipped build
+        /// (trpython.zip, client/physicalentity.pyo) the call that would have shown the report is
+        /// gone, so a reply would be built and thrown away.
+        ///
+        /// Neither server answered it: the C++ server lists the method ids only. The handler exists
+        /// so that a client that does send it is not disconnected - an opcode with no handler fails
+        /// the packet terminator check and closes the connection. The same information for a GM is
+        /// what .npcinfo, .where and .los give in chat.
+        /// </summary>
+        [PacketHandler(GameOpcode.ExamineHack)]
+        private void ExamineHack(ExamineHackPacket packet)
+        {
+            Logger.WriteLog(LogType.Debug, $"{Client.Player?.Name} sent ExamineHack for entity {packet.EntityId}; ExamineResults is not sent (developer-only, and the retail client does not display it).");
+        }
         
         [PacketHandler(GameOpcode.GetCustomizationChoices)]
         private void GetCustomizationChoices(GetCustomizationChoicesPacket packet)

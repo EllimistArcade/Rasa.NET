@@ -54,7 +54,7 @@ namespace Rasa.Managers
          *  - LogosStoneTabula
          *  - LogosStoneAdded
          *  - LogosStoneRemoved
-         *  - ShowHelmetChanged                 => implemented
+         *  - ShowHelmetChanged                => implemented
          *  - Titles
          *  - TitleChanged
          *  - TitleAdded
@@ -64,7 +64,7 @@ namespace Rasa.Managers
          *  - WaypointGained
          *  - GraveyardGained
          *  - CharacterName
-         *  - RaceId
+         *  - RaceId                           => implemented
          *  - PlayerAfk                        => implemented
          *  - PlayerInactiveWarning            => implemented
          *  - ClanId
@@ -1701,6 +1701,8 @@ namespace Rasa.Managers
                 // Manifestation
                 new CurrentCharacterIdPacket(player.EntityId),
                 new CharacterClassPacket(player.Class),
+                // Item race requirements are checked against it (Item.CanActorUse, the tooltip).
+                new RaceIdPacket(player.Race),
                 new AttributeInfoPacket(player.Attributes),
                 new PreloadDataPacket(client.Player.Inventory.EquippedInventory[13], player.Abilities),
                 new AppearanceDataPacket(player.AppearanceData),

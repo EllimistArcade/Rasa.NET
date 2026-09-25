@@ -23,7 +23,13 @@ namespace Rasa.Services.Preloader
         /// </summary>
         protected void Insert(MigrationBuilder migrationBuilder, string tableName, string[] columns)
         {
-            var values = CreateValues();
+            Insert(migrationBuilder, tableName, columns, null);
+        }
+
+        /// <summary>Only the rows <paramref name="where"/> keeps: a later migration's Down putting back rows it took out.</summary>
+        protected void Insert(MigrationBuilder migrationBuilder, string tableName, string[] columns, Func<object[], bool> where)
+        {
+            var values = CreateValues(where);
 
             migrationBuilder.InsertData(tableName,
                 columns,
@@ -38,9 +44,10 @@ namespace Rasa.Services.Preloader
             return columnNames.ToArray();
         }
 
-        private object[,] CreateValues()
+        private object[,] CreateValues(Func<object[], bool> where = null)
         {
             var rows = GetRows()
+                .Where(row => where == null || where(row))
                 .ToList();
 
             var innerLength = rows.First().Length;

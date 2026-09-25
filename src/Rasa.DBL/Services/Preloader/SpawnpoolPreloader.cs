@@ -24,6 +24,12 @@ namespace Rasa.Services.Preloader
             Insert(migrationBuilder, SpawnPoolEntry.TableName, Columns);
         }
 
+        /// <summary>Only the pools with these ids, as this migration history first inserted them (Rebuild_wilderness_spawns' Down).</summary>
+        public void Preload(MigrationBuilder migrationBuilder, ICollection<uint> ids)
+        {
+            Insert(migrationBuilder, SpawnPoolEntry.TableName, Columns, row => ids.Contains(System.Convert.ToUInt32(row[0])));
+        }
+
         protected override IEnumerable<object[]> GetRows()
         {
             yield return new object[] { 1, 0, 1, 20, 829, 293.9, 380, 1, 1220, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };

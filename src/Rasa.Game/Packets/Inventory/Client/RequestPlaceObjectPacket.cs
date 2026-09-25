@@ -8,7 +8,8 @@
     /// socketId)</c>, from client/augmentations/decoration.py
     /// Decoration.OnPlaceItemAtSelectedLocation - the item chosen, the entity whose decoration
     /// socket it goes in, and that socket. Nothing in the retail client calls it; see
-    /// ClientPacketHandler.RequestReturnItemToInventory.
+    /// ClientPacketHandler.RequestReturnItemToInventory. What placing it would send back is
+    /// <see cref="Server.WorldPlacementDescriptorPacket"/>.
     ///
     /// Every argument is read leniently - an int, a long, or None (or anything else) as null -
     /// because nothing the retail client does fixes their types.

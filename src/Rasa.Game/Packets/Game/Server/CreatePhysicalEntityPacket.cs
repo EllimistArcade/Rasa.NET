@@ -39,7 +39,7 @@ namespace Rasa.Packets.Game.Server
              *   + PhysicalEntity
              *     - BodyAttributes
              *     - WorldLocationDescriptor
-             *     - WorldPlacementDescriptor
+             *     - WorldPlacementDescriptor (decorations only, which were cut; see Inventory.Server.WorldPlacementDescriptorPacket)
              *     - IsTargetable
              *     - ServerSkeleton (not usable: the retail body has no SetServerSkeleton; see ServerSkeletonPacket)
              *     - ExamineResults

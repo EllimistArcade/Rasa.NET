@@ -985,7 +985,9 @@
         ///    PM_DECORATION_SELECT_LOCATION or PM_DECORATION_NO_LOCATIONS_AVAILABLE, and switches to
         ///    the homedecoration input state;
         ///  - OnPlaceItemAtSelectedLocation, on a proxy, sends
-        ///    <c>RequestPlaceObject((itemId, destEntityId or None, socketId))</c>;
+        ///    <c>RequestPlaceObject((itemId, destEntityId or None, socketId))</c>. The proxies are
+        ///    put on their sockets with the client's own Recv_WorldPlacementDescriptor, and the
+        ///    placed item would have come back the same way (WorldPlacementDescriptorPacket);
         ///  - OnReturnItemToInventory, on a placed decoration, sends
         ///    <c>RequestReturnItemToInventory((entityId,))</c>;
         ///  - OnCancelPlacement posts PM_DECORATION_CANCELLED. Around it: apartment point and

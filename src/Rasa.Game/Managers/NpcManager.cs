@@ -5,6 +5,7 @@ namespace Rasa.Managers
 {
     using Data;
     using Game;
+    using Packets;
     using Packets.Communicator.Server;
     using Packets.Inventory.Server;
     using Packets.MapChannel.Client;
@@ -864,6 +865,49 @@ namespace Rasa.Managers
             client.CallMethod(SysEntity.ClientInventoryManagerId, new AddBuybackItemPacket(soldItem.EntityId, (int) sellPrice, buyback.Count));
         }
 
+        /// <summary>What an item on the buyback list costs to buy back: what it sold for, its unit sell price times the stack.</summary>
+        public static int BuybackPrice(Item item) =>
+            item?.ItemTemplate == null ? 0 : (int)Math.Min((long)Math.Max(item.ItemTemplate.SellPrice, 0) * item.StackSize, int.MaxValue);
+
+        /// <summary>
+        /// The buyback list as the client should have it: a ResetBuybackInventory, then each item
+        /// still on the list in order - an AddBuybackItem at positions 1..N, with its price. Items
+        /// no longer registered are dropped from the list on the way.
+        /// </summary>
+        public static List<PythonPacket> BuybackListPackets(List<ulong> buyback, Func<ulong, Item> itemOf)
+        {
+            var packets = new List<PythonPacket> { new ResetBuybackInventoryPacket() };
+
+            buyback.RemoveAll(id => itemOf(id) == null);
+
+            for (var i = 0; i < buyback.Count; i++)
+                packets.Add(new AddBuybackItemPacket(buyback[i], BuybackPrice(itemOf(buyback[i])), i + 1));
+
+            return packets;
+        }
+
+        /// <summary>
+        /// On arriving on a map - a login, a map link or teleport, a dropship ride. The client
+        /// builds its world afresh on every map, the sold items with it, so they are shown to it
+        /// again and the list is rebuilt from the server's; the Recently Sold tab had kept the ids
+        /// of items the client no longer had ("Unknown entity"), or a previous character's. On a
+        /// login the list is empty and this only clears what the client still held.
+        /// </summary>
+        public void ResendBuyback(Client client)
+        {
+            if (client?.Player == null)
+                return;
+
+            var buyback = client.Player.Inventory.BuybackItems;
+            var packets = BuybackListPackets(buyback, id => EntityManager.Instance.GetItem(id));
+
+            foreach (var entityId in buyback)
+                ItemManager.Instance.SendItemDataToClient(client, EntityManager.Instance.GetItem(entityId), false);
+
+            foreach (var packet in packets)
+                client.CallMethod(SysEntity.ClientInventoryManagerId, packet);
+        }
+
         /// <summary>
         /// A sold item nobody can buy back any more: off the client, out of the entity tables,
         /// and its row out of the items table.
@@ -879,13 +923,17 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Called when the character leaves the world. Whatever was still on the buyback list
-        /// is gone for good, so its entities and rows go with it; they used to be left
-        /// registered for the life of the process.
+        /// Called when the character leaves the world - a logout, or a connection lost - and not on
+        /// a map change, which the list survives (ResendBuyback). Whatever was still on it is gone
+        /// for good, so its entities and rows go with it; they used to be left registered for the
+        /// life of the process. The client is told its list is empty, or the next character to
+        /// enter the world from its character select would be shown this one's.
         /// </summary>
         public void DiscardBuybackItems(Client client)
         {
             var buyback = client.Player.Inventory.BuybackItems;
+
+            client.CallMethod(SysEntity.ClientInventoryManagerId, new ResetBuybackInventoryPacket());
 
             if (buyback.Count == 0)
                 return;

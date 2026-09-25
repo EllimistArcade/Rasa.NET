@@ -409,6 +409,9 @@ namespace Rasa.Managers
                 // The buffs brought from the map left, now there is somebody to show them to.
                 EffectCarry.Restore(client);
 
+                // And what they sold before the ride, still to be bought back.
+                NpcManager.Instance.ResendBuyback(client);
+
                 CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Position);
                 CommunicatorManager.Instance.PlayerEnterMap(dropship.Client);
 
@@ -455,6 +458,10 @@ namespace Rasa.Managers
             // the cells and their own client has its actor's info, so the attach reaches it and
             // everyone around.
             EffectCarry.Restore(client);
+
+            // The Recently Sold list: what is still to be bought back after a map change, or a
+            // clean one on a login.
+            NpcManager.Instance.ResendBuyback(client);
 
             ClanManager.Instance.InitializePlayerClanData(client);
             InventoryManager.Instance.InitClanInventory(client);
@@ -594,7 +601,11 @@ namespace Rasa.Managers
             DestroyInventory(client, client.Player.Inventory.PersonalInventory);
             DestroyInventory(client, client.Player.Inventory.WeaponDrawer);
 
-            NpcManager.Instance.DiscardBuybackItems(client);
+            // The Recently Sold list lasts the session: a map change keeps it, and the arrival
+            // shows it again (NpcManager.ResendBuyback).
+            if (logout)
+                NpcManager.Instance.DiscardBuybackItems(client);
+
             ActorActionManager.Instance.RemoveActor(client.Player);
 
             // Effects are per map as far as the clients know - nobody on the next map was told
@@ -690,10 +701,28 @@ namespace Rasa.Managers
         {
             var player = client.Player;
 
-            if (player == null
-                || !EntityManager.Instance.Players.TryGetValue(player.EntityId, out var registered)
-                || registered != player)
+            if (player == null)
                 return;
+
+            if (!EntityManager.Instance.Players.TryGetValue(player.EntityId, out var registered) || registered != player)
+            {
+                // Out of the world already - but a map change keeps what they sold to buy back
+                // (RemovePlayer), and a connection lost on its loading screen would leave those
+                // items registered for good.
+                if (player.Inventory.BuybackItems.Count > 0)
+                {
+                    try
+                    {
+                        NpcManager.Instance.DiscardBuybackItems(client);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.WriteLog(LogType.Error, $"Failed to discard the buyback list of disconnected player {player.FamilyName}: {e}");
+                    }
+                }
+
+                return;
+            }
 
             foreach (var mapChannel in MapChannelArray.Values)
                 if (mapChannel.ClientList.Contains(client) || mapChannel.QueuedClients.Contains(client))

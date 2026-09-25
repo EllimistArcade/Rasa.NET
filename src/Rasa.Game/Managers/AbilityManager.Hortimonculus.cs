@@ -400,8 +400,8 @@ namespace Rasa.Managers
             plant.Buffed.Clear();
 
             plant.Object.StateId = UseObjectState.StateDestroyed;
-            plant.Object.IsEnabled = false;
             CellManager.Instance.CellCallMethod(plant.Object, new UsePacket(plant.Owner.EntityId, UseObjectState.StateDestroyed, 0));
+            DynamicObjectManager.Instance.SetEnabled(plant.Object, false);
         }
 
         private static void RemovePlant(Plant plant)

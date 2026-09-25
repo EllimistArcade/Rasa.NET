@@ -102,6 +102,25 @@ namespace Rasa.Managers
             CellManager.Instance.CellCallMethod(obj, new ForceStatePacket(state, delta));
         }
 
+        /// <summary>
+        /// Puts an object in or out of service and tells everyone who can see it (SetUsable). Out
+        /// of service it offers no Use and cannot be moused over on the client, and a use request
+        /// for it is refused here. A client meeting it later has the flag in UsableInfo. Returns
+        /// whether it changed; setting what it already is sends nothing.
+        /// </summary>
+        internal bool SetEnabled(DynamicObject obj, bool enabled)
+        {
+            if (obj == null || obj.IsEnabled == enabled)
+                return false;
+
+            obj.IsEnabled = enabled;
+
+            if (MapChannelManager.Instance.FindByContextId(obj.MapContextId) != null)
+                CellManager.Instance.CellCallMethod(obj, new SetUsablePacket(enabled));
+
+            return true;
+        }
+
         internal void RequestUseObjectPacket(Client client, RequestUseObjectPacket packet)
         {
             // Teleporting counts as being in the world for the packet gate - a dropship ride keeps
@@ -161,6 +180,15 @@ namespace Rasa.Managers
             {
                 Logger.WriteLog(LogType.Security,
                     $"{client.Player.FamilyName} sent {packet.ActionId}/{packet.ActionArgId} to use object {packet.EntityId}; an object is used with {ActionId.UseObject}. Ignored.");
+                return;
+            }
+
+            // Out of service (SetEnabled): the client offers no Use for it, so only a client that
+            // did not know yet - or did not care - asks. Refused as the client itself would put it,
+            // and the request closed and cancelled.
+            if (!obj.IsEnabled)
+            {
+                ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, PlayerMessage.PmUseObjectNotUsable);
                 return;
             }
 
@@ -569,7 +597,7 @@ namespace Rasa.Managers
                         controlpoint.StateId = controlpoint.StateId == UseObjectState.CpointStateFactionAOwned ? UseObjectState.CpointStateFactionBOwned : UseObjectState.CpointStateFactionAOwned;
 
                         CellManager.Instance.CellCallMethod(controlpoint, new ForceStatePacket(controlpoint.StateId, 100));
-                        CellManager.Instance.CellCallMethod(controlpoint, new UsableInfoPacket(true, controlpoint.StateId, 0, 10000, 0));
+                        CellManager.Instance.CellCallMethod(controlpoint, new UsableInfoPacket(controlpoint.IsEnabled, controlpoint.StateId, 0, 10000, 0));
                         break;
                     }
             }
@@ -819,7 +847,7 @@ namespace Rasa.Managers
 
                         Logger.WriteLog(LogType.Debug, $"Action Exicuted");
                         obj.TriggeredByPlayers.Remove(client);
-                        CellManager.Instance.CellCallMethod(obj, new UsableInfoPacket(true, obj.StateId, 0, 10000, 0));
+                        CellManager.Instance.CellCallMethod(obj, new UsableInfoPacket(obj.IsEnabled, obj.StateId, 0, 10000, 0));
 
                         var logosId = 0u;
                         foreach (var entry in mapChannel.DynamicObjects)

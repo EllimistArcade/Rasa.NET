@@ -170,6 +170,7 @@ namespace Rasa.Managers
             RegisterCommand(".teleup", GmLevel.GameMaster, TeleUpCommand);
             RegisterCommand(".targetcategory", GmLevel.GameMaster, TargetCategoryCommand);
             RegisterCommand(".blockaction", GmLevel.GameMaster, BlockActionCommand);
+            RegisterCommand(".usable", GmLevel.GameMaster, UsableCommand);
 
             // Admin: hands out progression, changes who a player is, reloads server data.
             // A restart does not undo these.
@@ -1561,6 +1562,84 @@ namespace Rasa.Managers
             CommunicatorManager.Instance.SystemMessage(_client, reasons.Count == 0
                 ? $"{name} is not blocked."
                 : $"{name} is blocked: {string.Join(", ", reasons)}.");
+        }
+
+        /// <summary>Ours: how far .usable looks for an object when none is named or targeted.</summary>
+        private const float UsableCommandReach = 10f;
+
+        /// <summary>
+        /// .usable [on|off] [#entityId|#target]: puts an object in or out of service
+        /// (DynamicObjectManager.SetEnabled, SetUsable) or, with neither, says which it is in. The
+        /// object is the one named, else your target if that is an object, else the nearest object
+        /// within UsableCommandReach. An object out of service cannot be moused over, so bringing it
+        /// back takes its id - which this prints - or standing next to it.
+        /// </summary>
+        private void UsableCommand(string[] parts)
+        {
+            var player = _client.Player;
+            var idPart = parts.Skip(1).FirstOrDefault(p => p.StartsWith("#"));
+            var args = parts.Skip(1).Where(p => p != idPart).Select(p => p.ToLowerInvariant()).ToList();
+            const string usage = "usage: .usable [on|off] [#entityId|#target]";
+
+            if (args.Count > 1 || (args.Count == 1 && args[0] != "on" && args[0] != "off"))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, usage);
+                return;
+            }
+
+            DynamicObject obj = null;
+
+            if (idPart != null)
+            {
+                var entityId = idPart.Equals("#target", StringComparison.OrdinalIgnoreCase)
+                    ? player.Target
+                    : ulong.TryParse(idPart.Substring(1), out var named) ? named : 0;
+
+                if (!EntityManager.Instance.TryGetObject(entityId, out obj) || obj.MapContextId != player.MapContextId)
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, $"No object {idPart} on this map.");
+                    return;
+                }
+            }
+            else if (player.Target != 0 && EntityManager.Instance.TryGetObject(player.Target, out var targeted) && targeted.MapContextId == player.MapContextId)
+                obj = targeted;
+            else
+            {
+                // The map loop adds and removes objects as this runs; a look that loses the race
+                // finds nothing, and saying so beats taking the command handler down.
+                try
+                {
+                    obj = EntityManager.Instance.DynamicObjects.Values
+                        .Where(o => o.MapContextId == player.MapContextId && Vector3.Distance(o.Position, player.Position) <= UsableCommandReach)
+                        .OrderBy(o => Vector3.Distance(o.Position, player.Position))
+                        .FirstOrDefault();
+                }
+                catch (InvalidOperationException)
+                {
+                    obj = null;
+                }
+            }
+
+            if (obj == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"No object named, targeted or within {UsableCommandReach:F0} m. {usage}");
+                return;
+            }
+
+            var label = $"Object {obj.EntityId} ({obj.EntityClassId}, {obj.DynamicObjectType})";
+
+            if (args.Count == 0)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"{label} is {(obj.IsEnabled ? "in" : "out of")} service.");
+                return;
+            }
+
+            var enabled = args[0] == "on";
+            var changed = DynamicObjectManager.Instance.SetEnabled(obj, enabled);
+
+            CommunicatorManager.Instance.SystemMessage(_client, changed
+                ? $"{label} is now {(enabled ? "in" : "out of")} service."
+                : $"{label} was already {(enabled ? "in" : "out of")} service.");
         }
 
         /// <summary>

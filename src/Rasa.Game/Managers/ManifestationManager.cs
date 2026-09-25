@@ -1514,6 +1514,9 @@ namespace Rasa.Managers
 
             client.CallMethod(SysEntity.ClientMethodId, new SetCurrentContextIdPacket(client.Player.MapChannel.MapInfo.MapContextId));
 
+            // SetIsContextOwner (SetIsContextOwnerPacket) is not sent: the client stores it and
+            // never reads it, and no map here has an owner. See the packet for the details.
+
             SocialManager.Instance.SetSocialContactList(client);
 
             client.CallMethod(player.EntityId, new ActorInfoPacket(player));

@@ -472,6 +472,55 @@
             KraftwerksManager.Instance.RequestRetrieveAllFinishedItems(Client, packet);
         }
 
+        /// <summary>
+        /// RequestDisassembleItem (676) and RequestModifyItem (677): the Reverse Engineering and
+        /// Modification pages of the old crafting window. Deliberately placeholders that do
+        /// nothing and send nothing.
+        ///
+        /// client/ui/craftingwindow.py is the Crafting v1 window - Fabrication, Modification and
+        /// Disassembly ("Reverse Engineering") tabs. Its disassembly page takes an item from the
+        /// personal inventory that has at least one loot module with a row in the module crafting
+        /// table, lists each module's ComponentItemClassId with its ReverseEngineerChance, and on
+        /// the button sends <c>RequestDisassembleItem((kraftwerksId, itemId))</c>, a 5 s job
+        /// (shared/crafting.py g_disassemblyTime; failure is PM_CRAFTING_DISASSEMBLY_FAILED,
+        /// 10000115). Its modification page applies a modification recipe to one of the item's
+        /// modules, sending <c>RequestModifyItem((kraftwerksId, recipeId, itemId,
+        /// selectedModuleClassId, attemptCriticalSuccess))</c>.
+        ///
+        /// In the 1.16.5 client neither can be sent:
+        ///  - the window never opens. A station posts UI_CRAFTINGSTATION_ACTIVATE on Recv_Use, which
+        ///    only craftingwindownew.py - the Crafting v2 window (fabrication, salvage, extraction,
+        ///    integration, upgrade) - handles. The old window opens on UI_KRAFTWERKS_ACTIVATED, and
+        ///    nothing posts that: only uieventmanager.pyo and craftingwindow.pyo in trpython.zip
+        ///    name it. Tabula_Rasa_UI_EXPORT.xml still defines both, CraftingWindow (script
+        ///    craftingwindow) and CraftingWindow_NEW;
+        ///  - the data behind both pages is empty. generated.shared.recipe's
+        ///    spGenShared_ModuleClassCrafting and spGenShared_RecipeModuleEnhancement have no rows
+        ///    (the recipe templates, their inputs and the module classes do), so no item passes the
+        ///    disassembly slot's check and there is no modification recipe;
+        ///  - here, items carry no modules: ItemInfo sends empty classModuleIds and lootModuleIds.
+        ///
+        /// The C++ server only listed the ids. The v2 pages' requests are answered by
+        /// KraftwerksManager.
+        ///
+        /// The handlers exist so that a client that does send one is not disconnected - an opcode
+        /// with no handler fails the packet terminator check and closes the connection.
+        /// </summary>
+        [PacketHandler(GameOpcode.RequestDisassembleItem)]
+        private void RequestDisassembleItem(RequestDisassembleItemPacket packet)
+        {
+            Logger.WriteLog(LogType.Debug,
+                $"{Client.Player?.Name} sent RequestDisassembleItem (station {packet.KraftwerksId}, item {packet.ItemId}); the old crafting window's reverse engineering is not supported, nothing done.");
+        }
+
+        /// <inheritdoc cref="RequestDisassembleItem"/>
+        [PacketHandler(GameOpcode.RequestModifyItem)]
+        private void RequestModifyItem(RequestModifyItemPacket packet)
+        {
+            Logger.WriteLog(LogType.Debug,
+                $"{Client.Player?.Name} sent RequestModifyItem (station {packet.KraftwerksId}, recipe {packet.RecipeId}, item {packet.ItemId}, module {packet.SelectedModuleClassId}, critical {packet.AttemptCriticalSuccess}); the old crafting window's modification is not supported, nothing done.");
+        }
+
         [PacketHandler(GameOpcode.RequestVendorBuyback)]
         private void RequestVendorBuyback(RequestVendorBuybackPacket packet)
         {

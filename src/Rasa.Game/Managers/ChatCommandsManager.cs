@@ -2565,6 +2565,10 @@ namespace Rasa.Managers
             ["gotomap"] = new PrivilegedChatCommand(GmLevel.GameMaster, GmMapCommands.GotoMap),
             ["gotostartgroup"] = new PrivilegedChatCommand(GmLevel.GameMaster, GmMapCommands.GotoStartGroup),
             ["killmap"] = new PrivilegedChatCommand(GmLevel.Admin, GmMapCommands.KillMap)
+
+            // "getservercollisiondata" is intentionally not registered: it asks for
+            // ServerCollisionData, which the retail client cannot load and this server has no
+            // shapes for. See ServerCollisionDataPacket.
         };
 
         /// <summary>

@@ -26,7 +26,9 @@ namespace Rasa.Managers
     ///    fight below DevourInFightPercent of its health eats one it is standing by. It regains
     ///    HEAL_AMOUNT scaled to its level, the corpse is gone, and it stands eating for the
     ///    recovery (5.3 s). A corpse with unlooted loot is left alone (ours: the loot is the
-    ///    player's).
+    ///    player's). What it regains is shown through XANX_FORTIFY (302), the client's effect for
+    ///    it: put on quietly for the meal, then told Heal with the amount (GameEffectHealPacket),
+    ///    which floats it over the Xanx and logs it.
     ///  - Predator scan (PredatorScanAbility, CR_PREDATOR_SCAN 425): the Predator is "used to scan
     ///    locations from the air, gathering enemy intel ... equipped with forward-scanning
     ///    search". An idle Predator scans its CONE_RADIUS (45 degrees either side) ahead to the
@@ -40,6 +42,13 @@ namespace Rasa.Managers
         public const ActionId FilcherLoot = (ActionId)434;
         public const ActionId XanxDevour = (ActionId)438;
         public const ActionId PredatorScan = (ActionId)425;
+
+        /// <summary>
+        /// XANX_FORTIFY: the Xanx's heal, shown. No icon, tooltip or FX; its one method, Heal,
+        /// announces healing on its holder. Its docstring says it raises a Xanx's maximum health,
+        /// which nothing in the client does and nothing says by how much, so this leaves it alone.
+        /// </summary>
+        public const int XanxFortifyTypeId = 302;
 
         /// <summary>Ours: how far an idle scavenger looks for a corpse.</summary>
         public const float SightRange = 30f;
@@ -295,7 +304,10 @@ namespace Rasa.Managers
                 var max = Math.Max(min, info.Get(AbilityProperty.HealAmountMax, min));
                 var amount = AbilityManager.Scale((int)xanx.Level, (min + max) / 2, info.Get(AbilityProperty.DamageScaleType));
 
-                ActorManager.Instance.Heal(xanx, amount, xanx.EntityId);
+                var healed = ActorManager.Instance.Heal(xanx, amount, xanx.EntityId);
+
+                if (healed > 0)
+                    ShowHeal(mapChannel, xanx, info, healed);
             }
 
             // Eaten: nothing left to loot, harvest, revive or eat again, and gone on the next pass.
@@ -305,6 +317,34 @@ namespace Rasa.Managers
 
             Hold(xanx, habit, info);
             Show(mapChannel, xanx, habit, corpse, new[] { corpse });
+        }
+
+        /// <summary>
+        /// What a Xanx regained, over its head and in the combat log: XANX_FORTIFY on it for the
+        /// meal - put on quietly, as it has nothing to show, and replacing one from an earlier meal
+        /// - then Heal on it. The UpdateHealth that ActorManager.Heal sent already moved its bar.
+        /// </summary>
+        private static void ShowHeal(MapChannel mapChannel, Creature xanx, ActionLevelInfo info, int healed)
+        {
+            var fortify = new GameEffect
+            {
+                TypeId = XanxFortifyTypeId,
+                EffectId = GameEffectManager.Instance.NextEffectId(mapChannel),
+                EffectLevel = info.Level,
+                ActionId = info.ActionId,
+                SourceId = xanx.EntityId,
+                Source = xanx,
+                SourceLevel = (int)xanx.Level,
+                ExpiresTick = Environment.TickCount64 + Math.Max(1000, info.WindupMs + info.RecoveryMs),
+                AnnounceOnAttach = false,
+                AnnounceToNewcomers = false
+            };
+
+            GameEffectManager.Instance.Attach(mapChannel, xanx, fortify);
+
+            // Attach turns away only debuffs, but a method call to an effect the client lacks is logged as an error there.
+            if (xanx.ActiveEffects.ContainsKey(fortify.EffectId))
+                CellManager.Instance.CellCallMethod(mapChannel, xanx, new GameEffectHealPacket(fortify.EffectId, healed));
         }
 
         /// <summary>The Predator's scan: every player in its cone ahead, cloaked ones revealed, and a fight with the first.</summary>

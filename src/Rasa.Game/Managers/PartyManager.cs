@@ -1423,6 +1423,38 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A corpse's credits as paid out (LootDispenserManager.Settle): every squad member who did
+        /// not get a share of them is told who did - "X received N credits." (264), which
+        /// PartyMemberLoot cannot say, since the client reads its amount and never prints it.
+        /// Those who shared have their own "You received" from GotLoot and are not told the rest.
+        /// </summary>
+        internal void AnnounceCredits(List<(Client Recipient, int Share)> shares)
+        {
+            if (shares == null || shares.Count == 0)
+                return;
+
+            var party = PartyOf(shares[0].Recipient);
+
+            if (party == null)
+                return;
+
+            var paid = shares.Select(s => s.Recipient).ToList();
+
+            foreach (var (recipient, share) in shares)
+            {
+                if (share <= 0 || recipient.AccountEntry == null)
+                    continue;
+
+                var name = party.Find(recipient.AccountEntry.Id)?.MemberName ?? recipient.Player?.Name ?? string.Empty;
+                var args = new Dictionary<string, string> { ["player"] = name, ["amount"] = share.ToString() };
+
+                foreach (var other in OnlineClients(party))
+                    if (!paid.Contains(other))
+                        other.CallMethod(SysEntity.ClientPartyManagerId, new DisplayPartyMessagePacket(PlayerMessage.PmPartyMemberGotMoneyLootFromUnknown, args));
+            }
+        }
+
+        /// <summary>
         /// PartyMemberLoot: the rest of a squad hears what one of them took from a corpse the squad
         /// shared in (any loot method but Individual) - "X looted 1 Y." Not the taker, whose own
         /// client says it from GotLoot and would say it twice.

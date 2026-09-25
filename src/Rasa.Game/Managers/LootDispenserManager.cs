@@ -87,9 +87,63 @@ namespace Rasa.Managers
         public static List<LootItem> LootableBy(LootDispenser loot, ulong entityId) =>
             loot.LootItems.FindAll(i => i.MayTake(entityId));
 
-        internal void GotLoot(Client client, LootDispenser loot)
+        /// <summary>What one take gave this player - the items they took and their share of the credits - if anything.</summary>
+        internal void GotLoot(Client client, LootDispenser loot, List<LootItem> items, int credits)
         {
-            client.CallMethod(SysEntity.ClientMethodId, new GotLootPacket(loot));
+            if ((items == null || items.Count == 0) && credits <= 0)
+                return;
+
+            client.CallMethod(SysEntity.ClientMethodId, new GotLootPacket(loot.AttachedTo, items, credits));
+        }
+
+        /// <summary>
+        /// A corpse's credits divided among those sharing them: an equal share each, the odd
+        /// credits one apiece from the first on (the looter who emptied the corpse is first).
+        /// Nobody is left out of a share for being last; a pot smaller than the squad gives the
+        /// first ones a credit each and the rest nothing.
+        /// </summary>
+        public static List<int> SplitCredits(int credits, int recipients)
+        {
+            var shares = new List<int>();
+
+            if (recipients <= 0)
+                return shares;
+
+            var each = Math.Max(0, credits) / recipients;
+            var odd = Math.Max(0, credits) % recipients;
+
+            for (var i = 0; i < recipients; i++)
+                shares.Add(each + (i < odd ? 1 : 0));
+
+            return shares;
+        }
+
+        /// <summary>
+        /// Who the credits of an emptied corpse go to: the looter who emptied it, first, and the
+        /// rest of the squad that shared in the kill (CreditSharers) who are still in the world on
+        /// this map. A corpse that was one player's goes to that player.
+        /// </summary>
+        public static List<Client> CreditRecipients(Client taker, LootDispenser loot)
+        {
+            var recipients = new List<Client> { taker };
+            var mapChannel = taker.Player?.MapChannel;
+
+            if (mapChannel == null || loot.CreditSharers.Count == 0)
+                return recipients;
+
+            foreach (var entityId in loot.CreditSharers)
+            {
+                if (entityId == taker.Player.EntityId)
+                    continue;
+
+                var sharer = mapChannel.ClientList.Find(c => c?.Player != null && c.Player.EntityId == entityId
+                    && c.State == ClientState.Ingame && c.Player.MapContextId == taker.Player.MapContextId);
+
+                if (sharer != null && !recipients.Contains(sharer))
+                    recipients.Add(sharer);
+            }
+
+            return recipients;
         }
 
         /// <summary>How long a corpse with nothing left on it stays in the world.</summary>
@@ -202,6 +256,12 @@ namespace Rasa.Managers
         {
             var (looters, partyId, party, eligible) = PartyManager.Instance.LootersFor(client, creature.Position);
             var loot = Create(client, creature, looters, partyId);
+
+            // Everyone who shared in the kill shares in its credits, whatever the method does
+            // with the items.
+            if (party != null && eligible.Count > 1)
+                foreach (var member in eligible)
+                    loot.CreditSharers.Add(member.Player.EntityId);
 
             // What is at or over the squad's threshold is rolled for among everyone sharing in
             // the corpse; a winner the method had left out is shown it too.
@@ -378,9 +438,7 @@ namespace Rasa.Managers
             if (!TakeItem(client, loot, lootItem, packet.DestSlot))
                 return;
 
-            var credits = Settle(client, loot);
-
-            PartyManager.Instance.AnnounceLoot(client, loot.AttachedTo, new List<LootItem> { lootItem }, credits);
+            Finish(client, loot, new List<LootItem> { lootItem });
         }
 
         /// <summary>
@@ -428,9 +486,34 @@ namespace Rasa.Managers
 
             // Credits come along either way: they have no quality to weigh against a threshold,
             // and leaving a handful behind would keep an otherwise empty corpse standing.
-            var credits = Settle(client, loot);
+            Finish(client, loot, taken);
+        }
 
-            PartyManager.Instance.AnnounceLoot(client, loot.AttachedTo, taken, credits);
+        /// <summary>
+        /// The end of a take: pays the credits if the corpse is now empty, then tells the looter
+        /// what the take gave them (GotLoot, with the items and their share), each other sharer
+        /// their share, and the rest of the squad what was taken (PartyMemberLoot) and who got
+        /// credits they did not share in.
+        /// </summary>
+        private void Finish(Client client, LootDispenser loot, List<LootItem> taken)
+        {
+            var shares = Settle(client, loot);
+            var ownShare = 0;
+
+            foreach (var (recipient, share) in shares)
+                if (recipient == client)
+                    ownShare = share;
+
+            GotLoot(client, loot, taken, ownShare);
+
+            foreach (var (recipient, share) in shares)
+                if (recipient != client)
+                    GotLoot(recipient, loot, null, share);
+
+            PartyManager.Instance.AnnounceLoot(client, loot.AttachedTo, taken, ownShare);
+            // A corpse the squad shared: the members left out of its credits hear who got them.
+            if (loot.CreditSharers.Count > 0)
+                PartyManager.Instance.AnnounceCredits(shares);
         }
 
         /// <summary>Whether walking past a corpse should pick this item up unasked.</summary>
@@ -488,7 +571,8 @@ namespace Rasa.Managers
 
             lootItem.Taken = true;
 
-            client.CallMethod(loot.EntityId, new ActorGotLootPacket(loot));
+            // No ActorGotLoot: its only effect is the pick-up sound, which the GotLoot this take
+            // ends with plays as well (Finish).
 
             // Everyone sharing the corpse sees the row go, not only the one who took it.
             foreach (var looter in LootersHere(client.Player.MapChannel, loot))
@@ -497,9 +581,15 @@ namespace Rasa.Managers
             return true;
         }
 
-        /// <summary>Pays out the credits and closes the corpse once nothing is left on it. Returns the credits paid.</summary>
-        private int Settle(Client client, LootDispenser loot)
+        /// <summary>
+        /// Pays out the credits and closes the corpse once nothing is left on it. The credits are
+        /// split among CreditRecipients; returns who was paid what, empty while the corpse still
+        /// holds items.
+        /// </summary>
+        private List<(Client Recipient, int Share)> Settle(Client client, LootDispenser loot)
         {
+            var paidOut = new List<(Client, int)>();
+
             // Items only. The credits are paid out *by* this method, so asking whether the corpse
             // still holds anything - which counts them - would be circular: the credits would
             // keep the corpse open, and nothing would ever pay them.
@@ -507,14 +597,23 @@ namespace Rasa.Managers
             {
                 // Still something on it: refresh what can be taken and leave it open.
                 CanLootItems(client, loot);
-                return 0;
+                return paidOut;
             }
-
-            var paid = loot.Credits;
 
             if (loot.Credits > 0)
             {
-                CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Credits, loot.Credits);
+                var recipients = CreditRecipients(client, loot);
+                var shares = SplitCredits(loot.Credits, recipients.Count);
+
+                for (var i = 0; i < recipients.Count; i++)
+                {
+                    if (shares[i] <= 0)
+                        continue;
+
+                    CharacterManager.Instance.UpdateCharacter(recipients[i], CharacterUpdate.Credits, shares[i]);
+                    paidOut.Add((recipients[i], shares[i]));
+                }
+
                 loot.Credits = 0;
             }
 
@@ -528,9 +627,8 @@ namespace Rasa.Managers
                     CanLootItems(looter, loot);
 
             CanLootItems(client, loot);
-            GotLoot(client, loot);
 
-            return paid;
+            return paidOut;
         }
 
         /// <summary>The rows TakenInfo should mark; the client keys off the ones it is sent.</summary>

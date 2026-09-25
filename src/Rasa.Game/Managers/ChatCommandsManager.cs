@@ -97,7 +97,7 @@ namespace Rasa.Managers
             registered.Handler(parts);
         }
 
-        private static bool HasLevel(Client client, GmLevel required)
+        internal static bool HasLevel(Client client, GmLevel required)
         {
             return client?.AccountEntry != null && client.AccountEntry.Level >= (byte)required;
         }
@@ -130,6 +130,7 @@ namespace Rasa.Managers
             RegisterCommand(".rqs", GmLevel.Observer, RqsWindowCommand);
             RegisterCommand(".where", GmLevel.Observer, WhereCommand);
             RegisterCommand(".cover", GmLevel.Observer, CoverCommand);
+            RegisterCommand(".los", GmLevel.Observer, LosCommand);
 
             // GameMaster: moves you, spawns and drives scenery and creatures, drives
             // your own client. A restart undoes all of it.
@@ -1196,6 +1197,24 @@ namespace Rasa.Managers
 
             CommunicatorManager.Instance.SystemMessage(_client, $"Its shots at you: {Describe(target, player)}");
             CommunicatorManager.Instance.SystemMessage(_client, $"Your shots at it: {Describe(player, target)}");
+        }
+
+        /// <summary>
+        /// .los [entityId]: the server's line of sight report (LosReport) from you to your target,
+        /// or to the entity given - what the client's unshipped LOS slash commands asked for with
+        /// RequestLOSReport.
+        /// </summary>
+        private void LosCommand(string[] parts)
+        {
+            var targetId = _client.Player.Target;
+
+            if (parts.Length > 1 && !ulong.TryParse(parts[1], out targetId))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "Usage: .los [entityId] - your target when no id is given");
+                return;
+            }
+
+            LosReport.Send(_client, targetId);
         }
 
         private void NpcInfoCommand(string[] parts)

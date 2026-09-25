@@ -729,7 +729,7 @@
         [PacketHandler(GameOpcode.RequestLOSReport)]
         private void RequestLOSReport(RequestLOSReportPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: RequestLOSReportPacket");
+            LosReport.Answer(Client, packet.TargetId);
         }
 
         [PacketHandler(GameOpcode.RevokeClanFeud)]

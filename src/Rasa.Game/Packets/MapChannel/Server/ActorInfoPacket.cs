@@ -3,6 +3,7 @@
 namespace Rasa.Packets.MapChannel.Server
 {
     using Data;
+    using Managers;
     using Memory;
     using Structures;
 
@@ -30,7 +31,8 @@ namespace Rasa.Packets.MapChannel.Server
             // A creature with its weapon out (CreatureWeaponDraw): drawn for whoever meets it now.
             if (actor is Creature { WeaponDrawn: true })
                 StateIds.Add(CharacterState.ToolReady);
-            TrackingTarget = actor.Target;
+            // What its movement is locked on, not what it has selected; nothing if that has gone.
+            TrackingTarget = TrackingTargets.Current(actor);
             Yaw = actor.Rotation;
             MovementMode = actor.MovementSpeed;
             DesiredPostureId = actor.IsCrouching ? CharacterState.Crouched : CharacterState.Standing;

@@ -44,7 +44,6 @@ namespace Rasa.Structures
 
         /// <summary>Actions this player may not perform, each with the reasons it is blocked for; see Managers.ActionBlocks.</summary>
         public Dictionary<ActionId, HashSet<string>> ActionBlocks { get; } = new();
-        public ulong TrackingTargetEntityId { get; set; }
         public byte ActiveWeapon { get; set; }
         public List<CharacterTeleporterEntry> GainedWaypoints = new();
         public bool IsAFK { get; set; }

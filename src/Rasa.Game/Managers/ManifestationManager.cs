@@ -3224,9 +3224,10 @@ namespace Rasa.Managers
             return InventoryManager.Instance.CurrentWeapon(client)?.ItemTemplate?.WeaponInfo?.AimRate ?? 0;
         }
 
+        /// <summary>SetTrackingTarget (entityId) and ClearTrackingTarget (0) from the player's own client.</summary>
         public void SetTrackingTarget(Client client, ulong entityId)
         {
-            client.Player.TrackingTargetEntityId = entityId;
+            TrackingTargets.FromClient(client, entityId);
         }
 
         public void UpdateAppearance(Client client)

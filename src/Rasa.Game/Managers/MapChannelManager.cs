@@ -609,6 +609,9 @@ namespace Rasa.Managers
             // the client sends after the server has already set Loading, which is dropped.
             client.Player.InCombatMode = false;
 
+            // And whatever it was following or walking up to: that is on the map being left.
+            client.Player.TrackingTargetEntityId = 0;
+
             // Before the player leaves the cells, while their minions can still be told to go:
             // "Player-controlled subordinates will teleport with their masters, but not change
             // maps." Leaving the map is leaving them behind, so they are dismissed, not orphaned.

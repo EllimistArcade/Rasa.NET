@@ -136,6 +136,7 @@ namespace Rasa.Managers
             // GameMaster: moves you, spawns and drives scenery and creatures, drives
             // your own client. A restart undoes all of it.
             RegisterCommand(".actorstate", GmLevel.GameMaster, ActorStateCommand);
+            RegisterCommand(".track", GmLevel.GameMaster, TrackCommand);
             RegisterCommand(".bark", GmLevel.GameMaster, BarkCommand);
             RegisterCommand(".comehere", GmLevel.GameMaster, ComeHereCommand);
             RegisterCommand(".createobj", GmLevel.GameMaster, CreateObjectCommand);
@@ -260,6 +261,87 @@ namespace Rasa.Managers
 
             ActorManager.CorrectState(_client.Player.MapChannel, actor, states);
             CommunicatorManager.Instance.SystemMessage(_client, $"{actor.EntityId}: {string.Join(", ", states)}.");
+        }
+
+        /// <summary>
+        /// .track &lt;targetId|me|target|0&gt; [#entityId|#target]: sets the tracking target
+        /// (Recv_SetTrackingTarget) of yourself, or of the creature or player named, for everyone
+        /// who can see it - what a player's client does on its own body while following or
+        /// walking up to something. The client never shows what the engine does with a tracked
+        /// body; this is for watching. "me" is you, "target" what you have selected, 0 clears.
+        /// With nothing after it, says what you and your target are tracking.
+        /// </summary>
+        private void TrackCommand(string[] parts)
+        {
+            var player = _client.Player;
+            var mapChannel = player.MapChannel;
+
+            Actor ActorById(ulong entityId) => EntityManager.Instance.GetEntityType(entityId) switch
+            {
+                EntityType.Creature => EntityManager.Instance.GetCreature(entityId),
+                EntityType.Character => EntityManager.Instance.GetPlayer(entityId),
+                _ => null
+            };
+
+            string Describe(Actor a) => a == null ? "-" : $"{a.EntityId} ({(string.IsNullOrEmpty(a.Name) ? a.EntityClass.ToString() : a.Name)})";
+
+            if (parts.Length < 2)
+            {
+                var selected = player.Target != 0 ? ActorById(player.Target) : null;
+                CommunicatorManager.Instance.SystemMessage(_client,
+                    "usage: .track <targetId|me|target|0> [#entityId|#target] - "
+                    + $"you track {TrackingTargets.Current(player)}"
+                    + (selected != null ? $", your target {Describe(selected)} tracks {TrackingTargets.Current(selected)}" : ""));
+                return;
+            }
+
+            var idPart = parts.Skip(1).FirstOrDefault(p => p.StartsWith("#"));
+            var targetPart = parts.Skip(1).FirstOrDefault(p => !p.StartsWith("#"));
+
+            Actor actor = player;
+
+            if (idPart != null)
+            {
+                actor = idPart.Equals("#target", StringComparison.OrdinalIgnoreCase)
+                    ? (player.Target != 0 ? ActorById(player.Target) : null)
+                    : ulong.TryParse(idPart.Substring(1), out var entityId) ? ActorById(entityId) : null;
+
+                if (actor == null || actor.MapContextId != player.MapContextId)
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, $"No creature or player {idPart} on this map.");
+                    return;
+                }
+            }
+
+            ulong targetId;
+
+            if (targetPart == null)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "Track what? A target id, me, target, or 0 to clear.");
+                return;
+            }
+            else if (targetPart.Equals("me", StringComparison.OrdinalIgnoreCase))
+                targetId = player.EntityId;
+            else if (targetPart.Equals("target", StringComparison.OrdinalIgnoreCase))
+                targetId = player.Target;
+            else if (!ulong.TryParse(targetPart, out targetId))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"'{targetPart}' is not an entity id, me, target or 0.");
+                return;
+            }
+
+            if (!TrackingTargets.IsValid(actor, targetId))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, targetId == actor.EntityId
+                    ? "An actor cannot track itself."
+                    : $"No entity {targetId} here.");
+                return;
+            }
+
+            TrackingTargets.Set(mapChannel, actor, targetId);
+            CommunicatorManager.Instance.SystemMessage(_client, targetId == 0
+                ? $"{Describe(actor)} tracks nothing."
+                : $"{Describe(actor)} tracks {targetId}.");
         }
 
         private void BarkCommand(string[] parts)

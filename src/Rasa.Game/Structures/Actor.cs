@@ -21,6 +21,13 @@ namespace Rasa.Structures
         public bool InCombatMode { get; set; }
         public CharacterState State { get; set; }
         public ulong Target { get; set; }
+
+        /// <summary>
+        /// The entity the actor's movement is locked on (the client's SetTrackingTarget), 0 for
+        /// none: what a player's client tracks while following someone or walking up to use
+        /// something, or what .track set. Not the selected Target. See Managers.TrackingTargets.
+        /// </summary>
+        public ulong TrackingTargetEntityId { get; set; }
         public double MovementSpeed { get; set; }
         public bool WeaponReady { get; set; }
         // action data

@@ -1293,6 +1293,57 @@ namespace Rasa.Managers
                 CommunicatorManager.Instance.SystemMessage(client, $"Your purse is full. {left} transfer credits are left on the slip.");
         }
 
+        /// <summary>
+        /// A Logos stone used from the inventory: its Logos goes into the Tabula and one stone
+        /// from the stack is used up.
+        ///
+        /// The stone's Logos is the client's own table (LogosStones, from logosstone.classlookup).
+        /// Learning it goes the way a shrine's does - CharacterUpdate.Logos adds it to the
+        /// character, saves it and sends LogosStoneAdded, which is what the client waits for: it
+        /// says "Logos stone added", puts the Logos in the Tabula and plays the Logos tutorial. A
+        /// Logos already known keeps its stone and is said in plain text: the client's own
+        /// PM_ALREADY_HAVE_LOGOS_STONE wants %(logosId)s as a number, which BuildPlayerMessage
+        /// turns into the Logos' name, and the player message packet carries only strings. The
+        /// client checks this itself before it asks, so it comes up only when the two disagree.
+        ///
+        /// Checked here rather than trusted, as the transfer credit slip is: the item has to be in
+        /// the player's own pack and of a Logos stone class.
+        /// </summary>
+        public void RequestAddLogosStoneToTabula(Client client, RequestAddLogosStoneToTabulaPacket packet)
+        {
+            if (client?.Player == null)
+                return;
+
+            if (!client.Player.Inventory.PersonalInventory.Contains(packet.EntityId))
+                return;
+
+            var item = EntityManager.Instance.GetItem(packet.EntityId);
+
+            if (item?.ItemTemplate == null || item.StackSize == 0)
+                return;
+
+            var logosId = LogosStones.LogosOf((uint)item.ItemTemplate.Class);
+
+            if (logosId == 0)
+            {
+                Logger.WriteLog(LogType.Error,
+                    $"RequestAddLogosStoneToTabula: {client.Player.Name} used item {packet.EntityId} (class {(uint)item.ItemTemplate.Class}), which is not a Logos stone");
+                return;
+            }
+
+            if (client.Player.Logos.Contains(logosId))
+            {
+                CommunicatorManager.Instance.SystemMessage(client, "That Logos is already in your Tabula.");
+                return;
+            }
+
+            // Used up before it is learned, so that a failure here cannot teach it for nothing.
+            InventoryManager.Instance.ReduceStackCount(client, InventoryType.Personal, item, 1);
+            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Logos, logosId);
+
+            Logger.WriteLog(LogType.Security, $"Logos stone used: {client.Player.FamilyName} learned Logos {logosId} from item {item.Id}");
+        }
+
         public void RequestArmAbility(Client client, int abilityDrawerSlot)
         {
             client.Player.CurrentAbilityDrawer = abilityDrawerSlot;

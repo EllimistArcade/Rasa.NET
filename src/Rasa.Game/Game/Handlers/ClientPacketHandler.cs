@@ -374,6 +374,12 @@
             ManifestationManager.Instance.RequestUseTransferCredit(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.RequestAddLogosStoneToTabula)]
+        private void RequestAddLogosStoneToTabula(RequestAddLogosStoneToTabulaPacket packet)
+        {
+            ManifestationManager.Instance.RequestAddLogosStoneToTabula(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestSetAbilitySlot)]
         private void RequestSetAbilitySlot(RequestSetAbilitySlotPacket packet)
         {

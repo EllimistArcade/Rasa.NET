@@ -52,6 +52,15 @@ namespace Rasa.Structures
         /// <summary>Environment.TickCount64 of the next tick.</summary>
         public long NextTickTick { get; set; }
 
+        /// <summary>
+        /// Whether the client is given the time left (the tooltip's 'duration', which is what puts
+        /// a timer on the icon and in the tooltip). False for an effect whose end the server keeps
+        /// pushing out while a condition holds - the Shield Drone's shield lasts as long as the
+        /// Bane stays under it - which would otherwise show a timer running out on something that
+        /// is not ending: the client's icon takes its timer from the attach and never re-reads it.
+        /// </summary>
+        public bool ShowsDuration { get; set; } = true;
+
         /// <summary>Buff or debuff, for the client's icon colouring and right-click rules.</summary>
         public bool IsBuff { get; set; } = true;
 

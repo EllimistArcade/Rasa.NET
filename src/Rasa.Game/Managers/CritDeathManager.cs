@@ -248,7 +248,17 @@ namespace Rasa.Managers
             // Claimed: a squad mate pressing at the same moment is turned away, and the window is
             // kept open at least until this windup has run.
             window.FinisherId = player.EntityId;
-            window.ExpiresTick = Math.Max(window.ExpiresTick, Environment.TickCount64 + windupMs + 1000);
+
+            var until = Environment.TickCount64 + windupMs + 1000;
+
+            // Held open past its time: the clients' tooltip timer is told, or it would read
+            // zero while the finisher winds up. The target window's icon keeps its first time
+            // until the finishing animation's effect goes on and it re-reads them all.
+            if (until > window.ExpiresTick)
+            {
+                window.ExpiresTick = until;
+                GameEffectManager.Instance.UpdateTooltip(mapChannel, creature, window);
+            }
 
             foreach (var cell in CellManager.CellsIn(mapChannel, player.Cells))
                 foreach (var other in cell.ClientList)

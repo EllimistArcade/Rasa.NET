@@ -241,7 +241,7 @@ namespace Rasa.Managers
                 EffectLevel = effect.EffectLevel,
                 SourceId = effect.SourceId,
                 Announced = announced,
-                Duration = effect.HasDuration ? effect.RemainingSeconds : (int?)null,
+                Duration = effect.HasDuration && effect.ShowsDuration ? effect.RemainingSeconds : (int?)null,
                 DamageType = effect.TickDamageMax > 0 ? (int)effect.TickDamageType : 0,
                 AttrId = effect.TooltipAttrId,
                 IsActive = true,
@@ -441,13 +441,32 @@ namespace Rasa.Managers
             {
                 TellHolder(mapChannel, actor, effect, new GameEffectPausePacket(effect.EffectId, false));
 
-                if (effect.HasDuration)
-                    TellHolder(mapChannel, actor, effect, new GameEffectUpdateTooltipPacket(AttachedPacket(effect, false)));
+                if (effect.HasDuration && effect.ShowsDuration)
+                    UpdateTooltip(mapChannel, actor, effect);
             }
 
             foreach (var child in effect.Children.ToList())
                 if (child.Holder != null)
                     Restart(mapChannel, child.Holder, child);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Tells whoever was told of an effect what its tooltip says now - the time it has left and
+        /// its own values - after either changed on the server (GameEffectUpdateTooltip, 660). The
+        /// client replaces the whole dictionary, so it goes out whole, written as the attach writes
+        /// it. What that reaches is the tooltip: the timer the icons on the buff bar, the target
+        /// window and the party window draw is copied from the effect only when an effect on that
+        /// actor comes or goes, and stays on the old time until then. False when the effect is
+        /// not on the actor.
+        /// </summary>
+        public bool UpdateTooltip(MapChannel mapChannel, Actor actor, GameEffect effect)
+        {
+            if (mapChannel == null || actor == null || effect == null || !actor.ActiveEffects.ContainsKey(effect.EffectId))
+                return false;
+
+            TellHolder(mapChannel, actor, effect, new GameEffectUpdateTooltipPacket(AttachedPacket(effect, false)));
 
             return true;
         }

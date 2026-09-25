@@ -182,7 +182,14 @@ namespace Rasa.Managers
                 IsBuff = true,
                 AllowDetach = false,
                 AnnounceOnAttach = true,
-                ExpiresTick = System.Environment.TickCount64 + RefreshMs * 3
+                ExpiresTick = System.Environment.TickCount64 + RefreshMs * 3,
+
+                // Its end is pushed out every pass while the Bane stays under the drone, which
+                // the client is never going to see: its icon takes the timer from the attach
+                // alone. Given three seconds, every shielded Bane showed a shield running out and
+                // then sitting at zero for as long as it was under the drone. It ends when the
+                // Bane walks out or the drone goes, so it is shown with no timer.
+                ShowsDuration = false
             });
         }
 

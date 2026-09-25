@@ -2203,9 +2203,60 @@ namespace Rasa.Managers
 
         #endregion
 
+        /// <summary>A slash command the client sends as PrivilegedCommand, and the account level it takes.</summary>
+        private sealed class PrivilegedChatCommand
+        {
+            public PrivilegedChatCommand(GmLevel level, Action<Client, string> handler)
+            {
+                Level = level;
+                Handler = handler;
+            }
+
+            public GmLevel Level { get; }
+            public Action<Client, string> Handler { get; }
+        }
+
+        private static readonly Dictionary<string, PrivilegedChatCommand> PrivilegedCommands = new Dictionary<string, PrivilegedChatCommand>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["gotomap"] = new PrivilegedChatCommand(GmLevel.GameMaster, GmMapCommands.GotoMap),
+            ["gotostartgroup"] = new PrivilegedChatCommand(GmLevel.GameMaster, GmMapCommands.GotoStartGroup)
+        };
+
+        /// <summary>
+        /// A slash command the client has no handler of its own for: client/communicator.py's
+        /// ProcessSlashCommand sends whatever is not a local command as (command, arg), and the
+        /// client's GM pickers send their picks the same way. The ones the server knows are in
+        /// <see cref="PrivilegedCommands"/>, each with the level it takes; anything else, or one
+        /// above the account's level, is answered as the dot commands answer it.
+        /// </summary>
         internal void PrivilegedCommand(Client client, PrivilegedCommandPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: PrivilegedCommand");
+            if (client?.Player == null || string.IsNullOrWhiteSpace(packet.Command))
+                return;
+
+            var command = packet.Command.Trim();
+
+            if (!PrivilegedCommands.TryGetValue(command, out var registered))
+            {
+                Logger.WriteLog(LogType.Command, $"Invalid slash command: /{command} {packet.Args}");
+                CommunicatorManager.Instance.SystemMessage(client, $"Unknown command: /{command}");
+                return;
+            }
+
+            if (!HasLevel(client, registered.Level))
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"AccountId = {client.AccountEntry?.Id} (level {client.AccountEntry?.Level}) tried to use /{command}, which needs {(byte)registered.Level}");
+
+                CommunicatorManager.Instance.SystemMessage(client,
+                    client.AccountEntry?.Level > 0
+                        ? $"/{command} needs account level {(byte)registered.Level}; yours is {client.AccountEntry.Level}."
+                        : $"Unknown command: /{command}");
+                return;
+            }
+
+            Logger.WriteLog(LogType.Command, $"AccountId = {client.AccountEntry.Id}: /{command} {packet.Args}");
+            registered.Handler(client, packet.Args ?? "");
         }
     }
 }

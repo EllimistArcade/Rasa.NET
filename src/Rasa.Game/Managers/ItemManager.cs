@@ -365,6 +365,69 @@ namespace Rasa.Managers
             return false;
         }
 
+        /// <summary>
+        /// Binds a Bind on Equip item to the character equipping it, the first time it is
+        /// equipped. Anything else - no item, not Bind on Equip, bound already - is left alone.
+        /// </summary>
+        public void BindOnEquip(Client client, Item item)
+        {
+            if (item?.ItemTemplate == null || !item.ItemTemplate.HasBoEFlag || item.BoundCharacterId != 0)
+                return;
+
+            Bind(client, item);
+        }
+
+        /// <summary>
+        /// Binds one item to the player's character: the row is written, and the client is sent
+        /// the item's ItemInfo again so its tooltip says Bound on Character and the next equip
+        /// does not ask the Bind on Equip question a second time.
+        /// </summary>
+        public void Bind(Client client, Item item)
+        {
+            item.BoundCharacterId = client.Player.Id;
+
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+                unitOfWork.Items.UpdateBoundCharacter(item);
+
+            var classInfo = EntityClassManager.Instance.GetClassInfo(item.ItemTemplate.Class);
+
+            if (classInfo != null)
+                client.CallMethod(item.EntityId, new ItemInfoPacket(item, classInfo));
+        }
+
+        /// <summary>
+        /// RequestBind (145): client.augmentations.weapon.Weapon.OnBind, "Called to tell the
+        /// server to bind this weapon to this character". Nothing in the 1.16.5.0 client calls
+        /// OnBind - it is left from a bind-a-weapon service (Actor.HasFundsToBind, which returns
+        /// 0, and WeaponBindCount, which nothing receives) - but the opcode is the client's to
+        /// send, and one with no handler closes the connection.
+        ///
+        /// Binds the weapon if the player holds it (pack, weapon drawer or equipment) and it is
+        /// not bound yet. Anything else is refused and logged: an entity the player does not
+        /// hold, or an item that is not a weapon, is not a request the client can make.
+        /// </summary>
+        public void RequestBind(Client client, RequestBindPacket packet)
+        {
+            var item = EntityManager.Instance.GetItem(packet.EntityId);
+            var inventory = client.Player.Inventory;
+
+            var holds = item != null
+                && (inventory.PersonalInventory.Contains(packet.EntityId)
+                    || inventory.WeaponDrawer.Contains(packet.EntityId)
+                    || inventory.EquippedInventory.Contains(packet.EntityId));
+
+            if (!holds || item.ItemTemplate?.WeaponInfo == null)
+            {
+                Logger.WriteLog(LogType.Security, $"AccountId = {client.AccountEntry.Id} asked to bind entity {packet.EntityId}, which is not a weapon they hold.");
+                return;
+            }
+
+            if (item.IsBound)
+                return;
+
+            Bind(client, item);
+        }
+
         public void SendItemDataToClient(Client client, Item item, bool updateOnly)
         {
             // CreatePhysicalEntity

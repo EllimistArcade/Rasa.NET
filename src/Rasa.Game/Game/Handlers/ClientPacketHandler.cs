@@ -858,6 +858,12 @@
             InventoryManager.Instance.RequestEquipWeapon(Client, packet);
         }
 
+        [PacketHandler(GameOpcode.RequestBind)]
+        private void RequestBind(RequestBindPacket packet)
+        {
+            ItemManager.Instance.RequestBind(Client, packet);
+        }
+
         [PacketHandler(GameOpcode.RequestLockboxTabPermissions)]
         private void RequestLockboxTabPermissions(RequestLockboxTabPermissionsPacket packet)
         {

@@ -244,8 +244,9 @@ namespace Rasa.Managers
                 return;
             }
 
-            // Bound on Character, or Not Tradable (mission items are both): "This item cannot be traded."
-            if (item.ItemTemplate.BoundToCharacter || item.ItemTemplate.NotTradable)
+            // Bound on Character - bound when it was equipped, or bound by its template - or Not
+            // Tradable (mission items are both): "This item cannot be traded."
+            if (item.IsBound || item.ItemTemplate.NotTradable)
             {
                 Decline(client, PlayerMessage.PmTradeItemCanNotBeTraded);
                 return;
@@ -466,6 +467,11 @@ namespace Rasa.Managers
                 var item = EntityManager.Instance.GetItem(offered.EntityId);
 
                 if (item == null || !HoldsInPersonalInventory(client, offered.EntityId))
+                    return false;
+
+                // Equipped and taken off again between the offer and the exchange: a Bind on
+                // Equip item is back in the pack, bound, and is no longer the player's to give.
+                if (item.IsBound)
                     return false;
 
                 if (offered.Matches(item))

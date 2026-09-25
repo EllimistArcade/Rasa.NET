@@ -32,6 +32,20 @@
         public string Crafter { get; set; }
         public int CurrentHitPoints { get; set; }
         public uint StackSize { get; set; }
+
+        /// <summary>
+        /// The character this item was bound to when it was equipped (Bind on Equip) or bound on
+        /// request, 0 when it has not been. Persisted in items.bound_character_id.
+        /// </summary>
+        public uint BoundCharacterId { get; set; }
+
+        /// <summary>
+        /// Bound on Character, either way it can be: this item was bound to a character, or its
+        /// template is bound from the start (mission items, GM and event gear, account rewards).
+        /// What the client is sent as boundToCharacter, and what trade, the auction house and the
+        /// clan lockbox refuse.
+        /// </summary>
+        public bool IsBound => BoundCharacterId != 0 || (ItemTemplate?.BoundToCharacter ?? false);
         // weapon specific
         public uint CurrentAmmo { get; set; }
         public bool IsJammed { get; set; }

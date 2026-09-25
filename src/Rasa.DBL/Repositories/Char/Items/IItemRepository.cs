@@ -8,6 +8,7 @@ namespace Rasa.Repositories.Char.Items
         void DeleteItem(uint itemId);
         ItemEntry GetItem(uint itemId);
         void UpdateAmmo(IItemChange item);
+        void UpdateBoundCharacter(IItemChange item);
         void UpdateCurrentHitPoints(IItemChange item);
         void UpdateItemStackSize(IItemChange item);
     }

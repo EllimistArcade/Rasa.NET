@@ -201,7 +201,8 @@ namespace Rasa.Managers
                         CurrentHitPoints = itemData.CurrentHitPoints,
                         Color = itemData.Color,
                         Id = item.ItemId,
-                        Crafter = itemData.CrafterName
+                        Crafter = itemData.CrafterName,
+                        BoundCharacterId = itemData.BoundCharacterId
                     };
 
                     // check if item is weapon

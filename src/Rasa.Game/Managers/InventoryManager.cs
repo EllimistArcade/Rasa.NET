@@ -331,6 +331,9 @@ namespace Rasa.Managers
             if (entityIdInventoryItem != 0)
                 AddItemBySlot(client, InventoryType.EquipedInventory, entityIdInventoryItem, packet.DestSlot, true);
 
+            // The client asked the player first (PM_BIND_ON_EQUIP) and sent this on OK.
+            ItemManager.Instance.BindOnEquip(client, itemToEquip);
+
             // update appearance
             if (itemToEquip == null)
             {
@@ -427,6 +430,10 @@ namespace Rasa.Managers
             if (entityIdInventoryItem != 0)
                 AddItemBySlot(client, InventoryType.WeaponDrawerInventory, entityIdInventoryItem, destSlot, true);
 
+            // Into the drawer is equipping, for the client as for this: weapondrawerwindow asks
+            // the Bind on Equip question on a drop there, not only on the active slot.
+            ItemManager.Instance.BindOnEquip(client, itemToEquip);
+
             if (destSlot == client.Player.ActiveWeapon)
                 if (itemToEquip == null)
                 {
@@ -470,14 +477,15 @@ namespace Rasa.Managers
         /// </summary>
         private static bool MayStore(Client client, ulong entityId, bool clan)
         {
-            var template = EntityManager.Instance.GetItem(entityId)?.ItemTemplate;
+            var item = EntityManager.Instance.GetItem(entityId);
+            var template = item?.ItemTemplate;
 
             if (template == null)
                 return true;
 
             PlayerMessage? refusal = null;
 
-            if (clan && (template.BoundToCharacter || template.NotTradable))
+            if (clan && (item.IsBound || template.NotTradable))
                 refusal = PlayerMessage.PmClanLockboxItemNotTradable;
             else if (template.NotPlaceableInLockbox)
                 refusal = PlayerMessage.PmNotPlaceableInLockbox;
@@ -486,6 +494,23 @@ namespace Rasa.Managers
                 return true;
 
             client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(refusal.Value, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+            return false;
+        }
+
+        /// <summary>
+        /// Whether an item in the footlocker may come out to this character. The footlocker is
+        /// the account's, shared by all its characters, so an item bound to one of them can be
+        /// put in by that character and seen by the others; only its own character takes it out
+        /// ("That item is bound on a different character.").
+        /// </summary>
+        private static bool MayTakeFromHome(Client client, ulong entityId)
+        {
+            var item = EntityManager.Instance.GetItem(entityId);
+
+            if (item == null || item.BoundCharacterId == 0 || item.BoundCharacterId == client.Player.Id)
+                return true;
+
+            client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmItemBoundOnDiffCharacter, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
             return false;
         }
 
@@ -507,6 +532,10 @@ namespace Rasa.Managers
                 return;
 
             if (!MayStore(client, entityId, false))
+                return;
+
+            // A swap takes the footlocker's item out into the pack.
+            if (client.Player.Inventory.HomeInventory[(int)packet.DestSlot] != 0 && !MayTakeFromHome(client, client.Player.Inventory.HomeInventory[(int)packet.DestSlot]))
                 return;
 
             RemoveItemBySlot(client, InventoryType.Personal, packet.SrcSlot);
@@ -822,6 +851,9 @@ namespace Rasa.Managers
             var entityId = client.Player.Inventory.HomeInventory[(int)packet.SrcSlot];
 
             if (entityId == 0)
+                return;
+
+            if (!MayTakeFromHome(client, entityId))
                 return;
 
             // A swap puts the pack's item in the footlocker.
@@ -1857,7 +1889,8 @@ namespace Rasa.Managers
                     CurrentHitPoints = itemData.CurrentHitPoints,
                     Color = itemData.Color,
                     Id = item.ItemId,
-                    Crafter = itemData.CrafterName
+                    Crafter = itemData.CrafterName,
+                    BoundCharacterId = itemData.BoundCharacterId
                 };
 
                 // check if item is weapon

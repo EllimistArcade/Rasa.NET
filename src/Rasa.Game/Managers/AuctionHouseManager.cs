@@ -498,7 +498,7 @@ namespace Rasa.Managers
             if (item?.ItemTemplate == null)
                 return false;
 
-            if (item.ItemTemplate.BoundToCharacter)
+            if (item.IsBound)
                 return false;
 
             if (!item.ItemTemplate.HasSellableFlag)

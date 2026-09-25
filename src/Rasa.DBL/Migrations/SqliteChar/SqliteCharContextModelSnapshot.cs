@@ -703,6 +703,10 @@ namespace Rasa.Migrations.SqliteChar
                         .HasColumnType("INTEGER")
                         .HasColumnName("ammo_count");
 
+                    b.Property<uint>("BoundCharacterId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("bound_character_id");
+
                     b.Property<uint>("Color")
                         .HasColumnType("INTEGER")
                         .HasColumnName("color");

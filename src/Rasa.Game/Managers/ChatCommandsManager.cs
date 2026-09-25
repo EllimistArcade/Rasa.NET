@@ -175,6 +175,7 @@ namespace Rasa.Managers
             RegisterCommand(".givelogos", GmLevel.Admin, GiveLogosCommand);
             RegisterCommand(".givepads", GmLevel.Admin, GivePadsCommand);
             RegisterCommand(".givexp", GmLevel.Admin, GiveXpCommand);
+            RegisterCommand(".setlevel", GmLevel.Admin, SetLevelCommand);
             RegisterCommand(".reloadcreatures", GmLevel.Admin, ReloadCreaturesCommand);
         }
 
@@ -1051,6 +1052,22 @@ namespace Rasa.Managers
                 CommunicatorManager.Instance.SystemMessage(_client, "usage: .givexp ammount");
 
             return;
+        }
+
+        /// <summary>
+        /// .setlevel level: puts your own character at that level, 1 to 50. Up levels you through
+        /// every level between, as experience would; down resets what the new level no longer
+        /// allows. See ManifestationManager.SetLevel.
+        /// </summary>
+        private void SetLevelCommand(string[] parts)
+        {
+            if (parts.Length != 2 || !int.TryParse(parts[1], out var level))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"usage: .setlevel level (1 to {ManifestationManager.MaxPlayerLevel})");
+                return;
+            }
+
+            CommunicatorManager.Instance.SystemMessage(_client, ManifestationManager.Instance.SetLevel(_client, level));
         }
 
         private void ChangeClassCommand(string[] parts)

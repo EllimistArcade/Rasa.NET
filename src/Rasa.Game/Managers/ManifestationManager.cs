@@ -36,7 +36,7 @@ namespace Rasa.Managers
          *  - ArmAbilityFailed                  => ToDo
          *  - AdvancementStats                  => implemented
          *  - ExperienceChanged                 => ToDo
-         *  - LevelChanged                      => ToDo
+         *  - LevelChanged                      => implemented (.setlevel)
          *  - CharacterClass                    => implemented
          *  - AvailableAllocationPoints
          *  - AvailableCharacterClasses
@@ -1989,6 +1989,185 @@ namespace Rasa.Managers
 
             CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Credits, -credits);
             return true;
+        }
+
+        /// <summary>
+        /// .setlevel: puts a player at <paramref name="level"/> (1 to 50). Returns what happened,
+        /// for the GM.
+        ///
+        /// Up is the ordinary road: the experience that reaches the new level is given through
+        /// GainExperience, so every level passed gets what levelling gives - LevelUp to everyone
+        /// in range, the fanfare, points, stats, a clone credit at 5, 15 and 30 and the tier offer
+        /// - and nothing here has to repeat it. The experience is exactly the level's threshold.
+        ///
+        /// Down leaves a legitimate character of the new level, and is where LevelChanged is used:
+        ///  - experience goes to the new level's threshold, so the next kill does not level them
+        ///    straight back up;
+        ///  - the class goes back up the tree to the highest tier the level allows - a level 4
+        ///    Soldier is a Recruit again, and is offered Soldier or Specialist again at 5;
+        ///  - skills that class or level no longer allows are untrained, and if the points still do
+        ///    not cover what is left, every skill is, back to a new character's 5 unspent points;
+        ///  - attribute points spent beyond the new allowance (3 a level after the first) are all
+        ///    refunded;
+        ///  - the player's client gets LevelChanged (no fanfare) and AdvancementStats (experience
+        ///    and points, silently), the stats, class, skills and abilities; everyone else in range
+        ///    gets Level; the party sees the new level and class.
+        /// Equipment worn above the new level stays on. Abilities left in the drawer from untrained
+        /// skills stay there too, and are refused when used - Grants reads the skills.
+        /// </summary>
+        public string SetLevel(Client client, int level)
+        {
+            var player = client?.Player;
+
+            if (player == null)
+                return "No player.";
+
+            if (level < 1 || level > MaxPlayerLevel)
+                return $"Level must be 1 to {MaxPlayerLevel}.";
+
+            var threshold = (uint)ExpPerLevel.ExpRequred[level - 1];
+
+            if (level == player.Level)
+                return $"{player.FamilyName} is already level {level}.";
+
+            if (level > player.Level)
+            {
+                var from = player.Level;
+                var needed = threshold > player.Experience ? threshold - player.Experience : 0;
+
+                // GainExperience levels by the experience it holds; a character carrying more
+                // than their level's worth (set by hand) would already be past it.
+                if (needed == 0)
+                    return $"{player.FamilyName} already has the experience for level {level}; .givexp 1 levels them up.";
+
+                GainExperience(client, needed);
+
+                return $"{player.FamilyName} raised from level {from} to {player.Level}.";
+            }
+
+            return LowerLevel(client, (byte)level, threshold);
+        }
+
+        private string LowerLevel(Client client, byte level, uint threshold)
+        {
+            var player = client.Player;
+            var from = player.Level;
+            var notes = new List<string>();
+
+            player.Level = level;
+            player.Experience = threshold;
+            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Level);
+            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Expirience);
+
+            // The class: back up the tree until the tier opens at or below the new level.
+            var oldClass = (CharacterClass)player.Class;
+            var newClass = oldClass;
+
+            while (CharacterClassTree.LevelFor(newClass) > level && CharacterClassTree.Parent(newClass) != CharacterClass.None)
+                newClass = CharacterClassTree.Parent(newClass);
+
+            if (newClass != oldClass)
+            {
+                player.Class = (uint)newClass;
+                CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Class, player.Class);
+                notes.Add($"class {oldClass} -> {newClass}");
+            }
+
+            // The skills: what the class or level no longer allows, then everything if the points
+            // still do not cover the rest.
+            var untrain = new List<SkillId>();
+
+            foreach (var skill in player.Skills.Values)
+                if (!_skillClasses.TryGetValue(skill.SkillId, out var requirement)
+                    || !CharacterClassTree.Is(newClass, requirement.Class)
+                    || requirement.Level > level)
+                    untrain.Add(skill.SkillId);
+
+            if (SkillPointBudget(level) - SpentSkillPoints(player, untrain) < 0)
+                untrain = player.Skills.Keys.ToList();
+
+            if (untrain.Count > 0)
+            {
+                foreach (var skillId in untrain)
+                    player.Skills.Remove(skillId);
+
+                using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+                unitOfWork.CharacterSkills.Delete(player.Id, untrain.Select(s => (uint)s));
+
+                notes.Add(player.Skills.Count == 0 ? "all skills untrained" : $"{untrain.Count} skill(s) untrained");
+            }
+
+            // The attributes: all refunded if more are spent than the level allows.
+            var spent = player.SpentBody + player.SpentMind + player.SpentSpirit;
+
+            if (spent > 3 * (level - 1))
+            {
+                player.SpentBody = player.SpentMind = player.SpentSpirit = 0;
+                CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Attributes);
+                notes.Add($"{spent} attribute point(s) refunded");
+            }
+
+            // The player's own client: the level quietly, then experience and points.
+            client.CallMethod(player.EntityId, new LevelChangedPacket(level));
+            client.CallMethod(player.EntityId, new AdvancementStatsPacket(level, player.Experience,
+                GetAvailableAttributePoints(player), 0, GetSkillPointsAvailable(player)));
+
+            if (newClass != oldClass)
+                client.CallMethod(player.EntityId, new CharacterClassPacket(player.Class));
+
+            UpdateStatsValues(client, true);
+            client.CallMethod(player.EntityId, new AttributeInfoPacket(player.Attributes));
+
+            if (untrain.Count > 0)
+            {
+                client.CallMethod(player.EntityId, new SkillsPacket(player.Skills));
+                client.CallMethod(player.EntityId, new AbilitiesPacket(player.Skills));
+                SyncSkillPassives(client);
+            }
+
+            client.CallMethod(player.EntityId, new TierAdvancementInfoPacket(AvailableClassIds(player)));
+
+            // Everyone else: the number over their head.
+            if (player.MapChannel != null)
+                client.CellIgnoreSelfCallMethod(client, new LevelPacket(level));
+
+            PartyManager.Instance.MemberInfoChanged(client);
+
+            Logger.WriteLog(LogType.Command, $"{player.FamilyName} set from level {from} to {level}" + (notes.Count > 0 ? $": {string.Join(", ", notes)}" : ""));
+
+            return $"{player.FamilyName} lowered from level {from} to {level}" + (notes.Count > 0 ? $" ({string.Join(", ", notes)})." : ".");
+        }
+
+        /// <summary>The skill points a level gives, before any are spent: GetSkillPointsAvailable without the spending or the floor at 0.</summary>
+        private static int SkillPointBudget(int level)
+        {
+            var points = (level - 1) * 2 + 5;
+
+            if (level >= 5)
+                points += 2;
+
+            if (level >= 15)
+                points += 2;
+
+            if (level >= 30)
+                points += 2;
+
+            if (level >= 50)
+                points += 4;
+
+            return points;
+        }
+
+        /// <summary>What the player's skills cost, leaving out those in <paramref name="except"/>.</summary>
+        private int SpentSkillPoints(Manifestation player, ICollection<SkillId> except)
+        {
+            var spent = 0;
+
+            foreach (var skill in player.Skills.Values)
+                if (!except.Contains(skill.SkillId) && skill.SkillLevel >= 0 && skill.SkillLevel <= MaxSkillLevel)
+                    spent += requiredSkillLevelPoints[skill.SkillLevel];
+
+            return spent;
         }
 
         public int GetAvailableAttributePoints(Manifestation player)

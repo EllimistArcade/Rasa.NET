@@ -1519,6 +1519,9 @@ namespace Rasa.Managers
 
             // Its weapon out for the fight, if it carries one.
             CreatureWeaponDraw.Draw(MapChannelManager.Instance.FindByContextId(creature.MapContextId), creature);
+
+            // Its target, to everyone who can see it: the guns that aim, aim (Targets).
+            Targets.Sync(MapChannelManager.Instance.FindByContextId(creature.MapContextId), creature);
         }
 
         /// <summary>
@@ -1641,6 +1644,7 @@ namespace Rasa.Managers
 
             controller.CurrentAction = BehaviorActionReturning;
             controller.ActionFighting.TargetEntityId = 0;
+            Targets.Sync(mapChannel, creature);
             controller.ActionReturning.Elapsed = 0;
             controller.ActionReturning.TimeoutMs = ReturnTimeoutFor(distance, creature.RunSpeed);
             controller.Path.Clear();
@@ -1791,10 +1795,12 @@ namespace Rasa.Managers
                 creature.Controller.ActionFollow.PathUpdateTime = 0;
                 creature.Controller.Path.Clear();
                 creature.Controller.PathIndex = 0;
-                return;
             }
+            else
+                SetActionWander(creature);
 
-            SetActionWander(creature);
+            // No target any more: the guns that aimed at it let go (Targets).
+            Targets.Sync(MapChannelManager.Instance.FindByContextId(creature.MapContextId), creature);
         }
 
         /// <summary>
@@ -1830,6 +1836,9 @@ namespace Rasa.Managers
             creature.Controller.ActionFollow.PathUpdateTime = 0;
             creature.Controller.Path.Clear();
             creature.Controller.PathIndex = 0;
+
+            // An order can take it out of a fight: its gun lets go of the target (Targets).
+            Targets.Sync(MapChannelManager.Instance.FindByContextId(creature.MapContextId), creature);
         }
 
         /// <summary>
@@ -1844,6 +1853,8 @@ namespace Rasa.Managers
             creature.Controller.ActionFollow.PathUpdateTime = 0;
             creature.Controller.Path.Clear();
             creature.Controller.PathIndex = 0;
+
+            Targets.Sync(MapChannelManager.Instance.FindByContextId(creature.MapContextId), creature);
         }
 
         /// <summary>

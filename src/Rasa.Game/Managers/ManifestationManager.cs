@@ -1800,6 +1800,10 @@ namespace Rasa.Managers
             if (!forSelf && player.IsCrouching)
                 entityData.Add(new SetDesiredCrouchStatePacket(CharacterState.Crouched));
 
+            // And what they have targeted, which their combat stance aims at.
+            if (!forSelf && Targets.Current(player) is var target && target != 0)
+                entityData.Add(new TargetIdPacket(target));
+
             return entityData;
         }
 
@@ -3212,7 +3216,12 @@ namespace Rasa.Managers
 
         public void SetTargetId(Client client, ulong entityId)
         {
+            var old = client.Player.Target;
             client.Player.Target = entityId;
+
+            // Everyone else sees the player's weapon come round to it (Targets).
+            if (old != entityId)
+                Targets.PlayerChanged(client, old);
 
             // The client works its bead's rates out again on every target change, so this does.
             Accuracy.UpdateRates(client.Player, AimRateOf(client), Environment.TickCount64);

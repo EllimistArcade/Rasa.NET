@@ -399,6 +399,10 @@ namespace Rasa.Managers
             if (creature.ActorName != null)
                 entityData.Add(new ActorNamePacket(creature.ActorName));
 
+            // What it is fighting: a turret's gun, a Stalker's or a Strider's comes round to it.
+            if (Targets.Current(creature) is var target && target != 0)
+                entityData.Add(new TargetIdPacket(target));
+
             client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(creature.EntityId, creature.EntityClass, entityData));
 
             // NPC  & Vendor augmentation

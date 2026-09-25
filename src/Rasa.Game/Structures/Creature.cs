@@ -106,6 +106,9 @@ namespace Rasa.Structures
         /// <summary>Whether it has its weapon out (CreatureWeaponDraw): TOOL_READY on the clients.</summary>
         public bool WeaponDrawn { get; set; }
 
+        /// <summary>The target the clients in range were last told this creature has (Targets.Sync); 0 for none.</summary>
+        public ulong ShownTargetId { get; set; }
+
         /// <summary>
         /// Percent of the hate this creature earns that goes to its master instead (Spotter's
         /// MINION_HATE_TO_MASTER_PERCENT); 0 for none. See Threat.FromDamage.

@@ -47,6 +47,13 @@ namespace Rasa.Game
         /// </summary>
         internal bool AwaitingMapLoaded { get; set; }
 
+        /// <summary>
+        /// EnableDevCommands has gone to this connection. What it switches on lives in the client
+        /// process, which a map change or a trip to the character screen does not restart, so it
+        /// is sent once; see MapChannelManager.MapLoaded.
+        /// </summary>
+        internal bool DevCommandsSent { get; set; }
+
         public ClientState State { get; set; }
         public Manifestation Player = new();
         public Movement Movement { get; set; }

@@ -342,6 +342,13 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>The account level whose clients get EnableDevCommands when they enter the world.</summary>
+        public const GmLevel DevCommandsLevel = GmLevel.GameMaster;
+
+        /// <summary>Whether this client is to get EnableDevCommands now: a GM's, not sent it yet.</summary>
+        public static bool ShouldEnableDevCommands(Client client) =>
+            client?.AccountEntry != null && !client.DevCommandsSent && client.AccountEntry.Level >= (byte)DevCommandsLevel;
+
         public void MapLoaded(Client client)
         {
             // Only in answer to a Wonkavate, and once for each. Nothing was checked, and this is
@@ -424,6 +431,14 @@ namespace Rasa.Managers
             // would be stuck reading about server data they cannot fix.
             if (client.AccountEntry != null && client.AccountEntry.Level >= (byte)GmLevel.Observer)
                 MapErrorManager.Instance.SendTo(client);
+
+            // A GM's client gets its developer commands, once per connection: see
+            // EnableDevCommandsPacket for what a client needs to do anything with it.
+            if (ShouldEnableDevCommands(client))
+            {
+                client.CallMethod(SysEntity.ClientMethodId, new EnableDevCommandsPacket());
+                client.DevCommandsSent = true;
+            }
 
             CellManager.Instance.AddToWorld(client); // will introduce the player to all clients, including the current owner
 

@@ -836,6 +836,60 @@ namespace Rasa.Managers
             return (int)balance;
         }
 
+        /// <summary>
+        /// Takes a Logos out of the character's Tabula: the list, the character_logos row, and the
+        /// client's Tabula through LogosStoneRemoved. Every copy goes - the list could hold one
+        /// twice before CharacterUpdate.Logos refused a second add - and the client is told once per
+        /// copy, since it removes one occurrence per message. Nothing else is told: the server's
+        /// ability check and the LogosStoneTabula sent on map entry both read the list.
+        ///
+        /// Players never lose a Logos in play; this is for the GM's .removelogos. Returns how many
+        /// copies went, 0 if the character did not have it.
+        /// </summary>
+        public int RemoveLogos(Client client, uint logosId)
+        {
+            var player = client?.Player;
+
+            if (player == null)
+                return 0;
+
+            var copies = player.Logos.RemoveAll(id => id == logosId);
+
+            if (copies == 0)
+                return 0;
+
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+                unitOfWork.CharacterLogoses.DeleteLogos(player.Id, logosId);
+
+            for (var i = 0; i < copies; i++)
+                client.CallMethod(player.EntityId, new LogosStoneRemovedPacket(logosId));
+
+            return copies;
+        }
+
+        /// <summary>
+        /// Empties the character's Tabula, as <see cref="RemoveLogos"/> for every Logos in it.
+        /// Returns how many Logos went.
+        /// </summary>
+        public int RemoveAllLogos(Client client)
+        {
+            var player = client?.Player;
+
+            if (player == null || player.Logos.Count == 0)
+                return 0;
+
+            var held = player.Logos.ToList();
+            player.Logos.Clear();
+
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+                unitOfWork.CharacterLogoses.DeleteAllLogos(player.Id);
+
+            foreach (var logosId in held)
+                client.CallMethod(player.EntityId, new LogosStoneRemovedPacket(logosId));
+
+            return held.Distinct().Count();
+        }
+
         public void UpdateCharacter(Client client, CharacterUpdate job, object value = null)
         {
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
@@ -888,6 +942,11 @@ namespace Rasa.Managers
                     break;
 
                 case CharacterUpdate.Logos:
+                    // Once each. A second add put the Logos in the list twice, failed the insert on
+                    // the (character_id, logos_id) key, and had the client append it again.
+                    if (client.Player.Logos.Contains((uint)value))
+                        break;
+
                     client.Player.Logos.Add((uint)value);
                     unitOfWork.CharacterLogoses.SetLogos(client.Player.Id, (uint)value);
                     client.CallMethod(client.Player.EntityId, new LogosStoneAddedPacket((uint)value));

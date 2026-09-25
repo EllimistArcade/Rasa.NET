@@ -51,9 +51,9 @@ namespace Rasa.Managers
          *  - JoinFriendCancelled
          *  - CannotJoin
          *  - ForceConverse
-         *  - LogosStoneTabula
-         *  - LogosStoneAdded
-         *  - LogosStoneRemoved
+         *  - LogosStoneTabula                 => implemented
+         *  - LogosStoneAdded                  => implemented
+         *  - LogosStoneRemoved                => implemented (.removelogos)
          *  - ShowHelmetChanged                => implemented
          *  - Titles
          *  - TitleChanged

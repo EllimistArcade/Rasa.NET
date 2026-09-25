@@ -175,6 +175,7 @@ namespace Rasa.Managers
             RegisterCommand(".givecredits", GmLevel.Admin, GiveCreditsCommand);
             RegisterCommand(".giveitem", GmLevel.Admin, GiveItemCommand);
             RegisterCommand(".givelogos", GmLevel.Admin, GiveLogosCommand);
+            RegisterCommand(".removelogos", GmLevel.Admin, RemoveLogosCommand);
             RegisterCommand(".givepads", GmLevel.Admin, GivePadsCommand);
             RegisterCommand(".givexp", GmLevel.Admin, GiveXpCommand);
             RegisterCommand(".setlevel", GmLevel.Admin, SetLevelCommand);
@@ -1301,18 +1302,67 @@ namespace Rasa.Managers
             CommunicatorManager.Instance.SystemMessage(_client, $"{given} dropship pad{(given == 1 ? "" : "s")} gained; step onto a pad to see them.");
         }
 
+        /// <summary>
+        /// .givelogos logosId: puts a Logos in your own Tabula. Only a Logos the client knows
+        /// (LogosStones.KnownLogosIds) - any other id was taken, saved and announced as a missing
+        /// translation - and only one you do not already have.
+        /// </summary>
         private void GiveLogosCommand(string[] parts)
         {
-            if (parts.Length == 1)
+            if (parts.Length != 2 || !uint.TryParse(parts[1], out var logosId))
             {
                 CommunicatorManager.Instance.SystemMessage(_client, "usage: .givelogos logosId");
                 return;
             }
-            if (parts.Length == 2)
-                if (uint.TryParse(parts[1], out uint logosId))
-                    CharacterManager.Instance.UpdateCharacter(_client, CharacterUpdate.Logos, logosId);
 
-            return;
+            if (!LogosStones.IsKnownLogos(logosId))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"There is no Logos {logosId}: the client's ids run from 1 to 408, with gaps.");
+                return;
+            }
+
+            if (_client.Player.Logos.Contains(logosId))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"Logos {logosId} is already in your Tabula.");
+                return;
+            }
+
+            CharacterManager.Instance.UpdateCharacter(_client, CharacterUpdate.Logos, logosId);
+        }
+
+        /// <summary>
+        /// .removelogos logosId|all: takes a Logos, or every Logos, out of your own Tabula - the
+        /// character's list, its saved rows and the client's Tabula (LogosStoneRemoved). Players
+        /// never lose a Logos in play; this is for testing shrines and stones from scratch, and for
+        /// putting right a Tabula a GM got wrong.
+        /// </summary>
+        private void RemoveLogosCommand(string[] parts)
+        {
+            if (parts.Length != 2)
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "usage: .removelogos logosId|all");
+                return;
+            }
+
+            if (string.Equals(parts[1], "all", StringComparison.OrdinalIgnoreCase))
+            {
+                var removed = CharacterManager.Instance.RemoveAllLogos(_client);
+
+                CommunicatorManager.Instance.SystemMessage(_client,
+                    removed == 0 ? "Your Tabula is already empty." : $"Removed all {removed} Logos from your Tabula.");
+                return;
+            }
+
+            if (!uint.TryParse(parts[1], out var logosId))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "usage: .removelogos logosId|all");
+                return;
+            }
+
+            CommunicatorManager.Instance.SystemMessage(_client,
+                CharacterManager.Instance.RemoveLogos(_client, logosId) == 0
+                    ? $"Logos {logosId} is not in your Tabula."
+                    : $"Removed Logos {logosId} from your Tabula.");
         }
 
         private void GiveXpCommand(string[] parts)

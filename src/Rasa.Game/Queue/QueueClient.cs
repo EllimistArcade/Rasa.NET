@@ -31,6 +31,9 @@ namespace Rasa.Queue
         /// <summary>When the handoff was sent; the slot it holds is given up if nobody arrives.</summary>
         public DateTime RedirectTime { get; private set; }
 
+        /// <summary>When the connection was accepted; a handshake that has not finished in time is closed.</summary>
+        public DateTime ConnectedTime { get; } = DateTime.Now;
+
         public QueueClient(QueueManager manager, LengthedSocket socket)
         {
             Manager = manager;
@@ -96,8 +99,26 @@ namespace Rasa.Queue
 
                     loginPacket.Read(data.GetReader());
 
+                    // The account and key have to be a redirect the auth server has sent this
+                    // game server, still waiting to be taken up at the world port. Nothing was
+                    // checked: any connection could queue under any account id, hold a place and
+                    // then a slot in the player count, and keep that account's real redirect
+                    // session alive for as long as it stayed connected. The session is only read
+                    // here; the world login still consumes it.
+                    if (!Manager.Server.HasPendingLogin(loginPacket.UserId, loginPacket.OneTimeKey))
+                    {
+                        Logger.WriteLog(LogType.Security, $"Queue login from {Socket.RemoteAddress} for account {loginPacket.UserId} has no matching redirect session; closing.");
+                        Close();
+                        return;
+                    }
+
                     UserId = loginPacket.UserId;
                     OneTimeKey = loginPacket.OneTimeKey;
+
+                    // One place in the queue per account: an earlier connection for it that has
+                    // not reached the world yet is a client that reconnected, or a copy.
+                    Manager.CloseEarlierConnections(this);
+
                     SetState(QueueState.InQueue);
 
                     Manager.Enqueue(this);

@@ -405,6 +405,20 @@ namespace Rasa.Game
             return entry;
         }
 
+        /// <summary>
+        /// Whether the auth server has sent a redirect for this account with this key that has
+        /// not expired and not been taken up at the world port. Read only: AuthenticateClient is
+        /// what consumes it.
+        /// </summary>
+        public bool HasPendingLogin(uint accountId, uint oneTimeKey)
+        {
+            lock (IncomingClients)
+                return IncomingClients.TryGetValue(accountId, out var entry)
+                       && entry != null
+                       && entry.OneTimeKey == oneTimeKey
+                       && entry.ExpireTime >= DateTime.Now;
+        }
+
         public bool IsBanned(uint accountId)
         {
             lock (_lockedAccounts)

@@ -42,6 +42,23 @@ namespace Rasa.Queue
         private static readonly TimeSpan RedirectTimeout = TimeSpan.FromSeconds(60);
 
         /// <summary>
+        /// How long a connection has to get through the key exchange and the queue login. The real
+        /// client sends both as soon as it connects. A connection that has done neither holds a
+        /// receive buffer from the pool the world port draws on too, and used to hold it for as
+        /// long as it stayed open.
+        /// </summary>
+        private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Open queue connections allowed from one address. Generous for players sharing an
+        /// address; small against the thousands it takes to empty the shared buffer pool.
+        /// </summary>
+        private const int MaxConnectionsPerAddress = 32;
+
+        private long _nextRefusalLogTick;
+        private int _refusalsSinceLog;
+
+        /// <summary>
         /// The account has logged in at the world port: its queue connection, if still open,
         /// stops counting as a slot.
         /// </summary>
@@ -72,6 +89,40 @@ namespace Rasa.Queue
                 Logger.WriteLog(LogType.Network, $"Queue client for account {client.UserId} was handed off {RedirectTimeout.TotalSeconds:F0} s ago and never logged in; closing it.");
                 client.Close();
             }
+        }
+
+        /// <summary>Closes connections that have not finished the handshake within HandshakeTimeout.</summary>
+        private void ExpireHandshakes()
+        {
+            List<QueueClient> expired;
+            var cutoff = DateTime.Now - HandshakeTimeout;
+
+            lock (Clients)
+                expired = Clients.Where(c => (c.State == QueueState.Authenticating || c.State == QueueState.Authenticated)
+                                             && c.ConnectedTime < cutoff).ToList();
+
+            if (expired.Count > 0)
+                Logger.WriteLog(LogType.Network, $"Closing {expired.Count} queue connection(s) that did not log in within {HandshakeTimeout.TotalSeconds:F0} s.");
+
+            // QueueClient.Close removes the client from Clients, so close outside the lock.
+            foreach (var client in expired)
+                client.Close();
+        }
+
+        /// <summary>
+        /// Closes the other connections for the same account that are still waiting - in the queue
+        /// or handed off - so an account holds one place, and one slot, at a time.
+        /// </summary>
+        public void CloseEarlierConnections(QueueClient current)
+        {
+            List<QueueClient> earlier;
+
+            lock (Clients)
+                earlier = Clients.Where(c => c != current && c.UserId == current.UserId
+                                             && (c.State == QueueState.InQueue || c.State == QueueState.Redirecting)).ToList();
+
+            foreach (var client in earlier)
+                client.Close();
         }
 
         /// <summary>Closes every queue connection belonging to an account.</summary>
@@ -121,8 +172,37 @@ namespace Rasa.Queue
         {
             Socket.AcceptAsync();
 
+            var address = socket.RemoteAddress;
+
             lock (Clients)
-                Clients.Add(new QueueClient(this, socket));
+            {
+                if (Clients.Count(c => address.Equals(c.Socket.RemoteAddress)) < MaxConnectionsPerAddress)
+                {
+                    Clients.Add(new QueueClient(this, socket));
+                    return;
+                }
+            }
+
+            socket.Close();
+            ReportRefusal(address);
+        }
+
+        /// <summary>
+        /// One line for the first refusal and then at most one every five seconds with the count,
+        /// since a flood of connections is exactly when a line apiece would hurt.
+        /// </summary>
+        private void ReportRefusal(IPAddress address)
+        {
+            var now = Environment.TickCount64;
+            var count = System.Threading.Interlocked.Increment(ref _refusalsSinceLog);
+
+            if (now < System.Threading.Interlocked.Read(ref _nextRefusalLogTick))
+                return;
+
+            System.Threading.Interlocked.Exchange(ref _nextRefusalLogTick, now + 5000);
+            System.Threading.Interlocked.Exchange(ref _refusalsSinceLog, 0);
+
+            Logger.WriteLog(LogType.Security, $"Refused a queue connection from {address}: {MaxConnectionsPerAddress} already open from it ({count} refused since the last of these).");
         }
 
         public void Disconnect(QueueClient client)
@@ -199,6 +279,7 @@ namespace Rasa.Queue
 
         public void Update(int freeSlots)
         {
+            ExpireHandshakes();
             ExpireRedirects();
 
             if (QueuedClients == 0)

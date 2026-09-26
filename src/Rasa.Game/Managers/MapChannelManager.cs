@@ -169,6 +169,42 @@ namespace Rasa.Managers
             Timer.Add("Regenerate", 1000, true, null);
         }
 
+        private readonly Dictionary<string, long> _workerFaultQuietUntil = new();
+        private readonly Dictionary<string, int> _workerFaultsSinceLog = new();
+
+        /// <summary>
+        /// Runs one worker so that its failure costs only itself. The world tick is a chain of
+        /// these, and one throwing used to abandon everything after it - every other worker on that
+        /// map and every map after it - on each tick it kept throwing. A fault is logged in full
+        /// the first time, then at most once a minute per worker with a count.
+        /// </summary>
+        private void Guard(string worker, MapChannel mapChannel, Action work)
+        {
+            try
+            {
+                work();
+            }
+            catch (Exception e)
+            {
+                var now = Environment.TickCount64;
+                var faults = (_workerFaultsSinceLog.TryGetValue(worker, out var n) ? n : 0) + 1;
+
+                if (_workerFaultQuietUntil.TryGetValue(worker, out var quietUntil) && now < quietUntil)
+                {
+                    _workerFaultsSinceLog[worker] = faults;
+                    return;
+                }
+
+                var where = mapChannel == null ? "" : $" on map {mapChannel.MapInfo.MapContextId}";
+                var repeat = faults > 1 ? $" ({faults} faults since the last of these)" : "";
+
+                Logger.WriteLog(LogType.Error, $"{worker}{where} threw{repeat}: {e}");
+
+                _workerFaultsSinceLog[worker] = 0;
+                _workerFaultQuietUntil[worker] = now + 60000;
+            }
+        }
+
         public void MapChannelWorker(long delta)
         {
             Timer.Update(delta);
@@ -178,10 +214,10 @@ namespace Rasa.Managers
             // Server-wide lists, ticked once. These used to run inside the per-map loop below,
             // guarded by that map having players, so with N populated maps every auto-fire
             // timer and every dropship advanced N times per tick.
-            DynamicObjectManager.Instance.DropshipsWorker(delta);
+            Guard("DynamicObjectManager.DropshipsWorker", null, () => DynamicObjectManager.Instance.DropshipsWorker(delta));
 
             if (Timer.IsTriggered("AutoFire"))
-                ManifestationManager.Instance.AutoFireTimerDoWork(delta);
+                Guard("ManifestationManager.AutoFireTimerDoWork", null, () => ManifestationManager.Instance.AutoFireTimerDoWork(delta));
 
             foreach (var t in MapChannelArray)
             {
@@ -190,7 +226,7 @@ namespace Rasa.Managers
                 mapChannel.MapChannelElapsed += delta;
 
                 // A /killmap asked for since the last tick: done here, between thinks.
-                MapReset.Worker(mapChannel);
+                Guard("MapReset.Worker", mapChannel, () => MapReset.Worker(mapChannel));
 
                 if (Timer.IsTriggered("CheckForLogingClients"))
                     if (mapChannel.QueuedClients.Count > 0)
@@ -206,114 +242,114 @@ namespace Rasa.Managers
                 {
                     // Rushing Blow: the charging players carried a step on, every tick, before
                     // the blows whose windup is up are resolved.
-                    AbilityManager.Instance.ChargeWorker(mapChannel);
+                    Guard("AbilityManager.ChargeWorker", mapChannel, () => AbilityManager.Instance.ChargeWorker(mapChannel));
 
                     // Kael rushing blow: the blows whose charge is over.
-                    KaelRushingBlow.Worker(mapChannel);
+                    Guard("KaelRushingBlow.Worker", mapChannel, () => KaelRushingBlow.Worker(mapChannel));
 
                     // Creature bombs, death blasts and self-destructs whose time has come.
-                    CreatureBombs.Worker(mapChannel);
+                    Guard("CreatureBombs.Worker", mapChannel, () => CreatureBombs.Worker(mapChannel));
 
                     // Creature heals, repairs and revives whose windup is up.
-                    CreatureSupport.Worker(mapChannel);
+                    Guard("CreatureSupport.Worker", mapChannel, () => CreatureSupport.Worker(mapChannel));
 
                     // Summoned turrets and pets whose time is up; grubs out of their cocoons.
-                    CreatureSummons.Worker(mapChannel);
+                    Guard("CreatureSummons.Worker", mapChannel, () => CreatureSummons.Worker(mapChannel));
 
                     // Linkers' channels whose windup is done, and the boosts that have run out.
-                    CreatureBuffs.Worker(mapChannel);
+                    Guard("CreatureBuffs.Worker", mapChannel, () => CreatureBuffs.Worker(mapChannel));
 
                     // Creature actions that are not missiles, whose windup is done.
-                    CreatureWindups.Worker(mapChannel);
+                    Guard("CreatureWindups.Worker", mapChannel, () => CreatureWindups.Worker(mapChannel));
 
                     // Miasmas whose time as a cloud is up coalesce.
-                    CreatureMiasma.Worker(mapChannel);
+                    Guard("CreatureMiasma.Worker", mapChannel, () => CreatureMiasma.Worker(mapChannel));
 
                     // Crab Mines: seeking, running, going off.
-                    AbilityManager.Instance.CrabMineWorker(mapChannel);
+                    Guard("AbilityManager.CrabMineWorker", mapChannel, () => AbilityManager.Instance.CrabMineWorker(mapChannel));
 
                     // Reality Ripper: taking creatures in, and closing.
-                    AbilityManager.Instance.RealityRipperWorker(mapChannel);
+                    Guard("AbilityManager.RealityRipperWorker", mapChannel, () => AbilityManager.Instance.RealityRipperWorker(mapChannel));
 
                     // Trap: shooting, drawing the hate, running out.
-                    AbilityManager.Instance.TrapWorker(mapChannel);
+                    Guard("AbilityManager.TrapWorker", mapChannel, () => AbilityManager.Instance.TrapWorker(mapChannel));
 
-                    ActorActionManager.Instance.DoWork(mapChannel, delta);
-                    MissileManager.Instance.DoWork(mapChannel, delta);
-                    BehaviorManager.Instance.MapChannelThink(mapChannel, delta);
+                    Guard("ActorActionManager.DoWork", mapChannel, () => ActorActionManager.Instance.DoWork(mapChannel, delta));
+                    Guard("MissileManager.DoWork", mapChannel, () => MissileManager.Instance.DoWork(mapChannel, delta));
+                    Guard("BehaviorManager.MapChannelThink", mapChannel, () => BehaviorManager.Instance.MapChannelThink(mapChannel, delta));
 
                     // despawn timers, and minions whose master has gone
-                    MinionManager.Instance.Worker(mapChannel, delta);
+                    Guard("MinionManager.Worker", mapChannel, () => MinionManager.Instance.Worker(mapChannel, delta));
 
                     // players whose combat timer has run out
-                    ManifestationManager.Instance.CombatWorker(mapChannel);
+                    Guard("ManifestationManager.CombatWorker", mapChannel, () => ManifestationManager.Instance.CombatWorker(mapChannel));
 
                     // CellManager worker
                     if (Timer.IsTriggered("CellUpdateVisibility"))
-                        CellManager.Instance.DoWork(mapChannel);
+                        Guard("CellManager.DoWork", mapChannel, () => CellManager.Instance.DoWork(mapChannel));
 
                     // check for objects
                     if (Timer.IsTriggered("CheckForObjects"))
-                        DynamicObjectManager.Instance.DynamicObjectWorker(mapChannel, delta);
+                        Guard("DynamicObjectManager.DynamicObjectWorker", mapChannel, () => DynamicObjectManager.Instance.DynamicObjectWorker(mapChannel, delta));
 
                     // check for creatures
                     if (Timer.IsTriggered("CheckForCreatures"))
-                        SpawnPoolManager.Instance.SpawnPoolWorker(mapChannel, delta);
+                        Guard("SpawnPoolManager.SpawnPoolWorker", mapChannel, () => SpawnPoolManager.Instance.SpawnPoolWorker(mapChannel, delta));
 
                     // check for mapTriggers
                     if (Timer.IsTriggered("CheckForMapTriggers"))
                     {
-                        MapTriggerManager.Instance.TriggersProximityWorker(mapChannel);
+                        Guard("MapTriggerManager.TriggersProximityWorker", mapChannel, () => MapTriggerManager.Instance.TriggersProximityWorker(mapChannel));
 
                         // zone borders and instance doors: anyone standing in one leaves the map
-                        MapLinkManager.Instance.Worker(mapChannel);
+                        Guard("MapLinkManager.Worker", mapChannel, () => MapLinkManager.Instance.Worker(mapChannel));
 
                         // ambient/music/sky/minimap regions: tell whoever changed region
-                        RegionManager.Instance.Worker(mapChannel);
+                        Guard("RegionManager.Worker", mapChannel, () => RegionManager.Instance.Worker(mapChannel));
                     }
 
                     // check for effects (buffs)
                     if (Timer.IsTriggered("ClientEffectUpdate"))
                     {
-                        GameEffectManager.Instance.DoWork(mapChannel, delta);
+                        Guard("GameEffectManager.DoWork", mapChannel, () => GameEffectManager.Instance.DoWork(mapChannel, delta));
 
                         // Fire Support's beacons: their blasts and napalm pools.
-                        AbilityManager.Instance.FireSupportWorker(mapChannel);
+                        Guard("AbilityManager.FireSupportWorker", mapChannel, () => AbilityManager.Instance.FireSupportWorker(mapChannel));
 
                         // Scatterbombs: the spent bombs are taken away once their blasts have played.
-                        AbilityManager.Instance.ScatterbombWorker(mapChannel);
+                        Guard("AbilityManager.ScatterbombWorker", mapChannel, () => AbilityManager.Instance.ScatterbombWorker(mapChannel));
 
                         // Cadaver Immolation: the bodies whose delay is up.
-                        AbilityManager.Instance.CorpseWorker(mapChannel);
+                        Guard("AbilityManager.CorpseWorker", mapChannel, () => AbilityManager.Instance.CorpseWorker(mapChannel));
 
                         // Hortimonculus: the plants' healing, protection and decay.
-                        AbilityManager.Instance.HortimonculusWorker(mapChannel);
+                        Guard("AbilityManager.HortimonculusWorker", mapChannel, () => AbilityManager.Instance.HortimonculusWorker(mapChannel));
 
                         // Reanimation: the risen whose master has gone, and the spent ones.
-                        AbilityManager.Instance.ReanimationWorker(mapChannel);
+                        Guard("AbilityManager.ReanimationWorker", mapChannel, () => AbilityManager.Instance.ReanimationWorker(mapChannel));
 
                         // Spotter: the spent ones taken away, the fallen let go.
-                        AbilityManager.Instance.SpotterWorker(mapChannel);
+                        Guard("AbilityManager.SpotterWorker", mapChannel, () => AbilityManager.Instance.SpotterWorker(mapChannel));
 
                         // Mind Control: the frightened kept running, the confused turned on someone new.
-                        AbilityManager.Instance.MindControlWorker(mapChannel);
+                        Guard("AbilityManager.MindControlWorker", mapChannel, () => AbilityManager.Instance.MindControlWorker(mapChannel));
 
                         // Tactical Evasion: the smoke screens, and the marks a retreat goes back to.
-                        AbilityManager.Instance.SmokeWorker(mapChannel);
+                        Guard("AbilityManager.SmokeWorker", mapChannel, () => AbilityManager.Instance.SmokeWorker(mapChannel));
 
                         // Shield Drones: the shield raised, held over whoever is under it, and its heal.
-                        ShieldDrone.Worker(mapChannel);
+                        Guard("ShieldDrone.Worker", mapChannel, () => ShieldDrone.Worker(mapChannel));
 
                         // Amoeboids: the regurgitated children whose time is up.
-                        AmoeboidVomit.Worker(mapChannel);
+                        Guard("AmoeboidVomit.Worker", mapChannel, () => AmoeboidVomit.Worker(mapChannel));
 
                         // Falls that ended with the player standing still: no Move to end them.
-                        FallDamage.Worker(mapChannel);
+                        Guard("FallDamage.Worker", mapChannel, () => FallDamage.Worker(mapChannel));
                     }
 
                     // a second's health, armour, power and chi for everyone here
                     if (Timer.IsTriggered("Regenerate"))
-                        ActorManager.Instance.Regenerate(mapChannel);
+                        Guard("ActorManager.Regenerate", mapChannel, () => ActorManager.Instance.Regenerate(mapChannel));
 
                     // warn idle players and flag long-idle ones for removal below
                     ManifestationManager.Instance.CheckInactivity(mapChannel);

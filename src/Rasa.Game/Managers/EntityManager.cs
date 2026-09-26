@@ -179,9 +179,19 @@ namespace Rasa.Managers
             RegisteredEntities.Remove(entityId);
         }
         // Actors
+        /// <summary>
+        /// The player or creature with this id, or null. Actors holds players only - nothing else
+        /// registers there - and this used to index it directly, so every caller handed a
+        /// creature's id (a fight target, a hate list entry, a player's current target) threw
+        /// KeyNotFoundException while treating the result as possibly null. From the map worker
+        /// that cost every map the rest of its tick.
+        /// </summary>
         public Actor GetActor(ulong entityId)
         {
-            return Actors[entityId];
+            if (Actors.TryGetValue(entityId, out var actor))
+                return actor;
+
+            return Creatures.TryGetValue(entityId, out var creature) ? creature : null;
         }
 
         public void RegisterActor(ulong entityId, Actor actor)

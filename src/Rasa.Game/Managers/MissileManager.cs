@@ -320,7 +320,8 @@ namespace Rasa.Managers
         {
             var actor = EntityManager.Instance.GetActor(missile.TargetEntityId);
 
-            if (actor.State == CharacterState.Dead)
+            // Gone since the missile was launched: logged out, or off the map.
+            if (actor == null || actor.State == CharacterState.Dead)
                 return;
 
             // A creature's hit has to be one its target category allows on a player

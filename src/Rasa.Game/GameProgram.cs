@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.Threading.Tasks;
 
 using Microsoft.Extensions.Configuration;
@@ -63,7 +62,6 @@ namespace Rasa
             {
                 Console.WriteLine("Game server ended unexpectedly. Exception:");
                 Console.WriteLine(e);
-                Debugger.Break();
                 return e.HResult;
             }
         }

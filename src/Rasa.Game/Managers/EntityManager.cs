@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Diagnostics;
 
 namespace Rasa.Managers
 {
@@ -88,7 +87,10 @@ namespace Rasa.Managers
                 case EntityType.VendorItem:
                     break;
                 default:
-                    Debugger.Break();
+                    // Every EntityType the server registers is handled above; an id registered as
+                    // something else is logged and left, rather than stopping the process at a
+                    // Debugger.Break() on the map worker.
+                    Logger.WriteLog(LogType.Error, $"DestroyPhysicalEntity: entity {entityId} has unhandled type {entityType}; not freed.");
                     break;
             }
                     

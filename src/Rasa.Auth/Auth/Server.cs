@@ -80,18 +80,21 @@ namespace Rasa.Auth
         #region Configuration
         private static void ConfigReLoaded()
         {
+            // Configuration re-registers for every change and runs ConfigLoaded after this; it no
+            // longer needs a Load() from here to hear the next one.
             Logger.WriteLog(LogType.Initialize, "Config file reloaded by external change!");
-
-            // Totally reload the configuration, because it's automatic reload case can only handle one reload. Our code's bug?
-            Configuration.Load();
         }
 
         private void ConfigLoaded()
         {
             var oldConfig = Config;
 
-            Config = new Config();
-            Configuration.Bind(Config);
+            // Built and bound before it replaces the one in force: a reload runs on the file
+            // watcher's thread, and anything reading Config halfway through a Bind saw a new,
+            // empty Config with every value zero.
+            var config = new Config();
+            Configuration.Bind(config);
+            Config = config;
 
             Logger.UpdateConfig(Config.LoggerConfig);
 

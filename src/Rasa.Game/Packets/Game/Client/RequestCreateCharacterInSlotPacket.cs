@@ -28,7 +28,7 @@ namespace Rasa.Packets.Game.Client
 
         public Dictionary<EquipmentData, AppearanceData> AppearanceData { get; } = new Dictionary<EquipmentData, AppearanceData>();
 
-        private static readonly Regex NameRegex = new Regex(@"^\w{3,20}$", RegexOptions.Compiled);
+        private static readonly Regex NameRegex = new Regex(@"^\w{3,20}\z", RegexOptions.Compiled);
 
         public override void Read(PythonReader pr)
         {

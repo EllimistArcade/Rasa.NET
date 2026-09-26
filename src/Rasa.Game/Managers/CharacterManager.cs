@@ -240,6 +240,14 @@ namespace Rasa.Managers
         /// </summary>
         private uint? InternalClone(Client client, RequestCloneCharacterToSlotPacket packet, ICharUnitOfWork unitOfWork)
         {
+            var nameResult = CheckNewName(unitOfWork, packet.CharacterName);
+
+            if (nameResult != CreateCharacterResult.Success)
+            {
+                SendCharacterCreateFailed(client, nameResult);
+                return null;
+            }
+
             var characterEntry = unitOfWork.Characters.Create(client.AccountEntry, packet.SlotNum,
                 packet.CharacterName,
                 (byte)packet.RaceId,
@@ -509,6 +517,28 @@ namespace Rasa.Managers
             return true;
         }
 
+        /// <summary>
+        /// A name being given out now, at creation or cloning: the rename rules (IsValidName) and
+        /// the censor. Creation only had a \w{3,20} pattern, which took digits, underscores, any
+        /// script's letters and a trailing newline, and never asked the censor - so names could be
+        /// made that look like someone else's, or that rename would have refused.
+        /// </summary>
+        private static CreateCharacterResult CheckNewName(ICharUnitOfWork unitOfWork, string name)
+        {
+            if (!IsValidName(name, out var error))
+                return error switch
+                {
+                    PlayerMessage.PmNameTooShort => CreateCharacterResult.NameTooShort,
+                    PlayerMessage.PmNameTooLong => CreateCharacterResult.NameTooLong,
+                    _ => CreateCharacterResult.NameFormatInvalid
+                };
+
+            if (new Censor(unitOfWork.CensoredWords.GetCensoredWords()).ContainsProfanity(name))
+                return CreateCharacterResult.NameUnacceptable;
+
+            return CreateCharacterResult.Success;
+        }
+
         public static bool IsValidName(string name, out PlayerMessage error)
         {
             error = PlayerMessage.PmNameFormatInvalid;
@@ -576,6 +606,20 @@ namespace Rasa.Managers
 
         private uint? InternalCreate(Client client, RequestCreateCharacterInSlotPacket packet, ICharUnitOfWork unitOfWork)
         {
+            var nameResult = CheckNewName(unitOfWork, packet.CharacterName);
+
+            // The family name is new unless it is exactly the one the account already has, which
+            // was accepted under whatever rules were current then and is left alone.
+            if (nameResult == CreateCharacterResult.Success
+                && !string.Equals(packet.FamilyName, client.AccountEntry.FamilyName, StringComparison.Ordinal))
+                nameResult = CheckNewName(unitOfWork, packet.FamilyName);
+
+            if (nameResult != CreateCharacterResult.Success)
+            {
+                SendCharacterCreateFailed(client, nameResult);
+                return null;
+            }
+
             var changeFamilyName = false;
             if (!string.IsNullOrWhiteSpace(client.AccountEntry.FamilyName) && packet.FamilyName != client.AccountEntry.FamilyName)
             {

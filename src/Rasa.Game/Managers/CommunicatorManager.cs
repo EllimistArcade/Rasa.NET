@@ -322,12 +322,17 @@ namespace Rasa.Managers
                 return;
             }
 
-            // Family names are unique; typed names should not have to match their case.
+            // Typed names should not have to match their case. Family names are unique without
+            // case now, but accounts made before that was enforced can differ only in case, so the
+            // exact spelling wins over a case-insensitive match rather than whichever is first.
             var target = name.Length == 0
                 ? null
                 : Server.Clients.Find(c =>
-                    c.State == ClientState.Ingame &&
-                    string.Equals(c.Player.FamilyName, name, StringComparison.OrdinalIgnoreCase));
+                      c.State == ClientState.Ingame &&
+                      string.Equals(c.Player.FamilyName, name, StringComparison.Ordinal))
+                  ?? Server.Clients.Find(c =>
+                      c.State == ClientState.Ingame &&
+                      string.Equals(c.Player.FamilyName, name, StringComparison.OrdinalIgnoreCase));
 
             if (target == null)
             {

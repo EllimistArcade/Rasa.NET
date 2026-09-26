@@ -1554,7 +1554,9 @@ namespace Rasa.Managers
             string.IsNullOrEmpty(familyName)
                 ? null
                 : Server.Clients.Find(c => c.State == ClientState.Ingame && c.Player != null && c.AccountEntry != null
-                                           && string.Equals(c.Player.FamilyName, familyName, StringComparison.OrdinalIgnoreCase));
+                                           && string.Equals(c.Player.FamilyName, familyName, StringComparison.Ordinal))
+                  ?? Server.Clients.Find(c => c.State == ClientState.Ingame && c.Player != null && c.AccountEntry != null
+                                              && string.Equals(c.Player.FamilyName, familyName, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>
         /// One message to everyone in the squad who is in the world, on the party manager's own

@@ -21,6 +21,7 @@ services:
     ports:
       - "8102:8102"
       - "8001:8001"
+      - "8103:8103/udp"
     volumes:
       - ./rasachar.db:/app/rasachar.db
       - ./rasaworld.db:/app/rasaworld.db

@@ -759,6 +759,9 @@ namespace Rasa.Game
             [GameOpcode.AddFriendByName] = ("social", 1, 5),
             [GameOpcode.AddIgnore] = ("social", 1, 5),
             [GameOpcode.AddIgnoreByName] = ("social", 1, 5),
+
+            // Each join hands out a voice login token; a client only asks once per connection.
+            [GameOpcode.RequestJoinVoiceChannel] = ("voice", 1, 5),
         };
 
         private readonly Dictionary<string, (double Tokens, long Tick)> _rateBuckets = new();

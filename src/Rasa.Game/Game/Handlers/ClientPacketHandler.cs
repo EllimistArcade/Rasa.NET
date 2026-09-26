@@ -1221,6 +1221,18 @@
             PartyManager.Instance.LeaveParty(Client);
         }
 
+        [PacketHandler(GameOpcode.RequestJoinVoiceChannel)]
+        private void RequestJoinVoiceChannel(RequestJoinVoiceChannelPacket packet)
+        {
+            PartyManager.Instance.RequestJoinVoiceChannel(Client);
+        }
+
+        [PacketHandler(GameOpcode.RequestLeaveVoiceChannel)]
+        private void RequestLeaveVoiceChannel(RequestLeaveVoiceChannelPacket packet)
+        {
+            PartyManager.Instance.RequestLeaveVoiceChannel(Client);
+        }
+
         [PacketHandler(GameOpcode.KickUserFromParty)]
         private void KickUserFromParty(KickUserFromPartyPacket packet)
         {

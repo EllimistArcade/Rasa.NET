@@ -109,6 +109,7 @@ namespace Rasa.Game
             CommandProcessor.RegisterCommand("perf", ProcessPerfCommand);
             CommandProcessor.RegisterCommand("maperrors", ProcessMapErrorsCommand);
             CommandProcessor.RegisterCommand("kb", ProcessKbCommand);
+            CommandProcessor.RegisterCommand("voice", ProcessVoiceCommand);
         }
 
         ~Server()
@@ -140,7 +141,15 @@ namespace Rasa.Game
 
             if (!KnowledgeBaseManager.Instance.Load(Config.GameDataConfig?.KnowledgeBaseFile, out var kbProblem))
                 Logger.WriteLog(LogType.Initialize, $"Knowledge base: {kbProblem}. SearchKB will answer with nothing.");
+
+            // A reload turns voice on or off, or moves it, without a restart. The first load comes
+            // before the world is up; Start opens the voice port with the others.
+            if (_voiceApplied)
+                Voice.VoiceServer.Instance.Apply(Config.VoiceConfig, Config.GameConfig?.PublicAddress);
         }
+
+        /// <summary>Set once Start has applied VoiceConfig, so reloads apply it too.</summary>
+        private bool _voiceApplied;
         #endregion
 
         public void Disconnect(Client client)
@@ -361,6 +370,13 @@ namespace Rasa.Game
 
             Logger.WriteLog(LogType.Network, "*** Listening for clients on port {0}", Config.GameConfig.Port);
 
+            // Squad voice chat. A voice port that cannot be bound leaves voice off, not the world.
+            _voiceApplied = true;
+            Voice.VoiceServer.Instance.Apply(Config.VoiceConfig, Config.GameConfig.PublicAddress);
+
+            if (Config.VoiceConfig?.Enabled != true)
+                Logger.WriteLog(LogType.Initialize, "Squad voice chat is off (VoiceConfig.Enabled).");
+
             Loop.Start();
 
             SetupCommunicator();
@@ -572,6 +588,8 @@ namespace Rasa.Game
 
             ListenerSocket?.Close();
             ListenerSocket = null;
+
+            Voice.VoiceServer.Instance.Stop();
 
             Loop.Stop();
         }
@@ -1035,6 +1053,13 @@ namespace Rasa.Game
                 foreach (var error in errors.ErrorsFor(mapContextId))
                     Logger.WriteLog(LogType.Command, $"   {error}");
             }
+        }
+
+        /// <summary>voice: whether voice chat is on, and who is in which squad's group.</summary>
+        private void ProcessVoiceCommand(string[] parts)
+        {
+            foreach (var line in Voice.VoiceServer.Instance.Describe())
+                Logger.WriteLog(LogType.Command, line);
         }
 
         private void ProcessPerfCommand(string[] parts)

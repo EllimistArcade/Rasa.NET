@@ -64,10 +64,14 @@ namespace Rasa.Managers
          * - DisplayPartyMessage(msgId, args = { })              => implemented
          * - PartyMemberRoll(itemClassId, winnerUserId, rolls, isGreedRoll)
          * - PartyMemberLoot(userId, creatureEntityId, lootClassIds, moneyAmount)
-         * - VoiceChatAvailable(isAvail)                        => implemented (always false)
-         * - PartyMemberVoiceId(userId, voiceId)
-         * - PartyMemberVoiceIds(memberList)
-         * - VoiceChatConnectInfo(serverAddr, groupId, playerId, token)
+         * - VoiceChatAvailable(isAvail)                        => implemented (VoiceConfig.Enabled)
+         * - PartyMemberVoiceId(userId, voiceId)                => implemented
+         * - PartyMemberVoiceIds(memberList)                    => implemented
+         * - VoiceChatConnectInfo(serverAddr, groupId, playerId, token) => implemented
+         *
+         *   Voice (chat messages):
+         * - RequestJoinVoiceChannel', ())                      => implemented
+         * - RequestLeaveVoiceChannel', ())                     => implemented
          */
 
         #region Singleton
@@ -108,22 +112,15 @@ namespace Rasa.Managers
         public const long HeldSpotMs = 5 * 60 * 1000;
 
         /// <summary>
-        /// Whether squad voice chat is offered. False: there is no voice server.
+        /// Whether squad voice chat is offered: VoiceConfig.Enabled, with the voice server listening.
         ///
         /// The client's voice chat is complete and native - Talkback in tabula_rasa.exe, with the
-        /// Sase 3200/6500, Speex, GSM and Clear codecs, and Sase6500_ncsoft.dll beside it - but it
-        /// talks to a voice server of its own at an address this server would have to hand it, and
-        /// no such server exists. Answering false is what keeps it dormant: the client's
-        /// g_voiceAvailable starts at 0 and only Recv_VoiceChatAvailable assigns it, so it never
-        /// sends RequestJoinVoiceChannel and never opens a session for push-to-talk to feed.
-        ///
-        /// Flipping this to true is not enough on its own. It also needs VoiceChatConnectInfo
-        /// (serverAddr, groupId, playerId, token) in answer to RequestJoinVoiceChannel, handlers for
-        /// RequestJoinVoiceChannel and RequestLeaveVoiceChannel, PartyMemberVoiceId(s) to map voice
-        /// ids onto squad members for the speaking indicators, and a Talkback voice server to point
-        /// it all at.
+        /// Sase 3200/6500, Speex, GSM and Clear codecs - and talks to a voice server at an address
+        /// this server hands it; Voice.VoiceServer is that server. False keeps the client's voice
+        /// dormant: g_voiceAvailable starts at 0 and only Recv_VoiceChatAvailable assigns it, so it
+        /// never sends RequestJoinVoiceChannel and never opens a session for push-to-talk to feed.
         /// </summary>
-        public const bool VoiceChatAvailable = false;
+        public static bool VoiceChatAvailable => Voice.VoiceServer.Instance.Available;
 
         public uint GetPartyId
         {
@@ -699,6 +696,47 @@ namespace Rasa.Managers
 
         #endregion
 
+        #region Voice chat
+
+        /// <summary>
+        /// A squad member's client asking for voice (it heard VoiceChatAvailable(true)). Answers with
+        /// where the voice server is and a login token for the squad's voice group, and makes sure
+        /// every voice-connected member can tell whose voice is whose: the voice id is the account
+        /// id, the requester gets the whole squad's and the others get the requester's.
+        /// </summary>
+        internal void RequestJoinVoiceChannel(Client client)
+        {
+            if (!InWorld(client) || !VoiceChatAvailable)
+                return;
+
+            var party = PartyOf(client);
+
+            if (party == null)
+                return;
+
+            var accountId = client.AccountEntry.Id;
+            var token = Voice.VoiceServer.Instance.IssueTicket(party.Id, accountId);
+
+            client.CallMethod(SysEntity.ClientPartyManagerId,
+                new PartyMemberVoiceIdsPacket(party.Members.Select(m => (m.UserId, m.UserId)).ToList()));
+
+            foreach (var other in OnlineClients(party))
+                if (other != client)
+                    other.CallMethod(SysEntity.ClientPartyManagerId, new PartyMemberVoiceIdPacket(accountId, accountId));
+
+            client.CallMethod(SysEntity.ClientPartyManagerId,
+                new VoiceChatConnectInfoPacket(Voice.VoiceServer.Instance.ClientAddress, party.Id, accountId, token));
+        }
+
+        /// <summary>The client's voice connection ended or could not be made. Anything left of it on the voice server goes.</summary>
+        internal void RequestLeaveVoiceChannel(Client client)
+        {
+            if (client?.AccountEntry != null)
+                Voice.VoiceServer.Instance.Leave(client.AccountEntry.Id);
+        }
+
+        #endregion
+
         #region World entry and exit
 
         /// <summary>
@@ -724,6 +762,10 @@ namespace Rasa.Managers
             }
 
             DropInvites(client.AccountEntry.Id);
+
+            // Out of the world is out of voice; the squad's own client disconnects too, but a
+            // dropped connection never says so.
+            Voice.VoiceServer.Instance.Leave(client.AccountEntry.Id);
 
             var party = FindPartyOfAccount(client.AccountEntry.Id);
 
@@ -1023,6 +1065,10 @@ namespace Rasa.Managers
             Parties.Remove(source.Id);
             FreePartyId(source.Id);
 
+            // The arrivals' clients drop their voice connection when their party id is cleared
+            // and ask to join the new squad's group with the state SendPartyState sends.
+            Voice.VoiceServer.Instance.GroupDisbanded(source.Id);
+
             foreach (var member in moving)
                 AddMemberEntry(party, member, existing);
 
@@ -1131,6 +1177,8 @@ namespace Rasa.Managers
 
             party.Members.Remove(member);
 
+            Voice.VoiceServer.Instance.Leave(member.UserId);
+
             if (member.IsOnline)
             {
                 var leaver = FindIngame(member.UserId);
@@ -1180,6 +1228,8 @@ namespace Rasa.Managers
             party.Members.Clear();
             Parties.Remove(party.Id);
             FreePartyId(party.Id);
+
+            Voice.VoiceServer.Instance.GroupDisbanded(party.Id);
 
             AdsChanged(null, former);
         }

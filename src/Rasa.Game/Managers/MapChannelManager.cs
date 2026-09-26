@@ -745,6 +745,10 @@ namespace Rasa.Managers
             // maps." Leaving the map is leaving them behind, so they are dismissed, not orphaned.
             RemovalStep(client, "dismissing minions", () => MinionManager.Instance.DismissAll(client));
 
+            // Off every waypoint, pad, station and control point's list of who is at it; nothing
+            // else takes a player who left standing on one off it.
+            RemovalStep(client, "leaving waypoints and objects", () => DynamicObjectManager.Instance.ForgetPlayer(mapChannel, client));
+
             RemovalStep(client, "leaving the cells", () => CellManager.Instance.RemoveFromWorld(client));
             RemovalStep(client, "leaving map links", () => MapLinkManager.Instance.RemovePlayer(client));
             RemovalStep(client, "leaving regions", () => RegionManager.Instance.RemovePlayer(client));

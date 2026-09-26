@@ -1145,6 +1145,58 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// Takes a player leaving the map out of every object's and trigger's list of who is at
+        /// it: waypoints and teleporters, dropship pads, control points, logos, crafting stations,
+        /// footlockers - anything with a TriggeredByPlayers or TriggeredBy.
+        ///
+        /// Those lists are left by walking away: the proximity workers drop a client whose
+        /// player is no longer near, and a use's recovery drops its user. A player who logged
+        /// out, dropped or zoned while standing on a waypoint keeps the last position they had,
+        /// so they were near it for good; the pad worker only ever tests clients still on the
+        /// map's list; and RemovePlayer cancels the queued recoveries that would have let a
+        /// station or a logos go. Each such entry kept the whole Client - manifestation,
+        /// inventory lists, packet queues, socket - alive for the rest of the process, in a list
+        /// scanned every second. Waypoints are where people log out.
+        ///
+        /// Called from RemovePlayer. It walks every object and trigger on the map, which is fine
+        /// for something that happens once per player per map change.
+        /// </summary>
+        internal void ForgetPlayer(MapChannel mapChannel, Client client)
+        {
+            if (mapChannel == null || client == null)
+                return;
+
+            static void Forget(DynamicObject obj, Client leaving)
+            {
+                obj?.TriggeredByPlayers.RemoveAll(c => c == leaving);
+            }
+
+            foreach (var obj in mapChannel.DynamicObjects)
+                Forget(obj, client);
+
+            foreach (var obj in mapChannel.Teleporters.Values)
+                Forget(obj, client);
+
+            foreach (var obj in mapChannel.ControlPoints.Values)
+                Forget(obj, client);
+
+            foreach (var obj in mapChannel.FootLockers.Values)
+                Forget(obj, client);
+
+            foreach (var obj in mapChannel.Kraftwerks.Values)
+                Forget(obj, client);
+
+            foreach (var cell in mapChannel.MapCellInfo.Cells.Values)
+            {
+                foreach (var obj in cell.DynamicObjectList)
+                    Forget(obj, client);
+
+                foreach (var trigger in cell.MapTriggers)
+                    trigger.TriggeredBy.RemoveAll(c => c == client);
+            }
+        }
+
+        /// <summary>
         /// Whether the player currently has a waypoint window open on the server's side: the
         /// proximity workers add a client to a teleporter's TriggeredByPlayers or a dropship
         /// pad's TriggeredBy while it is within range, and take it out again when it leaves.
@@ -1209,6 +1261,13 @@ namespace Rasa.Managers
             for (var i = obj.TriggeredByPlayers.Count - 1; i >= 0; i--)
             {
                 var client = obj.TriggeredByPlayers[i];
+
+                // A connection that has gone is not at anything, wherever its player was left.
+                if (client.State == ClientState.Disconnected)
+                {
+                    obj.TriggeredByPlayers.RemoveAt(i);
+                    continue;
+                }
 
                 if (!client.Player.IsNear2m(obj))
                 {

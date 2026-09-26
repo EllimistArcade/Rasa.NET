@@ -537,6 +537,20 @@ namespace Rasa.Managers
             ActionBlocks.SetAll(client, ActionBlocks.Unimplemented, blocked, send);
         }
 
+        /// <summary>
+        /// Whether the tables know this action at this level (0 meaning no particular level): what
+        /// an ability drawer slot may hold. Nothing checked the drawer, so any id and level were
+        /// saved and shown to everyone who met the player.
+        /// </summary>
+        public bool IsKnownAction(long actionId, long level)
+        {
+            if (actionId <= 0 || actionId > uint.MaxValue || level < 0 || level > uint.MaxValue)
+                return false;
+
+            return _actions.TryGetValue((ActionId)actionId, out var action)
+                   && (level == 0 || action.Levels.ContainsKey((uint)level));
+        }
+
         /// <summary>The action's name from the tables, or null for an id they do not have.</summary>
         public string ActionName(ActionId actionId) => _actions.TryGetValue(actionId, out var action) ? action.Name : null;
 

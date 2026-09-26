@@ -1444,7 +1444,21 @@ namespace Rasa.Managers
 
         public void RequestSetAbilitySlot(Client client, RequestSetAbilitySlotPacket packet)
         {
-            // todo: do we need to check if ability is available ??
+            // Every call wrote a character_ability_drawer row for whatever slot, ability id and
+            // level it named, and the whole drawer goes to everyone who meets the player. The slot
+            // has to be one of the drawer's, and anything put in it an action the tables know.
+            if (packet.SlotId < 0 || packet.SlotId >= AbilityDrawerSlots)
+            {
+                Logger.WriteLog(LogType.Security, $"{client.Player.Name} asked to set ability drawer slot {packet.SlotId}; there are {AbilityDrawerSlots}. Refused.");
+                return;
+            }
+
+            if (packet.AbilityId != 0 && !AbilityManager.Instance.IsKnownAction(packet.AbilityId, packet.AbilityLevel))
+            {
+                Logger.WriteLog(LogType.Security, $"{client.Player.Name} asked to put action {packet.AbilityId} at level {packet.AbilityLevel} in drawer slot {packet.SlotId}, which the tables do not have. Refused.");
+                return;
+            }
+
             if (packet.AbilityId == 0)
             {
                 // remove ability is used
@@ -1474,9 +1488,18 @@ namespace Rasa.Managers
 
         public void RequestSwapAbilitySlots(Client client, RequestSwapAbilitySlotsPacket packet)
         {
+            // Both ends in the drawer, and something to move: an empty or unknown source slot
+            // threw here, and any slot number was written to the database.
+            if (packet.FromSlot < 0 || packet.FromSlot >= AbilityDrawerSlots || packet.ToSlot < 0 || packet.ToSlot >= AbilityDrawerSlots
+                || packet.FromSlot == packet.ToSlot)
+                return;
+
             AbilityDrawerData toSlot;
             var abilities = client.Player.Abilities;
-            var fromSlot = abilities[packet.FromSlot];
+
+            if (!abilities.TryGetValue(packet.FromSlot, out var fromSlot))
+                return;
+
             abilities.TryGetValue(packet.ToSlot, out toSlot);
             if (toSlot == null)
             {
@@ -3138,16 +3161,53 @@ namespace Rasa.Managers
             WeaponReady(client, false);
         }
 
+        /// <summary>
+        /// Bounds on what an options save may write. Each distinct option id is a row kept for the
+        /// account or character for good, and the ids and values are the client's; the client's own
+        /// option ids are all well under this, and the value column is varchar(50), which Sqlite
+        /// does not enforce.
+        /// </summary>
+        private const uint MaxOptionId = 1024;
+        private const int MaxOptionValueLength = 50;
+        private const int MaxOptionsPerSave = 512;
+
+        /// <summary>
+        /// The options worth saving from one packet: ids in range, values that fit, one per id (the
+        /// last wins - two of the same id in one save would be two inserts of one key), and no more
+        /// than MaxOptionsPerSave. Null when the packet is refused outright.
+        /// </summary>
+        private static List<(uint Id, string Value)> SaneOptions(Client client, IEnumerable<(uint Id, string Value)> options, int count, string what)
+        {
+            if (count > MaxOptionsPerSave)
+            {
+                Logger.WriteLog(LogType.Security, $"{client.AccountEntry?.Id} sent {what} with {count} options (limit {MaxOptionsPerSave}); refused.");
+                return null;
+            }
+
+            var byId = new Dictionary<uint, string>();
+
+            foreach (var (id, value) in options)
+                if (id != 0 && id <= MaxOptionId && (value?.Length ?? 0) <= MaxOptionValueLength)
+                    byId[id] = value ?? string.Empty;
+
+            return byId.Select(kv => (kv.Key, kv.Value)).ToList();
+        }
+
         public void SaveCharacterOptions(Client client, SaveCharacterOptionsPacket packet)
         {
             if (packet.OptionsList.Count == 0)
                 return;
 
+            var options = SaneOptions(client, packet.OptionsList.Select(o => ((uint)o.OptionId, o.Value)), packet.OptionsList.Count, "SaveCharacterOptions");
+
+            if (options == null)
+                return;
+
             client.Player.CharacterOptions = packet.OptionsList;
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
-            foreach (var option in client.Player.CharacterOptions)
-                unitOfWork.CharacterOptions.AddOrUpdate(client.Player.Id, (uint)option.OptionId, option.Value);
+            foreach (var (id, value) in options)
+                unitOfWork.CharacterOptions.AddOrUpdate(client.Player.Id, id, value);
 
             // AddOrUpdate only stages the rows; without this they were thrown away on dispose,
             // and every option the client saved was back to its default at the next login.
@@ -3157,11 +3217,16 @@ namespace Rasa.Managers
         // maybe move this to other manager becose it's account related
         public void SaveUserOptions(Client client, SaveUserOptionsPacket packet)
         {
+            var options = SaneOptions(client, packet.OptionsList.Select(o => ((uint)o.OptionId, o.Value)), packet.OptionsList.Count, "SaveUserOptions");
+
+            if (options == null)
+                return;
+
             client.UserOptions = packet.OptionsList;
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
-            foreach (var option in client.UserOptions)
-                unitOfWork.UserOptions.AddOrUpdate(client.AccountEntry.Id, (uint)option.OptionId, option.Value);
+            foreach (var (id, value) in options)
+                unitOfWork.UserOptions.AddOrUpdate(client.AccountEntry.Id, id, value);
 
             unitOfWork.Complete();
         }

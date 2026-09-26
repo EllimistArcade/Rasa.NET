@@ -685,6 +685,12 @@ namespace Rasa.Game
             [GameOpcode.ChannelChat] = ("chat", 3, 8),
             [GameOpcode.Whisper] = ("chat", 3, 8),
             [GameOpcode.Reply] = ("chat", 3, 8),
+
+            // Not broadcasts, but each one is a synchronous database write on the loop thread.
+            [GameOpcode.SaveUserOptions] = ("options", 1, 5),
+            [GameOpcode.SaveCharacterOptions] = ("options", 1, 5),
+            [GameOpcode.RequestSetAbilitySlot] = ("drawer", 10, 30),
+            [GameOpcode.RequestSwapAbilitySlots] = ("drawer", 10, 30),
         };
 
         private readonly Dictionary<string, (double Tokens, long Tick)> _rateBuckets = new();

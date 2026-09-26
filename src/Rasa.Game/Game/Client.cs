@@ -368,6 +368,7 @@ namespace Rasa.Game
                             Subtype = LoginResponseMessageSubtype.Failed
                         }, delay: false);
 
+                        LoginFailed();
                         return;
                     }
 
@@ -382,6 +383,7 @@ namespace Rasa.Game
                             Subtype = LoginResponseMessageSubtype.Failed
                         }, delay: false);
 
+                        LoginFailed();
                         return;
                     }
 
@@ -403,6 +405,7 @@ namespace Rasa.Game
                                 Subtype = LoginResponseMessageSubtype.Failed
                             }, delay: false);
 
+                            LoginFailed();
                             return;
                         }
 
@@ -416,6 +419,7 @@ namespace Rasa.Game
                                 Subtype = LoginResponseMessageSubtype.Failed
                             }, delay: false);
 
+                            LoginFailed();
                             return;
                         }
 
@@ -732,6 +736,24 @@ namespace Rasa.Game
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// World logins a connection may get wrong before it is closed. A refused login used to
+        /// leave the connection open to try again, as often as it liked, with an Error line
+        /// written synchronously on the loop thread for each. The real client logs in once per
+        /// connection, so a few tries is already more than it needs.
+        /// </summary>
+        private const int MaxFailedLogins = 3;
+        private int _failedLogins;
+
+        private void LoginFailed()
+        {
+            if (++_failedLogins < MaxFailedLogins)
+                return;
+
+            Logger.WriteLog(LogType.Security, $"Client {Socket.RemoteAddress} failed {_failedLogins} world logins on one connection; disconnecting.");
+            Close();
         }
 
         private T GetMessageAs<T>(ProtocolPacket protocolPacket)

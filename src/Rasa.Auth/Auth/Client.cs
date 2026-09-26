@@ -68,11 +68,12 @@ namespace Rasa.Auth
 
             Socket.ReceiveAsync();
 
-            var rnd = new Random();
-
-            OneTimeKey = rnd.NextUInt();
-            SessionId1 = rnd.NextUInt();
-            SessionId2 = rnd.NextUInt();
+            // The one-time key is the credential the world server logs this account in with, and
+            // the session ids gate AboutToPlay. They came from System.Random, cast from its
+            // non-negative int - 31 bits from a generator that is not meant to be unpredictable.
+            OneTimeKey = RandomUInt();
+            SessionId1 = RandomUInt();
+            SessionId2 = RandomUInt();
 
             SendPacket(new ProtocolVersionPacket(OneTimeKey));
 
@@ -88,6 +89,9 @@ namespace Rasa.Auth
 
             Logger.WriteLog(LogType.Network, "*** Client connected from {0}", Socket.RemoteAddress);
         }
+
+        /// <summary>A full 32 bits from the cryptographic generator.</summary>
+        private static uint RandomUInt() => BitConverter.ToUInt32(System.Security.Cryptography.RandomNumberGenerator.GetBytes(4), 0);
 
         public void Update(long delta)
         {

@@ -164,6 +164,7 @@ namespace Rasa.Managers
             RegisterCommand(".destination", GmLevel.GameMaster, DestinationCommand);
             RegisterCommand(".placefield", GmLevel.GameMaster, PlaceFieldCommand);
             RegisterCommand(".removeobj", GmLevel.GameMaster, RemoveObjectCommand);
+            RegisterCommand(".moveobj", GmLevel.GameMaster, MoveObjectCommand);
             RegisterCommand(".rename", GmLevel.GameMaster, RenameCommand);
             RegisterCommand(".setkillstreak", GmLevel.GameMaster, SetKillStreakCommand);
             RegisterCommand(".setregion", GmLevel.GameMaster, SetRegionCommand);
@@ -2220,6 +2221,102 @@ namespace Rasa.Managers
             }
             return;
         }
+
+        /// <summary>
+        /// .moveobj &lt;entityId&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt; [yawDegrees | qx qy qz qw] - moves an object that is not
+        /// an actor, for every client on your map: an experiment in moving what MoveObject cannot.
+        ///
+        /// The client's MoveObject only reaches entities registered as moving (Python's
+        /// RegisterAsMovingEntity, which only actors call), and an in-world body refuses
+        /// SetPosition. UpdatePhysicalEntity takes the entity out of the world first, then runs
+        /// WorldLocationDescriptor, which sets the position and orientation and adds it back.
+        ///
+        /// Works on objects the server made (ids below 2^32) and, as far as the client's code goes,
+        /// on the static objects each client builds from the map file (ids above it) - those are in
+        /// its entity list too, but were made on a separate static path whose culling bounds are
+        /// set once, so what they do when moved is what this is for finding out. A static object is
+        /// only moved for the clients on the map now: a client that loads the map later builds it
+        /// where the map file says. Orientation: none given is yaw 0; one number is a yaw in
+        /// degrees; four are a quaternion (x y z w), which keeps a prop's tilt.
+        /// </summary>
+        private void MoveObjectCommand(string[] parts)
+        {
+            if ((parts.Length != 5 && parts.Length != 6 && parts.Length != 9)
+                || !ulong.TryParse(parts[1], out var entityId)
+                || !TryFloat(parts[2], out var x) || !TryFloat(parts[3], out var y) || !TryFloat(parts[4], out var z))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, "usage: .moveobj entityId x y z [yawDegrees | qx qy qz qw]");
+                return;
+            }
+
+            var mapChannel = _client.Player?.MapChannel;
+
+            if (mapChannel == null)
+                return;
+
+            var position = new Vector3(x, y, z);
+            var rotation = Quaternion.Identity;
+
+            if (parts.Length == 6)
+            {
+                if (!TryFloat(parts[5], out var yawDegrees))
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, $"{parts[5]} is not a number");
+                    return;
+                }
+
+                rotation = Quaternion.CreateFromYawPitchRoll(yawDegrees * MathF.PI / 180f, 0f, 0f);
+            }
+            else if (parts.Length == 9)
+            {
+                if (!TryFloat(parts[5], out var qx) || !TryFloat(parts[6], out var qy) || !TryFloat(parts[7], out var qz) || !TryFloat(parts[8], out var qw))
+                {
+                    CommunicatorManager.Instance.SystemMessage(_client, "the quaternion is four numbers: qx qy qz qw");
+                    return;
+                }
+
+                rotation = Quaternion.Normalize(new Quaternion(qx, qy, qz, qw));
+            }
+
+            switch (EntityManager.Instance.GetEntityType(entityId))
+            {
+                case EntityType.Character:
+                case EntityType.Creature:
+                case EntityType.Npc:
+                    CommunicatorManager.Instance.SystemMessage(_client, $"{entityId} is an actor, and actors move with MoveObject; use .tele or .teleport for yourself.");
+                    return;
+            }
+
+            // An object the server made: its own position too, so anyone who comes into range later
+            // is told the new one. Its cell is not changed; a move within the cell is what that suits.
+            var dynamicObject = mapChannel.DynamicObjects.Find(o => o.EntityId == entityId);
+
+            if (dynamicObject != null)
+            {
+                dynamicObject.Position = position;
+                dynamicObject.Rotation = Math.Atan2(2.0 * (rotation.W * rotation.Y + rotation.X * rotation.Z), 1.0 - 2.0 * (rotation.Y * rotation.Y + rotation.X * rotation.X));
+            }
+
+            var update = new UpdatePhysicalEntityPacket(entityId, new List<Packets.PythonPacket> { new WorldLocationDescriptorPacket(position, rotation) });
+            var sent = 0;
+
+            foreach (var client in mapChannel.ClientList)
+            {
+                if (client?.Player == null || client.State != ClientState.Ingame)
+                    continue;
+
+                client.CallMethod(SysEntity.ClientMethodId, update);
+                sent++;
+            }
+
+            var kind = entityId > uint.MaxValue ? "a static object from the map file" : dynamicObject != null ? "a server object" : "an id the server does not know";
+
+            CommunicatorManager.Instance.SystemMessage(_client, $"Moved {entityId} ({kind}) to {x} {y} {z} for {sent} client(s) on this map.");
+            Logger.WriteLog(LogType.Command, $"{_client.Player.FamilyName} moved entity {entityId} ({kind}) on map {mapChannel.MapInfo.MapContextId} to {position}, rotation {rotation}.");
+        }
+
+        private static bool TryFloat(string text, out float value) =>
+            float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value);
 
         /// <summary>
         /// .rename first|last &lt;NewName&gt; [familyName] - renames yourself, or the player with

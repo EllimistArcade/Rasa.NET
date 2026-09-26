@@ -254,9 +254,41 @@ namespace Rasa.Game
                 return false;
             }
 
-            Loop.Start();
+            // The world first, then the doors. Everything below the loaders used to come first:
+            // the loop ticking, the auth link logging in (which puts this world on the server
+            // list), and both the world and queue ports accepting - while about twenty loaders
+            // still had the maps, clans, dynamic objects, navmesh and abilities to build. The loop
+            // only skips its tick while nobody is connected, so the first connection to finish its
+            // key exchange had the map worker walking MapChannelArray while MapChannelInit was
+            // still adding to it, cells and entity tables written from two threads at once, and a
+            // login that got as far as the world before ClansInit reading clan items that were
+            // not there yet. A restart is exactly when everyone reconnects at once.
+            //
+            // So: load everything; then bind and listen; then start accepting; then start the
+            // loop; and last of all log in to the auth server, which is what tells players this
+            // world is up.
+            // Load items from db
+            EntityClassManager.Instance.LoadEntityClasses();
+            MissionManager.Instance.LoadMissions();
+            CreatureManager.Instance.CreatureInit();
+            SpawnPoolManager.Instance.SpawnPoolInit();
+            ChatCommandsManager.Instance.RegisterChatCommands();
+            MapChannelManager.Instance.MapChannelInit();
+            NavMeshManager.Instance.NavMeshInit(Config.GameDataConfig?.NavMeshPath);
+            ClanManager.Instance.ClansInit();
+            DynamicObjectManager.Instance.InitDynamicObjects();
+            MapTriggerManager.Instance.MapTriggerInit();
+            MapLinkManager.Instance.MapLinkInit();
+            RegionManager.Instance.RegionInit();
+            EmitterManager.Instance.EmitterInit();
+            MapMarkerManager.Instance.MapMarkerInit();
+            SpawnPoolManager.Instance.ValidatePools();
+            RecipeManager.Instance.RecipeInit();
+            AbilityManager.Instance.AbilityInit();
+            ManifestationManager.Instance.LoadSkillClasses();
 
-            SetupCommunicator();
+            // After AbilityInit, which loads the action data it checks the creature rows against.
+            CreatureManager.Instance.ValidateActions();
 
             try
             {
@@ -273,14 +305,6 @@ namespace Rasa.Game
 
                 return false;
             }
-
-            LoginManager.OnLogin += OnLogin;
-
-            QueueManager = new QueueManager(this);
-
-            ListenerSocket.AcceptAsync();
-
-            Logger.WriteLog(LogType.Network, "*** Listening for clients on port {0}", Config.GameConfig.Port);
 
             Timer.Add("SessionExpire", 10000, true, () =>
             {
@@ -326,28 +350,17 @@ namespace Rasa.Game
             if (Config.GameConfig.PerformanceMetricsInterval > 0)
                 Timer.Add("PerformanceMetrics", Config.GameConfig.PerformanceMetricsInterval, true, SendPerformanceMetrics);
 
-            // Load items from db
-            EntityClassManager.Instance.LoadEntityClasses();
-            MissionManager.Instance.LoadMissions();
-            CreatureManager.Instance.CreatureInit();
-            SpawnPoolManager.Instance.SpawnPoolInit();
-            ChatCommandsManager.Instance.RegisterChatCommands();
-            MapChannelManager.Instance.MapChannelInit();
-            NavMeshManager.Instance.NavMeshInit(Config.GameDataConfig?.NavMeshPath);
-            ClanManager.Instance.ClansInit();
-            DynamicObjectManager.Instance.InitDynamicObjects();
-            MapTriggerManager.Instance.MapTriggerInit();
-            MapLinkManager.Instance.MapLinkInit();
-            RegionManager.Instance.RegionInit();
-            EmitterManager.Instance.EmitterInit();
-            MapMarkerManager.Instance.MapMarkerInit();
-            SpawnPoolManager.Instance.ValidatePools();
-            RecipeManager.Instance.RecipeInit();
-            AbilityManager.Instance.AbilityInit();
-            ManifestationManager.Instance.LoadSkillClasses();
+            LoginManager.OnLogin += OnLogin;
 
-            // After AbilityInit, which loads the action data it checks the creature rows against.
-            CreatureManager.Instance.ValidateActions();
+            QueueManager = new QueueManager(this);
+
+            ListenerSocket.AcceptAsync();
+
+            Logger.WriteLog(LogType.Network, "*** Listening for clients on port {0}", Config.GameConfig.Port);
+
+            Loop.Start();
+
+            SetupCommunicator();
 
             // Last line of Start(), and it has to stay last. It used to sit inside
             // MapChannelInit, which is the sixth of the loaders above - so the navmesh, the

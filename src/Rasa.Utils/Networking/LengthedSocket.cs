@@ -377,6 +377,8 @@ namespace Rasa.Networking
 
                     var client = new LengthedSocket(accepted, SizeHeaderLength, CountSize);
 
+                    client.EnableKeepAlive();
+
                     // The accept args is never torn down and is re-armed by the handler itself,
                     // so a fault here is dealt with on the spot: the connection that could not
                     // be set up is shut, and the listener carries on as if it had been refused.
@@ -554,6 +556,58 @@ namespace Rasa.Networking
             data.Offset = 0;
         }
         #endregion
+
+        /// <summary>Idle time before the first keepalive probe, the gap between probes, and how many go unanswered before the connection is given up.</summary>
+        public const int KeepAliveIdleSeconds = 30;
+        public const int KeepAliveIntervalSeconds = 10;
+        public const int KeepAliveProbes = 5;
+
+        /// <summary>
+        /// Turns on TCP keepalive, so a peer that has gone without a word - power cut, sleep, a
+        /// NAT or Wi-Fi drop, a client that died on a loading screen - surfaces as a socket error
+        /// within about a minute and a half (KeepAliveIdleSeconds + KeepAliveIntervalSeconds x
+        /// KeepAliveProbes) instead of never.
+        ///
+        /// Without it the only thing that ever noticed a vanished peer was a send timing out,
+        /// and a connection nothing is sent to - a player at the character screen, a queue
+        /// connection that has been handed off, a world login that stalled mid-load - sat open
+        /// for as long as the process ran, holding its pooled receive buffer and, on the world
+        /// port, counting as the account being logged in. The probes only go out while the
+        /// connection is idle, so a player in the world, whose client talks constantly, sends
+        /// none of them.
+        ///
+        /// Set on every accepted socket. Each option is tried on its own and a refusal is
+        /// ignored: the interval and probe count need a Windows 10 of 1703 or later, and a
+        /// system without them keeps its own defaults for those, which only makes detection
+        /// slower.
+        /// </summary>
+        public void EnableKeepAlive()
+        {
+            try
+            {
+                Socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            TrySetTcpOption(SocketOptionName.TcpKeepAliveTime, KeepAliveIdleSeconds);
+            TrySetTcpOption(SocketOptionName.TcpKeepAliveInterval, KeepAliveIntervalSeconds);
+            TrySetTcpOption(SocketOptionName.TcpKeepAliveRetryCount, KeepAliveProbes);
+        }
+
+        private void TrySetTcpOption(SocketOptionName option, int value)
+        {
+            try
+            {
+                Socket.SetSocketOption(SocketOptionLevel.Tcp, option, value);
+            }
+            catch (Exception)
+            {
+                // Not supported here; the system's own value stands.
+            }
+        }
 
         public void Bind(EndPoint ep)
         {

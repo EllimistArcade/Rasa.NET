@@ -488,14 +488,65 @@ namespace Rasa.Game
                 return _lockedAccounts.Contains(accountId);
         }
 
-        public bool IsAlreadyLoggedIn(uint accountId)
+        /// <summary>
+        /// Called by a world login for its account, after the one-time key and the ban check.
+        /// Closes every other connection that account holds, and says whether the new login can
+        /// go ahead now.
+        ///
+        /// This used to refuse the new login instead and leave the old connection alone - and a
+        /// connection whose peer vanished without closing it (a power cut, a sleeping laptop, a
+        /// dropped Wi-Fi link, a client that crashed on the loading screen) is never noticed at
+        /// the character screen or on a loading screen, so the player was told the account was
+        /// in use until the server restarted. The one asking now is the one who just passed the
+        /// auth server with the account's password; the older connection is either dead or the
+        /// same person somewhere else, and in both cases the newest one should win.
+        ///
+        /// A connection with no character in the world - logged in, or at the character screen
+        /// - is gone as soon as it is closed, and the login carries on. One that has a character
+        /// in the world, or on its way into it, leaves a manifestation that the map worker takes
+        /// out over the next tick or so (Close only flags it; see RemovePlayer). Loading the same
+        /// character again while that one is still registered puts two of it in the world, so
+        /// that login is refused with AlreadyLoggedIn; by the time the player has been through
+        /// the auth server again the old one has left, and the next attempt goes through. The
+        /// same holds while any map still has a connection of this account waiting to be removed,
+        /// whatever became of the connection itself.
+        /// </summary>
+        public bool TakeOverSessions(Client newClient, uint accountId)
         {
-            lock (Clients)
-                foreach (var client in Clients)
-                    if (client.IsAuthenticated() && client.AccountEntry.Id == accountId)
-                        return true;
+            List<Client> others;
 
-            return false;
+            lock (Clients)
+                others = Clients.Where(c => c != newClient && c.IsAuthenticated() && c.AccountEntry?.Id == accountId).ToList();
+
+            var inWorld = false;
+
+            foreach (var old in others)
+            {
+                // Decided before the close, which moves the state to Disconnected.
+                var hadCharacter = HasCharacterInWorld(old);
+
+                inWorld |= hadCharacter;
+
+                Logger.WriteLog(LogType.Security,
+                    $"Account {accountId} logged in from {newClient.Socket?.RemoteAddress}; closing its earlier connection from {old.Socket?.RemoteAddress} (state {old.State}{(hadCharacter ? ", character in the world" : "")}).");
+
+                old.Close();
+            }
+
+            return !inWorld && !MapChannelManager.Instance.HoldsClientOf(accountId);
+        }
+
+        /// <summary>Whether this connection's character is in a map, on its way into one, or still registered from one.</summary>
+        private static bool HasCharacterInWorld(Client client)
+        {
+            if (client.State == ClientState.Loading || client.State == ClientState.Ingame || client.State == ClientState.Teleporting)
+                return true;
+
+            var player = client.Player;
+
+            return player != null
+                   && EntityManager.Instance.Players.TryGetValue(player.EntityId, out var registered)
+                   && registered == player;
         }
 
         public void Shutdown()

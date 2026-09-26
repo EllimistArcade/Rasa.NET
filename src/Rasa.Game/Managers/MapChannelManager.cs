@@ -753,6 +753,28 @@ namespace Rasa.Managers
         /// on no map's list or login queue is removed here, the way the worker would have; any
         /// other is left alone, so nobody is removed twice.
         /// </summary>
+        /// <summary>
+        /// Whether any map still lists a connection of this account, on its client list or its
+        /// login queue. A connection that has closed stays on its map's list until the worker has
+        /// taken its character out of the world, so this is true for exactly as long as a
+        /// character of the account may still be there.
+        /// </summary>
+        public bool HoldsClientOf(uint accountId)
+        {
+            foreach (var mapChannel in MapChannelArray.Values)
+            {
+                foreach (var client in mapChannel.ClientList)
+                    if (client?.AccountEntry?.Id == accountId)
+                        return true;
+
+                foreach (var client in mapChannel.QueuedClients)
+                    if (client?.AccountEntry?.Id == accountId)
+                        return true;
+            }
+
+            return false;
+        }
+
         public void RemoveStrandedPlayer(Client client)
         {
             var player = client.Player;

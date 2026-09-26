@@ -426,9 +426,13 @@ namespace Rasa.Game
                             return;
                         }
 
-                        if (Server.IsAlreadyLoggedIn(loginMsg.AccountId))
+                        // Any earlier connection of this account is closed here, the newest one
+                        // winning. Refused only while a character of the account is still in the
+                        // world, which lasts until the map worker has taken it out; see
+                        // Server.TakeOverSessions.
+                        if (!Server.TakeOverSessions(this, loginMsg.AccountId))
                         {
-                            Logger.WriteLog(LogType.Error, "Client with ip: {0} tried to log in while the account is being played on! User Id: {1}", Socket.RemoteAddress, loginMsg.AccountId);
+                            Logger.WriteLog(LogType.Network, $"Account {loginMsg.AccountId} logged in from {Socket.RemoteAddress} while a character of it was still leaving the world; refused this time.");
 
                             SendMessage(new LoginResponseMessage
                             {

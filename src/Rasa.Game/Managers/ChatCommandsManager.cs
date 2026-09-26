@@ -184,7 +184,6 @@ namespace Rasa.Managers
             RegisterCommand(".giveitem", GmLevel.Admin, GiveItemCommand);
             RegisterCommand(".givelogos", GmLevel.Admin, GiveLogosCommand);
             RegisterCommand(".removelogos", GmLevel.Admin, RemoveLogosCommand);
-            RegisterCommand(".playerflag", GmLevel.Admin, PlayerFlagCommand);
             RegisterCommand(".givepads", GmLevel.Admin, GivePadsCommand);
             RegisterCommand(".givexp", GmLevel.Admin, GiveXpCommand);
             RegisterCommand(".setlevel", GmLevel.Admin, SetLevelCommand);
@@ -1863,76 +1862,6 @@ namespace Rasa.Managers
                 CharacterManager.Instance.RemoveLogos(_client, logosId) == 0
                     ? $"Logos {logosId} is not in your Tabula."
                     : $"Removed Logos {logosId} from your Tabula.");
-        }
-
-        /// <summary>
-        /// The player flags the client's own actions ask for (actiondata.playerFlagReqs): every one
-        /// gates an emote - the account, veteran and event reward emotes, and the fireworks, flare
-        /// and smoke gestures. Nothing else in the 1.16.5 client reads a player flag.
-        /// </summary>
-        private static readonly uint[] EmotePlayerFlags =
-        {
-            388, 389, 390, 391, 646, 741, 742, 743, 744, 745, 746, 747, 748, 749, 750, 752, 754, 756, 757,
-            758, 759, 760, 761, 762, 763, 764, 765, 766, 767, 768, 780, 781, 782, 791, 792, 793, 794, 795,
-            796, 797, 798, 799, 802, 803, 809, 810, 811, 812, 815, 819, 820, 828, 835, 859, 860, 948, 20000005
-        };
-
-        /// <summary>
-        /// .playerflag [list] | .playerflag add &lt;id|emotes&gt; | .playerflag remove &lt;id|all&gt;: the
-        /// player flags you hold, saved with the character and told to your client (PlayerFlags).
-        /// "emotes" gives every flag an emote asks for. Nothing in play hands flags out yet - the
-        /// reward emote items that set them are not wired.
-        /// </summary>
-        private void PlayerFlagCommand(string[] parts)
-        {
-            const string usage = "usage: .playerflag [list] | .playerflag add <id|emotes> | .playerflag remove <id|all>";
-            var player = _client.Player;
-            var verb = parts.Length > 1 ? parts[1].ToLowerInvariant() : "list";
-
-            if (verb == "list" && parts.Length <= 2)
-            {
-                CommunicatorManager.Instance.SystemMessage(_client, player.PlayerFlags.Count == 0
-                    ? "You hold no player flags."
-                    : $"{player.PlayerFlags.Count} player flag(s): {string.Join(", ", player.PlayerFlags.OrderBy(f => f))}");
-                return;
-            }
-
-            if (parts.Length != 3 || (verb != "add" && verb != "remove"))
-            {
-                CommunicatorManager.Instance.SystemMessage(_client, usage);
-                return;
-            }
-
-            var arg = parts[2].ToLowerInvariant();
-
-            if (verb == "add" && arg == "emotes")
-            {
-                var given = EmotePlayerFlags.Count(flag => CharacterManager.Instance.SetPlayerFlag(_client, flag, true));
-
-                CommunicatorManager.Instance.SystemMessage(_client, $"Gave {given} emote flag(s); you now hold {player.PlayerFlags.Count}.");
-                return;
-            }
-
-            if (verb == "remove" && arg == "all")
-            {
-                var removed = CharacterManager.Instance.ClearPlayerFlags(_client);
-
-                CommunicatorManager.Instance.SystemMessage(_client, removed == 0 ? "You hold no player flags." : $"Removed all {removed} player flag(s).");
-                return;
-            }
-
-            if (!uint.TryParse(arg, out var flagId))
-            {
-                CommunicatorManager.Instance.SystemMessage(_client, usage);
-                return;
-            }
-
-            var on = verb == "add";
-            var changed = CharacterManager.Instance.SetPlayerFlag(_client, flagId, on);
-
-            CommunicatorManager.Instance.SystemMessage(_client, changed
-                ? $"Player flag {flagId} {(on ? "given" : "removed")}."
-                : $"Player flag {flagId} was already {(on ? "held" : "not held")}, or could not be saved.");
         }
 
         private void GiveXpCommand(string[] parts)

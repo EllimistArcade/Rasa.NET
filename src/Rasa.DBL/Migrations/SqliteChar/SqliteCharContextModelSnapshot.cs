@@ -395,21 +395,6 @@ namespace Rasa.Migrations.SqliteChar
                     b.ToTable("character_option");
                 });
 
-            modelBuilder.Entity("Rasa.Structures.Char.CharacterPlayerFlagEntry", b =>
-                {
-                    b.Property<uint>("CharacterId")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("character_id");
-
-                    b.Property<uint>("PlayerFlagId")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("player_flag_id");
-
-                    b.HasKey("CharacterId", "PlayerFlagId");
-
-                    b.ToTable("character_player_flag");
-                });
-
             modelBuilder.Entity("Rasa.Structures.Char.CharacterSkillsEntry", b =>
                 {
                     b.Property<uint>("CharacterId")

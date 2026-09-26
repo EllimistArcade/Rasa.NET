@@ -396,21 +396,6 @@ namespace Rasa.Migrations.MySqlChar
                     b.ToTable("character_option");
                 });
 
-            modelBuilder.Entity("Rasa.Structures.Char.CharacterPlayerFlagEntry", b =>
-                {
-                    b.Property<uint>("CharacterId")
-                        .HasColumnType("int unsigned")
-                        .HasColumnName("character_id");
-
-                    b.Property<uint>("PlayerFlagId")
-                        .HasColumnType("int unsigned")
-                        .HasColumnName("player_flag_id");
-
-                    b.HasKey("CharacterId", "PlayerFlagId");
-
-                    b.ToTable("character_player_flag");
-                });
-
             modelBuilder.Entity("Rasa.Structures.Char.CharacterSkillsEntry", b =>
                 {
                     b.Property<uint>("CharacterId")

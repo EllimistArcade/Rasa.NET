@@ -102,19 +102,14 @@ namespace Rasa.Auth
         [PacketHandler(CommOpcode.LoginRequest)]
         private void MsgLoginRequest(LoginRequestPacket packet)
         {
-            // Set before the slot is claimed, not after. DisconnectCommunicator gives the slot
-            // back only when ServerId is non-zero, and this used to be assigned four statements
-            // and two sends later - so a game server whose socket died in that window left its
-            // entry in GameServers forever, pointing at a dead connection. It could then never
-            // reconnect (the slot reads as in use) and the auth server went on asking that dead
-            // socket for its player counts once a second until it was restarted.
-            ServerId = packet.ServerId;
-            PublicAddress = packet.PublicAddress;
-
+            // ServerId and PublicAddress are assigned by AuthenticateGameServer, under the
+            // GameServers lock and in the same step that claims the slot, so a socket that dies
+            // right after is still given its slot back by DisconnectCommunicator. They used to be
+            // taken from the packet here, before the password was checked: a rejected login then
+            // carried the id of the server it had failed to be, and DisconnectCommunicator removed
+            // GameServers[id] - the real server's entry - for it.
             if (!Server.AuthenticateGameServer(packet, this))
             {
-                ServerId = 0;
-
                 Socket.Send(new LoginResponsePacket
                 {
                     Response = CommLoginReason.Failure
@@ -134,6 +129,10 @@ namespace Rasa.Auth
         [PacketHandler(CommOpcode.ServerInfoResponse)]
         private void MsgGameInfoResponse(ServerInfoResponsePacket packet)
         {
+            // Only from a connection that has logged in as a game server.
+            if (ServerId == 0)
+                return;
+
             Server.UpdateServerInfo(this, packet);
         }
 
@@ -141,6 +140,10 @@ namespace Rasa.Auth
         [PacketHandler(CommOpcode.RedirectResponse)]
         private void MsgRedirectResponse(RedirectResponsePacket packet)
         {
+            // Only from a connection that has logged in as a game server.
+            if (ServerId == 0)
+                return;
+
             Server.RedirectResponse(this, packet);
         }
     }

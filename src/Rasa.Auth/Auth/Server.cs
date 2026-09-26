@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
 
 using Microsoft.Extensions.Hosting;
 
@@ -220,6 +222,8 @@ namespace Rasa.Auth
                 return false;
             }
 
+            WarnAboutCommunicatorExposure();
+
             AuthCommunicator.AcceptAsync();
 
             Timer.Add("ServerInfoUpdate", 1000, true, () =>
@@ -233,6 +237,34 @@ namespace Rasa.Auth
             Logger.WriteLog(LogType.Network, $"*** Listening for Game servers on port {Config.CommunicatorConfig.Port}");
 
             return true;
+        }
+
+        /// <summary>
+        /// The communicator port hands whoever logs in on it every player's world login key. The
+        /// only thing guarding it is the per-server password, so say so at startup when it is
+        /// listening beyond this machine with a password anyone could guess.
+        /// </summary>
+        private void WarnAboutCommunicatorExposure()
+        {
+            var bound = IPAddress.Parse(Config.CommunicatorConfig.Address);
+
+            if (IPAddress.IsLoopback(bound))
+                return;
+
+            var weak = (Config.Servers ?? new Dictionary<string, string>())
+                .Where(s => string.IsNullOrEmpty(s.Value) || s.Value.Length < 12 || s.Value.StartsWith("test", StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.Key)
+                .ToList();
+
+            if (weak.Count == 0)
+                return;
+
+            Logger.WriteLog(LogType.Security,
+                $"The communicator listens on {bound}:{Config.CommunicatorConfig.Port}, beyond this machine, and server "
+                + $"slot(s) {string.Join(", ", weak)} have a default, empty or short password. Anyone who can reach that port "
+                + "with the password can register as a game server and receive players' login keys. Set long passwords in "
+                + "Servers (and the matching ServerInfoConfig.Password on each game server), or bind the communicator to "
+                + "127.0.0.1 when auth and game run on the same machine, or firewall the port.");
         }
 
         private void OnCommunicatorAccept(LengthedSocket socket)
@@ -256,7 +288,20 @@ namespace Rasa.Auth
 
             lock (GameServers)
             {
-                if (GameServers.ContainsKey(packet.ServerId))
+                if (client.ServerId != 0)
+                {
+                    // One login per connection. A second one naming another id would have left
+                    // the first slot pointing at this connection with nothing to remove it.
+                    rejection = $"Game server {client.ServerId} tried to log in again, as {packet.ServerId}!";
+                    rejectionLogType = LogType.Security;
+                }
+                else if (packet.ServerId == 0)
+                {
+                    // 0 means "not logged in" everywhere in CommunicatorClient.
+                    rejection = "A server tried to connect to server slot 0!";
+                    rejectionLogType = LogType.Security;
+                }
+                else if (GameServers.ContainsKey(packet.ServerId))
                 {
                     rejection = "A server tried to connect to an already in use server slot!";
                     rejectionLogType = LogType.Debug;
@@ -266,13 +311,19 @@ namespace Rasa.Auth
                     rejection = "A server tried to connect to a non-defined server slot!";
                     rejectionLogType = LogType.Debug;
                 }
-                else if (Config.Servers[packet.ServerId.ToString()] != packet.Password)
+                else if (!PasswordMatches(Config.Servers[packet.ServerId.ToString()], packet.Password))
                 {
                     rejection = "A server tried to log in with an invalid password!";
-                    rejectionLogType = LogType.Error;
+                    rejectionLogType = LogType.Security;
                 }
                 else
                 {
+                    // Taken on only now, in the same locked step that claims the slot, so there
+                    // is no moment where the connection holds the slot without the id that
+                    // DisconnectCommunicator gives it back by.
+                    client.ServerId = packet.ServerId;
+                    client.PublicAddress = packet.PublicAddress;
+
                     GameServerQueue.Remove(client);
                     GameServers.Add(packet.ServerId, client);
 
@@ -286,6 +337,21 @@ namespace Rasa.Auth
             Logger.WriteLog(rejectionLogType, $"{rejection} Remote Address: {client.Socket.RemoteAddress}");
 
             return false;
+        }
+
+        /// <summary>
+        /// The configured password against the one offered, in time that does not depend on how
+        /// much of it matched. An empty configured password matches nothing.
+        /// </summary>
+        private static bool PasswordMatches(string expected, string offered)
+        {
+            if (string.IsNullOrEmpty(expected) || offered == null)
+                return false;
+
+            var expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(expected));
+            var offeredHash = SHA256.HashData(Encoding.UTF8.GetBytes(offered));
+
+            return CryptographicOperations.FixedTimeEquals(expectedHash, offeredHash);
         }
 
         public void UpdateServerInfo(CommunicatorClient client, ServerInfoResponsePacket packet)
@@ -326,7 +392,9 @@ namespace Rasa.Auth
             {
                 GameServerQueue.Remove(client);
 
-                if (client.ServerId != 0)
+                // Only this connection's own entry. Removing by id alone took out whichever
+                // server held that slot - the live one, when a rejected login carried its id.
+                if (client.ServerId != 0 && GameServers.TryGetValue(client.ServerId, out var registered) && registered == client)
                     GameServers.Remove(client.ServerId);
             }
 

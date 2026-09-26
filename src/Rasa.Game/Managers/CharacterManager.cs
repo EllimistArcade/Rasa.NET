@@ -56,12 +56,54 @@ namespace Rasa.Managers
             _gameUnitOfWorkFactory = gameUnitOfWorkFactory;
         }
 
+        private static readonly Race[] AllRaces = { Race.Human, Race.Forean, Race.Brann, Race.Thrax };
+
+        /// <summary>
+        /// The races a character can be created or cloned as - GameDataConfig.EnabledRaces, which was
+        /// read by nothing: BeginCharacterSelection offered all four whatever it said. Human is
+        /// always among them (the client has nothing to lock it behind); unknown ids are dropped. No
+        /// setting at all means all four, as before.
+        /// </summary>
+        public static IReadOnlyList<Race> EnabledRaces { get; private set; } = AllRaces;
+
+        /// <summary>
+        /// Takes EnabledRaces from the configuration, on load and on every reload. Static, as the
+        /// configuration is read before the managers have their database factory.
+        /// </summary>
+        public static void LoadEnabledRaces(int[] configured)
+        {
+            if (configured == null)
+            {
+                EnabledRaces = AllRaces;
+                return;
+            }
+
+            var races = new List<Race> { Race.Human };
+
+            foreach (var id in configured)
+            {
+                if (!Enum.IsDefined(typeof(Race), id))
+                {
+                    Logger.WriteLog(LogType.Initialize, $"GameDataConfig.EnabledRaces: {id} is not a race (1 to 4); ignored.");
+                    continue;
+                }
+
+                if (!races.Contains((Race)id))
+                    races.Add((Race)id);
+            }
+
+            races.Sort();
+            EnabledRaces = races;
+        }
+
+        public static bool IsRaceEnabled(Race race) => EnabledRaces.Contains(race);
+
         public void StartCharacterSelection(Client client)
         {
             if (client.State != ClientState.LoggedIn)
                 return;
 
-            client.CallMethod(SysEntity.ClientMethodId, new BeginCharacterSelectionPacket(client.AccountEntry.FamilyName, client.AccountEntry.Characters.Any(), client.AccountEntry.Id, client.AccountEntry.CanSkipBootcamp));
+            client.CallMethod(SysEntity.ClientMethodId, new BeginCharacterSelectionPacket(client.AccountEntry.FamilyName, client.AccountEntry.Characters.Any(), client.AccountEntry.Id, EnabledRaces, client.AccountEntry.CanSkipBootcamp));
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             var charactersBySlot = unitOfWork.Characters.GetByAccountId(client.AccountEntry.Id);
@@ -143,6 +185,15 @@ namespace Rasa.Managers
             }
 
             var result = packet.Validate();
+
+            // The window only offers the enabled races, so another one is a client that was not
+            // shown this list.
+            if (result == CreateCharacterResult.Success && !IsRaceEnabled(packet.RaceId))
+            {
+                Logger.WriteLog(LogType.Security, $"Account {client.AccountEntry.Id} asked for a {packet.RaceId} character, a race this server does not offer.");
+                result = CreateCharacterResult.CharacterCreationInvalidRace;
+            }
+
             if (result != CreateCharacterResult.Success)
             {
                 SendCharacterCreateFailed(client, result);
@@ -245,6 +296,9 @@ namespace Rasa.Managers
             if (nameResult == CreateCharacterResult.Success && !AppearanceIsValid(packet.AppearanceData))
                 nameResult = CreateCharacterResult.InvalidEncoding;
 
+            if (nameResult == CreateCharacterResult.Success && !AppearanceFitsRace(packet.AppearanceData, packet.RaceId))
+                nameResult = CreateCharacterResult.CharacterCreationInvalidRace;
+
             if (nameResult != CreateCharacterResult.Success)
             {
                 SendCharacterCreateFailed(client, nameResult);
@@ -343,6 +397,15 @@ namespace Rasa.Managers
             }
 
             var result = packet.Validate();
+
+            // The window only offers the enabled races, so another one is a client that was not
+            // shown this list.
+            if (result == CreateCharacterResult.Success && !IsRaceEnabled(packet.RaceId))
+            {
+                Logger.WriteLog(LogType.Security, $"Account {client.AccountEntry.Id} asked for a {packet.RaceId} character, a race this server does not offer.");
+                result = CreateCharacterResult.CharacterCreationInvalidRace;
+            }
+
             if (result != CreateCharacterResult.Success)
             {
                 SendCharacterCreateFailed(client, result);
@@ -547,6 +610,27 @@ namespace Rasa.Managers
             return true;
         }
 
+        /// <summary>
+        /// Every face, hair and head chosen may be worn by the race: the item race requirements
+        /// (item_template_requirement_race) the equip and loot checks already hold to. The window
+        /// only lists a race's own heads - a hybrid gets one of its race's three heads and bald
+        /// hair, a human the human faces and hair - so a mismatch is a client that did not use it,
+        /// and would show a human head on a hybrid or the other way round.
+        /// </summary>
+        private static bool AppearanceFitsRace(IDictionary<EquipmentData, AppearanceData> appearance, Race race)
+        {
+            foreach (var entry in appearance.Values)
+            {
+                var template = ItemManager.Instance.GetItemTemplateById(entry.Class);
+                var raceReq = template?.ItemInfo?.RaceReq ?? 0;
+
+                if (raceReq != 0 && raceReq != (int)race)
+                    return false;
+            }
+
+            return true;
+        }
+
         private static CreateCharacterResult CheckNewName(ICharUnitOfWork unitOfWork, string name)
         {
             if (!IsValidName(name, out var error))
@@ -634,6 +718,9 @@ namespace Rasa.Managers
 
             if (nameResult == CreateCharacterResult.Success && !AppearanceIsValid(packet.AppearanceData))
                 nameResult = CreateCharacterResult.InvalidEncoding;
+
+            if (nameResult == CreateCharacterResult.Success && !AppearanceFitsRace(packet.AppearanceData, packet.RaceId))
+                nameResult = CreateCharacterResult.CharacterCreationInvalidRace;
 
             // The family name is new unless it is exactly the one the account already has, which
             // was accepted under whatever rules were current then and is left alone.

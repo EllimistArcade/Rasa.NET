@@ -15,17 +15,18 @@ namespace Rasa.Packets.Game.Server
         public List<Race> EnabledRaceList { get; } = new List<Race>();
         public bool CanSkipBootcamp { get; set; }
 
-        public BeginCharacterSelectionPacket(string familyName, bool hasCharacters, uint accountId, bool canSkipBootcamp = true)
+        /// <param name="enabledRaces">
+        /// The races the character creation window lets the player pick: the rest show locked, with
+        /// "Unlock this hybrid by completing certain missions in game." (CharacterManager.EnabledRaces).
+        /// </param>
+        public BeginCharacterSelectionPacket(string familyName, bool hasCharacters, uint accountId, IEnumerable<Race> enabledRaces, bool canSkipBootcamp = true)
         {
             FamilyName = familyName;
             HasCharacters = hasCharacters;
             AccountId = accountId;
             CanSkipBootcamp = canSkipBootcamp;
 
-            EnabledRaceList.Add(Race.Human);
-            EnabledRaceList.Add(Race.Forean);
-            EnabledRaceList.Add(Race.Brann);
-            EnabledRaceList.Add(Race.Thrax);
+            EnabledRaceList.AddRange(enabledRaces ?? new[] { Race.Human });
         }
 
         public override void Write(PythonWriter pw)

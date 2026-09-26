@@ -133,6 +133,7 @@ namespace Rasa.Game
             Logger.UpdateConfig(Config.LoggerConfig);
 
             ServerFlagManager.Instance.LoadConfiguredFlags(Config.GameDataConfig?.ServerFlags);
+            CharacterManager.LoadEnabledRaces(Config.GameDataConfig?.EnabledRaces);
 
             if (!KnowledgeBaseManager.Instance.Load(Config.GameDataConfig?.KnowledgeBaseFile, out var kbProblem))
                 Logger.WriteLog(LogType.Initialize, $"Knowledge base: {kbProblem}. SearchKB will answer with nothing.");

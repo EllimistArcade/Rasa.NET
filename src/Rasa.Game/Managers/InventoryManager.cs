@@ -1869,6 +1869,35 @@ namespace Rasa.Managers
             };
         }
 
+        /// <summary>
+        /// An Item for a row read from the database, registered with the EntityManager. Whoever
+        /// holds it is responsible for destroying it.
+        /// </summary>
+        internal static Item CreateLoadedItem(Structures.Char.ItemEntry itemData, ItemTemplate itemTemplate, uint ownerId, uint slotId)
+        {
+            var newItem = new Item
+            {
+                OwnerId = ownerId,
+                OwnerSlotId = slotId,
+                ItemTemplate = itemTemplate,
+                StackSize = itemData.StackSize,
+                CurrentHitPoints = itemData.CurrentHitPoints,
+                Color = itemData.Color,
+                Id = itemData.ItemId,
+                Crafter = itemData.CrafterName,
+                BoundCharacterId = itemData.BoundCharacterId
+            };
+
+            // check if item is weapon
+            if (newItem.ItemTemplate.WeaponInfo != null)
+                newItem.CurrentAmmo = itemData.AmmoCount;
+
+            EntityManager.Instance.RegisterEntity(newItem.EntityId, EntityType.Item);
+            EntityManager.Instance.RegisterItem(newItem.EntityId, newItem);
+
+            return newItem;
+        }
+
         public void InitCharacterInventory(Client client)
         {
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
@@ -1904,6 +1933,33 @@ namespace Rasa.Managers
 
             foreach (var item in getInventoryData)
             {
+                var inventoryType = (InventoryType)item.InventoryType;
+
+                // Whose row this is, decided before anything is created for it. The rows are the
+                // whole account's, and every one of them used to become a registered Item - the
+                // other characters' too, which went into no list and were never destroyed, so each
+                // login and map change left another copy of them registered for good.
+                //
+                // An orphaned character-inventory row (a character id that is not one of this
+                // account's) is adopted by the first character on the account to log in with that
+                // slot free.
+                var adopt = item.CharacterId != client.Player.Id
+                            && !accountCharacterIds.Contains(item.CharacterId)
+                            && (inventoryType == InventoryType.Personal || inventoryType == InventoryType.EquipedInventory || inventoryType == InventoryType.WeaponDrawerInventory);
+
+                if (adopt && !IsSlotFree(client, inventoryType, item.SlotId))
+                {
+                    Logger.WriteLog(LogType.Error, $"Account {client.AccountEntry.Id} {inventoryType} slot {item.SlotId} item {item.ItemId} was stored with character id {item.CharacterId}, which is not a character of this account, and the slot is taken; left as is.");
+                    continue;
+                }
+
+                var loads = adopt
+                            || item.CharacterId == client.Player.Id
+                            || (item.CharacterId == 0 && inventoryType == InventoryType.HomeInventory);
+
+                if (!loads)
+                    continue;
+
                 var itemData = unitOfWork.Items.GetItem(item.ItemId);
 
                 if (itemData == null)
@@ -1924,51 +1980,30 @@ namespace Rasa.Managers
                     continue;
                 }
 
-                var newItem = new Item
+                // A listed item is the auction house's, and may already be registered - found by a
+                // search while this character was away, or kept from their last session. The one
+                // object is shared rather than a second made for the same row.
+                var newItem = inventoryType == InventoryType.AuctionInventory
+                    ? AuctionHouseManager.Instance.ListedItem(item.ItemId)
+                    : null;
+
+                if (newItem == null)
                 {
-                    OwnerId = item.CharacterId,
-                    OwnerSlotId = item.SlotId,
-                    ItemTemplate = itemTemplate,
-                    StackSize = itemData.StackSize,
-                    CurrentHitPoints = itemData.CurrentHitPoints,
-                    Color = itemData.Color,
-                    Id = item.ItemId,
-                    Crafter = itemData.CrafterName,
-                    BoundCharacterId = itemData.BoundCharacterId
-                };
+                    newItem = CreateLoadedItem(itemData, itemTemplate, item.CharacterId, item.SlotId);
 
-                // check if item is weapon
-                if (newItem.ItemTemplate.WeaponInfo != null)
-                    newItem.CurrentAmmo = itemData.AmmoCount;
-
-                // register item
-                EntityManager.Instance.RegisterEntity(newItem.EntityId, EntityType.Item);
-                EntityManager.Instance.RegisterItem(newItem.EntityId, newItem);
+                    if (inventoryType == InventoryType.AuctionInventory)
+                        AuctionHouseManager.Instance.List(newItem);
+                }
 
                 // fill invenoty slot
                 ItemManager.Instance.SendItemDataToClient(client, newItem, false);
 
-                var inventoryType = (InventoryType)item.InventoryType;
-
-                // An orphaned character-inventory row is adopted by the first character on
-                // the account to log in with that slot free: the row gets this character's
-                // id, and the item is back. If the slot is taken it is left for a later
-                // login and reported.
-                if (item.CharacterId != client.Player.Id
-                    && !accountCharacterIds.Contains(item.CharacterId)
-                    && (inventoryType == InventoryType.Personal || inventoryType == InventoryType.EquipedInventory || inventoryType == InventoryType.WeaponDrawerInventory))
+                if (adopt)
                 {
-                    if (IsSlotFree(client, inventoryType, item.SlotId))
-                    {
-                        Logger.WriteLog(LogType.Error, $"Account {client.AccountEntry.Id} {inventoryType} slot {item.SlotId} item {item.ItemId} was stored with character id {item.CharacterId}, which is not a character of this account; assigned to {client.Player.Id} ({client.Player.Name}).");
-                        unitOfWork.CharacterInventories.MoveInvItem(client.AccountEntry.Id, client.Player.Id, item.InventoryType, item.SlotId, item.ItemId);
-                        newItem.OwnerId = client.Player.Id;
-                        item.CharacterId = client.Player.Id;
-                    }
-                    else
-                    {
-                        Logger.WriteLog(LogType.Error, $"Account {client.AccountEntry.Id} {inventoryType} slot {item.SlotId} item {item.ItemId} was stored with character id {item.CharacterId}, which is not a character of this account, and the slot is taken; left as is.");
-                    }
+                    Logger.WriteLog(LogType.Error, $"Account {client.AccountEntry.Id} {inventoryType} slot {item.SlotId} item {item.ItemId} was stored with character id {item.CharacterId}, which is not a character of this account; assigned to {client.Player.Id} ({client.Player.Name}).");
+                    unitOfWork.CharacterInventories.MoveInvItem(client.AccountEntry.Id, client.Player.Id, item.InventoryType, item.SlotId, item.ItemId);
+                    newItem.OwnerId = client.Player.Id;
+                    item.CharacterId = client.Player.Id;
                 }
 
                 if (item.CharacterId == client.Player.Id)

@@ -159,6 +159,9 @@ namespace Rasa.Managers
             PaySeller(unitOfWork, auction);
             RemoveFromSellersAuctionList(auction.SellerId, item.EntityId, auction.Price);
 
+            // The buyer is the one asking, so they are logged in and it is in their inbox now.
+            Unlist(item, true);
+
             client.CallMethod(SysEntity.ClientAuctionHouseManagerId, new AuctionBuyoutSuccessPacket(item.EntityId));
         }
 
@@ -223,6 +226,7 @@ namespace Rasa.Managers
 
             unitOfWork.Auctions.DeleteAuction(item.Id);
             client.Player.Inventory.AuctionItems.Remove(packet.ItemEntityId);
+            Unlist(item, true);
 
             client.CallMethod(SysEntity.ClientInventoryManagerId, new RemoveAuctionItemPacket(packet.ItemEntityId));
 
@@ -321,6 +325,7 @@ namespace Rasa.Managers
 
             var auctionSlot = NextAuctionSlot(client);
             client.Player.Inventory.AuctionItems.Add(item.EntityId);
+            List(item);
             item.OwnerSlotId = auctionSlot;
 
             unitOfWork.CharacterInventories.MoveInvItem(client.AccountEntry.Id, client.Player.Id,
@@ -353,7 +358,7 @@ namespace Rasa.Managers
                 if (auction.SellerId == client.Player.Id)
                     continue;               // the browse tab is for other people's auctions
 
-                var item = FindAuctionedItem(auction);
+                var item = FindAuctionedItem(auction, unitOfWork);
 
                 if (item?.ItemTemplate == null)
                     continue;
@@ -576,10 +581,17 @@ namespace Rasa.Managers
                     $"Auction on item {auction.ItemId} has expired but its seller {auction.SellerName} ({auction.SellerId}) no longer exists; the listing is removed.");
 
                 unitOfWork.Auctions.DeleteAuction(auction.ItemId);
+
+                // And its item, if one was loaded for it: there is nobody to hold it now.
+                var orphan = ListedItem(auction.ItemId);
+
+                if (orphan != null)
+                    Unlist(orphan, false);
+
                 return;
             }
 
-            var item = FindAuctionedItem(auction);
+            var item = FindAuctionedItem(auction, unitOfWork);
 
             if (item == null)
             {
@@ -595,6 +607,7 @@ namespace Rasa.Managers
 
             unitOfWork.Auctions.DeleteAuction(auction.ItemId);
             RemoveFromSellersAuctionList(auction.SellerId, item.EntityId, null);
+            Unlist(item, InSomeonesInbox(item.EntityId));
         }
 
         /// <summary>
@@ -650,27 +663,81 @@ namespace Rasa.Managers
             Server.Clients.Find(c => c?.Player != null && c.Player.Id == sellerId && c.State == ClientState.Ingame);
 
         /// <summary>
-        /// The live Item behind an auction row. A seller who is logged in has it in their
-        /// auction list; otherwise it is whichever registered item carries that database id.
+        /// The Item behind each listing, by database item id: one object per listing, owned here
+        /// from the moment it is listed until the listing ends, whether or not the seller is
+        /// logged in. Loading a seller's inventory reuses it (InventoryManager), a logout leaves it
+        /// alone, and a search finds it here.
+        ///
+        /// Searches used to find listed items by scanning every registered item for the database
+        /// id - which only worked because every login left the account's items registered for
+        /// good, several copies of each, and found nothing for a seller who had not logged in since
+        /// a restart.
         /// </summary>
-        private static Item FindAuctionedItem(AuctionEntry auction)
+        private static readonly Dictionary<uint, Item> Listed = new();
+
+        /// <summary>The registered Item for a listing, or null if none is loaded.</summary>
+        public Item ListedItem(uint itemId)
         {
-            var seller = OnlineSeller(auction.SellerId);
+            if (!Listed.TryGetValue(itemId, out var item))
+                return null;
 
-            if (seller != null)
-                foreach (var entityId in seller.Player.Inventory.AuctionItems)
-                {
-                    var held = EntityManager.Instance.GetItem(entityId);
+            if (EntityManager.Instance.GetItem(item.EntityId) == item)
+                return item;
 
-                    if (held != null && held.Id == auction.ItemId)
-                        return held;
-                }
-
-            foreach (var entry in EntityManager.Instance.Items)
-                if (entry.Value != null && entry.Value.Id == auction.ItemId)
-                    return entry.Value;
-
+            Listed.Remove(itemId);
             return null;
+        }
+
+        /// <summary>Hands an item to the auction house for as long as it is listed.</summary>
+        public void List(Item item) => Listed[item.Id] = item;
+
+        /// <summary>
+        /// The listing is over; the item belongs to whoever it went to. If nobody who is logged in
+        /// holds it now - it went to the inbox of someone who is not - its entity is let go here, and
+        /// that player's login loads it from the row again.
+        /// </summary>
+        private static void Unlist(Item item, bool heldByOnlinePlayer)
+        {
+            Listed.Remove(item.Id);
+
+            if (heldByOnlinePlayer)
+                return;
+
+            EntityManager.Instance.UnregisterEntity(item.EntityId);
+            EntityManager.Instance.UnregisterItem(item.EntityId);
+            EntityManager.Instance.FreeEntity(item.EntityId);
+        }
+
+        /// <summary>Whether any logged-in player has this entity in their inbox.</summary>
+        private static bool InSomeonesInbox(ulong entityId) =>
+            Server.Clients.Exists(c => c?.Player != null && c.Player.Inventory.InboxItems.Contains(entityId));
+
+        /// <summary>
+        /// The live Item behind an auction row: the auction house's own, or else loaded from the
+        /// database now and kept.
+        /// </summary>
+        private static Item FindAuctionedItem(AuctionEntry auction, ICharUnitOfWork unitOfWork)
+        {
+            var listed = Instance.ListedItem(auction.ItemId);
+
+            if (listed != null)
+                return listed;
+
+            var itemData = unitOfWork.Items.GetItem(auction.ItemId);
+
+            if (itemData == null)
+                return null;
+
+            var itemTemplate = ItemManager.Instance.GetItemTemplateById(itemData.ItemTemplateId);
+
+            if (itemTemplate == null)
+                return null;
+
+            var item = InventoryManager.CreateLoadedItem(itemData, itemTemplate, auction.SellerId, 0);
+
+            Instance.List(item);
+
+            return item;
         }
 
         /// <summary>

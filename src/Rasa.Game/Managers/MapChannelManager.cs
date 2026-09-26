@@ -640,6 +640,15 @@ namespace Rasa.Managers
             DestroyInventory(client, client.Player.Inventory.PersonalInventory);
             DestroyInventory(client, client.Player.Inventory.WeaponDrawer);
 
+            // The auction house's pick-up items are this player's; they are loaded again from
+            // their rows on arrival, like the lists above, and were left registered each time.
+            DestroyInventory(client, client.Player.Inventory.InboxItems);
+
+            // Listed items are the auction house's (AuctionHouseManager.Listed), which keeps them
+            // while the seller is away and gives the same objects back on their next load; the
+            // seller's list of them only goes.
+            client.Player.Inventory.AuctionItems.Clear();
+
             // The Recently Sold list lasts the session: a map change keeps it, and the arrival
             // shows it again (NpcManager.ResendBuyback).
             if (logout)

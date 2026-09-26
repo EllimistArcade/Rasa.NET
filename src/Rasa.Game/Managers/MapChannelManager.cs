@@ -369,9 +369,24 @@ namespace Rasa.Managers
 
                     // check for players leaving the map: /logout, inactivity, and dropped
                     // connections flagged by Client.Close()
-                    foreach (var client in mapChannel.ClientList)
+                    //
+                    // Every one flagged, not the first: this took one player per map per tick and
+                    // stopped, so two hundred connections dropping together from one map - an
+                    // ISP blip, the server's own network - took twenty seconds to clear, with each
+                    // character still registered, in the cells and fought by creatures meanwhile.
+                    // RemovePlayer writes to the database, so a crowd is spread over a few ticks
+                    // by RemovalBudgetMs rather than stalling one; the first always goes.
+                    var removalFrom = System.Diagnostics.Stopwatch.GetTimestamp();
+                    var removed = 0;
+
+                    foreach (var client in mapChannel.ClientList.ToArray())
                         if (client != null && client.Player.RemoveFromMap)
                         {
+                            if (removed > 0 && System.Diagnostics.Stopwatch.GetElapsedTime(removalFrom).TotalMilliseconds >= RemovalBudgetMs)
+                                break;
+
+                            removed++;
+
                             // The MainLoop thread has no handler of its own, so an exception
                             // escaping here stops the whole server ticking. Clear the flag
                             // first and drop the entry on failure so a bad removal is logged
@@ -387,12 +402,13 @@ namespace Rasa.Managers
                                 Logger.WriteLog(LogType.Error, $"Failed to remove {client.Player.FamilyName} from map {mapChannel.MapInfo.MapContextId}: {e}");
                                 mapChannel.ClientList.Remove(client);
                             }
-
-                            break;
                         }
                 }
             }
         }
+
+        /// <summary>How long one map's removal pass may run in a tick before the rest wait for the next; see MapChannelWorker.</summary>
+        private const double RemovalBudgetMs = 50;
 
         /// <summary>The account level whose clients get EnableDevCommands when they enter the world.</summary>
         public const GmLevel DevCommandsLevel = GmLevel.GameMaster;

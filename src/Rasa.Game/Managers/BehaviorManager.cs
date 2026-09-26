@@ -193,6 +193,10 @@ namespace Rasa.Managers
                     if (client.Player == null || !TargetCategories.Seeks(creature.TargetCategory, client.Player.CombatCategory))
                         continue;
 
+                    // Gone, and waiting to be taken out of the world: nothing to pick a fight with.
+                    if (client.Player.Disconected)
+                        continue;
+
                     if (client.Player.GmFlagAlwaysFriendly)
                         continue;
 

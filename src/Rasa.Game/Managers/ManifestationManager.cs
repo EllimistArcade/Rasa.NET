@@ -1863,7 +1863,9 @@ namespace Rasa.Managers
                 new ActorNamePacket(player.FamilyName),
                 new IsRunningPacket(player.IsRunning),
                 new TargetCategoryPacket(TargetCategory.Friendly),
-                new PlayerFlagsPacket(),
+                // Only the player's own client checks them (an action's playerFlagReqs); others get
+                // an empty list, which is still a list.
+                new PlayerFlagsPacket(forSelf ? player.PlayerFlags : null),
                 new IsTrialAccountPacket(player.IsTrialAccount),
                 new EquipmentInfoPacket(client.Player.Inventory.EquippedInventory),
                 // "Received because the manifestation was loaded on the server", and only ever

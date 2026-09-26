@@ -42,6 +42,9 @@ namespace Rasa.Structures
         public DateTime LoginTime { get; set; }
         public List<uint> Logos = new();
 
+        /// <summary>The player flags this character holds (character_player_flag); see PlayerFlagsPacket.</summary>
+        public HashSet<uint> PlayerFlags { get; set; } = new();
+
         /// <summary>Actions this player may not perform, each with the reasons it is blocked for; see Managers.ActionBlocks.</summary>
         public Dictionary<ActionId, HashSet<string>> ActionBlocks { get; } = new();
         public byte ActiveWeapon { get; set; }

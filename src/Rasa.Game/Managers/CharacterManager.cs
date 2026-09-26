@@ -342,6 +342,10 @@ namespace Rasa.Managers
             foreach (var logosId in unitOfWork.CharacterLogoses.GetLogos(source.Id))
                 unitOfWork.CharacterLogoses.SetLogos(cloneId, logosId);
 
+            // As the Logos: what the source has unlocked, the clone has.
+            foreach (var flagId in unitOfWork.CharacterPlayerFlags.Get(source.Id))
+                unitOfWork.CharacterPlayerFlags.Add(cloneId, flagId);
+
             foreach (var teleporter in unitOfWork.CharacterTeleporters.Get(source.Id))
                 unitOfWork.CharacterTeleporters.Add(
                     new CharacterTeleporterEntry(cloneId, teleporter.WaypointId, teleporter.WaypointType));
@@ -874,8 +878,9 @@ namespace Rasa.Managers
                     var itemIds = unitOfWork.CharacterInventories.DeleteForCharacter(client.AccountEntry.Id, charactersBySlot.Id);
                     unitOfWork.Items.DeleteItems(itemIds);
 
-                    // And the cooldowns it logged out with.
+                    // And the cooldowns it logged out with, and its player flags.
                     unitOfWork.CharacterActionReuses.DeleteForCharacter(charactersBySlot.Id);
+                    unitOfWork.CharacterPlayerFlags.DeleteForCharacter(charactersBySlot.Id);
 
                     // TODO delete ClanMember entry
                     unitOfWork.Characters.Delete(charactersBySlot.Id);
@@ -1009,7 +1014,8 @@ namespace Rasa.Managers
                 Abilities = MapChannelManager.Instance.GetPlayerAbilities(character.Id),
                 Missions = missionData,
                 LoginTime = DateTime.Now,
-                Logos = logos
+                Logos = logos,
+                PlayerFlags = new HashSet<uint>(unitOfWork.CharacterPlayerFlags.Get(character.Id))
             };
 
             // The cooldowns it logged out with, on the server's clock; ActionReuseTimes takes
@@ -1042,6 +1048,56 @@ namespace Rasa.Managers
             }
 
             return (int)balance;
+        }
+
+        /// <summary>
+        /// Gives a player flag to, or takes it from, the player: the character's set, its saved row,
+        /// and the client's list (PlayerFlags, the whole list again). Returns whether anything
+        /// changed; a flag that could not be saved is not given.
+        /// </summary>
+        public bool SetPlayerFlag(Client client, uint flagId, bool on)
+        {
+            var player = client?.Player;
+
+            if (player == null || player.PlayerFlags.Contains(flagId) == on)
+                return false;
+
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+            {
+                var saved = on
+                    ? unitOfWork.CharacterPlayerFlags.Add(player.Id, flagId)
+                    : unitOfWork.CharacterPlayerFlags.Remove(player.Id, flagId);
+
+                if (!saved)
+                    return false;
+            }
+
+            if (on)
+                player.PlayerFlags.Add(flagId);
+            else
+                player.PlayerFlags.Remove(flagId);
+
+            client.CallMethod(player.EntityId, new PlayerFlagsPacket(player.PlayerFlags));
+            return true;
+        }
+
+        /// <summary>Takes every player flag from the player; returns how many there were.</summary>
+        public int ClearPlayerFlags(Client client)
+        {
+            var player = client?.Player;
+
+            if (player == null || player.PlayerFlags.Count == 0)
+                return 0;
+
+            using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
+                if (!unitOfWork.CharacterPlayerFlags.RemoveAll(player.Id))
+                    return 0;
+
+            var count = player.PlayerFlags.Count;
+
+            player.PlayerFlags.Clear();
+            client.CallMethod(player.EntityId, new PlayerFlagsPacket(player.PlayerFlags));
+            return count;
         }
 
         /// <summary>

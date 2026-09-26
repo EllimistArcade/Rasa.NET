@@ -916,6 +916,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Someone who has the inviter ignored is not asked by them.
+            if (recipient.Player.IgnoredPlayers.Contains(inviter.AccountEntry.Id))
+            {
+                Message(inviter, PlayerMessage.PmUserIgnoringYou, "name", displayName);
+                return;
+            }
+
             if (_invites.ContainsKey(recipient.AccountEntry.Id))
             {
                 // Includes a repeat invitation from this inviter: every InviteToParty adds

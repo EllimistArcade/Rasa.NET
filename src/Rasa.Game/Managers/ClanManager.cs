@@ -1194,6 +1194,15 @@ namespace Rasa.Managers
             if (inviteeClient?.Player == null)
                 return;
 
+            // Someone who has the inviter ignored is not asked by them.
+            if (inviteeClient.Player.IgnoredPlayers.Contains(client.AccountEntry.Id))
+            {
+                client.CallMethod(SysEntity.ClientClanManagerId,
+                    new DisplayClanMessagePacket((int)PlayerMessage.PmUserIgnoringYou,
+                        CreatePlayerMessageArgs("name", inviteeClient.Player.FamilyName)));
+                return;
+            }
+
             // One open invitation per character, as the client shows one dialog.
             if (_invites.ContainsKey(inviteeClient.Player.Id))
             {

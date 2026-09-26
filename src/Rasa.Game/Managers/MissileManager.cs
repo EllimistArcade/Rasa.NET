@@ -316,6 +316,14 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// Whether one player's weapon may hurt another. Never, for now: abilities already hold to
+        /// that (AbilityManager.IsHostile, "Other players are not targets"), and there is no feud,
+        /// wargame or PvP flag wired up yet to allow anything else. This is the one place to change
+        /// when there is.
+        /// </summary>
+        private static bool PlayersMayFight(Manifestation attacker, Manifestation defender) => false;
+
         private void DoDamageToPlayer(MapChannel mapChannel, Missile missile)
         {
             var actor = EntityManager.Instance.GetActor(missile.TargetEntityId);
@@ -323,6 +331,15 @@ namespace Rasa.Managers
             // Gone since the missile was launched: logged out, or off the map.
             if (actor == null || actor.State == CharacterState.Dead)
                 return;
+
+            // The same rule where the damage lands, for any path that did not go through the
+            // launch check: a player's hit on a player does nothing unless PvP allows it.
+            if (missile.Source is Manifestation attackerPlayer && actor is Manifestation defenderPlayer
+                && !PlayersMayFight(attackerPlayer, defenderPlayer))
+            {
+                missile.DamageA = 0;
+                return;
+            }
 
             // A creature's hit has to be one its target category allows on a player
             // (TargetCategories.MayFightPlayer): a FRIENDLY creature's stray shot does nothing.
@@ -599,6 +616,12 @@ namespace Rasa.Managers
                             {
                                 targetActor = EntityManager.Instance.GetPlayer(action.TargetId);
                                 missile.TargetEntityId = action.TargetId;
+
+                                // A player's weapon at another player. The client does not offer it,
+                                // but the target is whatever SetTargetId named, and nothing refused it.
+                                if (action.Actor is Manifestation shootingPlayer && targetActor is Manifestation shotPlayer
+                                    && !PlayersMayFight(shootingPlayer, shotPlayer))
+                                    return;
                             }
                             break;
                         default:

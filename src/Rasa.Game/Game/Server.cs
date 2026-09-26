@@ -580,10 +580,13 @@ namespace Rasa.Game
 
             try
             {
-                AuthCommunicator = new LengthedSocket(SizeType.Word);
-                AuthCommunicator.OnConnect += OnCommunicatorConnect;
-                AuthCommunicator.OnError += OnCommunicatorError;
-                AuthCommunicator.ConnectAsync(new IPEndPoint(IPAddress.Parse(Config.CommunicatorConfig.Address), Config.CommunicatorConfig.Port));
+                var socket = new LengthedSocket(SizeType.Word);
+
+                AuthCommunicator = socket;
+                socket.OnConnect += OnCommunicatorConnect;
+                socket.OnError += OnCommunicatorError;
+                socket.OnDrop += reason => OnCommunicatorDrop(socket, reason);
+                socket.ConnectAsync(new IPEndPoint(IPAddress.Parse(Config.CommunicatorConfig.Address), Config.CommunicatorConfig.Port));
             }
             catch (Exception e)
             {
@@ -596,13 +599,49 @@ namespace Rasa.Game
 
         private void OnCommunicatorError(SocketAsyncEventArgs args)
         {
+            ScheduleCommunicatorReconnect();
+
+            Logger.WriteLog(LogType.Error, "Could not connect to the Auth server! Trying again in a few seconds...");
+        }
+
+        private void ScheduleCommunicatorReconnect()
+        {
             Timer.Add("CommReconnect", 10000, false, () =>
             {
                 if (!AuthCommunicator?.Connected ?? true)
                     ConnectCommunicator();
             });
+        }
 
-            Logger.WriteLog(LogType.Error, "Could not connect to the Auth server! Trying again in a few seconds...");
+        /// <summary>
+        /// The socket layer gave up on the auth link without a socket error: no pooled buffer to
+        /// re-arm its receive with (it re-arms after every message), none to send with, a full
+        /// send queue, or a frame that would not decode. It logs that once and raises OnDrop;
+        /// after a receive-side drop nothing reads the link again, after a send-side one nothing
+        /// is written to it, and the socket itself stays open and Connected.
+        ///
+        /// Nothing handled OnDrop here, and the reconnect only ever came from OnError, so a
+        /// dropped link stayed dropped: RedirectRequests went unread, every world login failed
+        /// its session check, the auth server went on listing this world as up, and only a
+        /// restart brought it back. The link is closed now - which is what makes Connected false,
+        /// the condition the reconnect waits for - and a reconnect is scheduled exactly as a
+        /// socket error schedules one. A drop from the connect itself (no args left to connect
+        /// with) is retried the same way.
+        /// </summary>
+        private void OnCommunicatorDrop(LengthedSocket socket, string reason)
+        {
+            // Only the link in use: one already replaced by a reconnect has nothing left to say.
+            if (socket != AuthCommunicator)
+                return;
+
+            Logger.WriteLog(LogType.Error, $"The link to the Auth server was dropped ({reason}); world logins cannot complete until it is back. Reconnecting in a few seconds...");
+
+            // Closing completes any receive still armed with an error; this is not a failed
+            // connect, and the reconnect below is already on its way.
+            socket.OnError -= OnCommunicatorError;
+            socket.Close();
+
+            ScheduleCommunicatorReconnect();
         }
 
         private void OnCommunicatorConnect(SocketAsyncEventArgs args)

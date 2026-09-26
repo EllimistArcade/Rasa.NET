@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 
 namespace Rasa.Auth
 {
@@ -35,6 +36,7 @@ namespace Rasa.Auth
 
             Socket.OnReceive += OnReceive;
             Socket.OnError += OnError;
+            Socket.OnDrop += OnDrop;
 
             Socket.ReceiveAsync();
         }
@@ -75,6 +77,32 @@ namespace Rasa.Auth
 
         private void OnError(SocketAsyncEventArgs args)
         {
+            Disconnect();
+        }
+
+        /// <summary>
+        /// The socket layer gave up on this link without a socket error - no buffer to re-arm the
+        /// receive with, a full send queue, a frame that would not decode. The socket stays open
+        /// and Connected after that, and with only OnError handled the game server stayed
+        /// registered and listed as up while nothing it sent was read and nothing reached it.
+        /// It is let go the same way a socket error lets it go; the game server reconnects.
+        /// </summary>
+        private void OnDrop(string reason)
+        {
+            Disconnect();
+        }
+
+        private int _disconnected;
+
+        /// <summary>
+        /// Once per link: a drop closes the socket, and the close completes the receive that
+        /// was still armed with an error, which comes back through OnError.
+        /// </summary>
+        private void Disconnect()
+        {
+            if (Interlocked.Exchange(ref _disconnected, 1) != 0)
+                return;
+
             Socket.Close();
 
             Server.DisconnectCommunicator(this);

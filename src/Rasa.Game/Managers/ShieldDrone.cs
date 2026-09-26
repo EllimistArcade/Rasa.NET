@@ -1,6 +1,8 @@
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Rasa.Managers
 {
@@ -109,32 +111,34 @@ namespace Rasa.Managers
         /// </summary>
         public static void Worker(MapChannel mapChannel)
         {
-            var creatures = new List<Creature>();
+            // The drones on the map, found in one pass over its creatures. This used to gather
+            // every creature on the map into a list first, deduplicated with List.Contains -
+            // a linear search per creature, so quadratic in the map's population, twice a second,
+            // on every map with a player on it, whether or not it had a single drone - and then
+            // measured every drone against every creature on the map again. A creature is on
+            // exactly one cell's list, so there is nothing to deduplicate, and a map without a
+            // drone is done here.
+            List<Creature> drones = null;
 
             foreach (var cell in mapChannel.MapCellInfo.Cells.Values)
                 foreach (var creature in cell.CreatureList)
-                    if (!creatures.Contains(creature))
-                        creatures.Add(creature);
+                    if (Is(creature) && Alive(creature))
+                        (drones ??= new List<Creature>()).Add(creature);
 
-            var drones = new List<Creature>();
+            if (drones == null)
+                return;
 
-            foreach (var creature in creatures)
-            {
-                if (!Is(creature) || !Alive(creature))
-                    continue;
-
-                Raise(mapChannel, creature);
-                drones.Add(creature);
-            }
+            foreach (var drone in drones)
+                Raise(mapChannel, drone);
 
             foreach (var drone in drones)
             {
-                var covered = Covered(drone, creatures);
+                var covered = Covered(mapChannel, drone);
 
                 foreach (var bane in covered)
                     Cover(mapChannel, drone, bane);
 
-                Uncover(mapChannel, drone, creatures, covered);
+                Uncover(mapChannel, drone, covered);
                 Heal(mapChannel, drone, covered);
             }
         }
@@ -142,19 +146,41 @@ namespace Rasa.Managers
         private static bool Alive(Actor actor) =>
             actor != null && actor.State != CharacterState.Dead && actor.State != CharacterState.Dying;
 
-        /// <summary>The drone's own side, alive, inside the radius, and not the drone itself.</summary>
-        private static List<Creature> Covered(Creature drone, List<Creature> creatures)
+        /// <summary>How many cells out from the drone's own the radius can reach: 60 m over 25.6 m cells.</summary>
+        private static readonly int ReachCells = (int)Math.Ceiling(Radius / CellManager.CellSize);
+
+        /// <summary>
+        /// The drone's own side, alive, inside the radius, and not the drone itself. Looked for in
+        /// the cells the radius can reach, not across the whole map. Cells the map has not got are
+        /// passed over rather than created: nothing can be standing in one.
+        /// </summary>
+        private static List<Creature> Covered(MapChannel mapChannel, Creature drone)
         {
             var found = new List<Creature>();
+            var cells = mapChannel.MapCellInfo.Cells;
 
-            foreach (var creature in creatures)
-            {
-                if (creature == drone || !Alive(creature) || creature.TargetCategory != drone.TargetCategory)
-                    continue;
+            // As CellManager.GetCell and GetCellSeed number them.
+            var centreX = (uint)(drone.Position.X / CellManager.CellSize + CellManager.CellBias);
+            var centreZ = (uint)(drone.Position.Z / CellManager.CellSize + CellManager.CellBias);
 
-                if (Vector3.Distance(creature.Position, drone.Position) <= Radius)
-                    found.Add(creature);
-            }
+            for (var dx = -ReachCells; dx <= ReachCells; dx++)
+                for (var dz = -ReachCells; dz <= ReachCells; dz++)
+                {
+                    var cellX = (uint)(centreX + dx);
+                    var cellZ = (uint)(centreZ + dz);
+
+                    if (!cells.TryGetValue((cellX & 0xFFFF) | (cellZ << 16), out var cell))
+                        continue;
+
+                    foreach (var creature in cell.CreatureList)
+                    {
+                        if (creature == drone || !Alive(creature) || creature.TargetCategory != drone.TargetCategory)
+                            continue;
+
+                        if (Vector3.Distance(creature.Position, drone.Position) <= Radius)
+                            found.Add(creature);
+                    }
+                }
 
             return found;
         }
@@ -193,20 +219,36 @@ namespace Rasa.Managers
             });
         }
 
-        /// <summary>Takes the shield off anyone this drone was covering who has walked out of it.</summary>
-        private static void Uncover(MapChannel mapChannel, Creature drone, List<Creature> creatures, List<Creature> covered)
+        /// <summary>
+        /// Who each drone covered on its last pass. Held weakly by the drone, so a drone that
+        /// leaves the world takes its entry with it; the shields it left behind run out on their
+        /// own three-second expiry.
+        /// </summary>
+        private static readonly ConditionalWeakTable<Creature, List<Creature>> LastCovered = new ConditionalWeakTable<Creature, List<Creature>>();
+
+        /// <summary>
+        /// Takes the shield off anyone this drone was covering who has walked out of it. Only
+        /// those it covered last time are looked at - it used to search every creature on the map
+        /// for a shield from this drone, per drone, per pass.
+        /// </summary>
+        private static void Uncover(MapChannel mapChannel, Creature drone, List<Creature> covered)
         {
-            foreach (var creature in creatures)
+            if (LastCovered.TryGetValue(drone, out var previous))
             {
-                if (covered.Contains(creature))
-                    continue;
+                foreach (var creature in previous)
+                {
+                    if (covered.Contains(creature))
+                        continue;
 
-                var shield = creature.ActiveEffects.Values.FirstOrDefault(
-                    e => e.TypeId == ShieldTypeId && e.SourceId == drone.EntityId);
+                    var shield = creature.ActiveEffects.Values.FirstOrDefault(
+                        e => e.TypeId == ShieldTypeId && e.SourceId == drone.EntityId);
 
-                if (shield != null)
-                    GameEffectManager.Instance.DettachEffect(mapChannel, creature, shield);
+                    if (shield != null)
+                        GameEffectManager.Instance.DettachEffect(mapChannel, creature, shield);
+                }
             }
+
+            LastCovered.AddOrUpdate(drone, covered);
         }
 
         /// <summary>

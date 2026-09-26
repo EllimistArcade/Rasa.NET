@@ -2264,13 +2264,16 @@ namespace Rasa.Managers
         {
 
             var itemTemplate = ItemManager.Instance.GetItemTemplateById(itemTemplateId);
-            var classInfo = EntityClassManager.Instance.GetClassInfo(itemTemplate.Class);
 
+            // Checked before its class is read: the other way round, the client's own requests for
+            // templates this server does not have disconnected it.
             if (itemTemplate == null)
             {
                 Logger.WriteLog(LogType.Error, $"RequestTooltipForItemTemplateId: Unknown itemTemplateId {itemTemplateId}");
                 return; // todo: even answer on a unknown template, else the client will continue to spam us with requests
             }
+
+            var classInfo = EntityClassManager.Instance.GetClassInfo(itemTemplate.Class);
             client.CallMethod(SysEntity.ClientGameUIManagerId, new ItemTemplateTooltipInfoPacket(itemTemplate, classInfo));
         }
 

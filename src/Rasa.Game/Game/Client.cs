@@ -56,7 +56,20 @@ namespace Rasa.Game
 
         public ClientState State { get; set; }
         public Manifestation Player = new();
-        public Movement Movement { get; set; }
+        private Movement _movement;
+
+        /// <summary>
+        /// The last Move this client sent, or - before it has sent one, which is every player
+        /// who has not moved since entering the world - where the server has them, facing the
+        /// way the server has them facing. It used to be null until the first Move, and summons,
+        /// Self Destruct's and Stealth's return, and several GM commands read its view direction
+        /// straight off it and disconnected the player.
+        /// </summary>
+        public Movement Movement
+        {
+            get => _movement ?? new Movement(Player?.Position ?? Vector3.Zero, new Vector2((float)(Player?.Rotation ?? 0), 0));
+            set => _movement = value;
+        }
         public uint[] SendSequence { get; } = new uint[256];
         public uint[] ReceiveSequence { get; } = new uint[256];
         public List<UserOptions> UserOptions = new();

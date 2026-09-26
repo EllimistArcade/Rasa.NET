@@ -61,7 +61,9 @@ namespace Rasa.Managers
 
         public void AssignNPCMission(Client client, AssignNPCMissionPacket packet)
         {
-            var mission = MissionManager.Instance.LoadedMissions[packet.MissionId];
+            // Any id can arrive here; an unknown one threw and disconnected the sender.
+            if (!MissionManager.Instance.LoadedMissions.TryGetValue(packet.MissionId, out var mission))
+                return;
 
             if (client.Player.Missions.Count > 30)
             {
@@ -100,7 +102,10 @@ namespace Rasa.Managers
 
                     foreach (var missionId in creature.Npc.NpcMissionIds)
                     {
-                        var mission = MissionManager.Instance.LoadedMissions[missionId];
+                        // An NPC row naming a mission that did not load: skipped, not a disconnect
+                        // for whoever talks to it.
+                        if (!MissionManager.Instance.LoadedMissions.TryGetValue(missionId, out var mission))
+                            continue;
 
                         if (mission.MissionGiver == creature.DbId)
                             dispensableMissions.Add(mission.MissionId, mission);
@@ -267,7 +272,8 @@ namespace Rasa.Managers
 
                 foreach (var missionId in npc.NpcMissionIds)
                 {
-                    var mission = MissionManager.Instance.LoadedMissions[missionId];
+                    if (!MissionManager.Instance.LoadedMissions.TryGetValue(missionId, out var mission))
+                        continue;
 
                     if (mission.MissionReciver == creature.DbId)
                         completeMission.Add(missionId);

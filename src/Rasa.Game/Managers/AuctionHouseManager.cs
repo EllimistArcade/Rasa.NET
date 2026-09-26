@@ -103,6 +103,10 @@ namespace Rasa.Managers
         /// </summary>
         public void RequestAuctionBuyout(Client client, RequestAuctionBuyoutPacket packet)
         {
+            // At an auction house: the auctioneer the window was opened from has to be in reach.
+            if (NpcManager.NpcInReach(client, packet.EntityId, NpcManager.IsAuctioneerNpc, "an auctioneer") == null)
+                return;
+
             var item = EntityManager.Instance.GetItem(packet.ItemId);
 
             if (item == null)
@@ -171,6 +175,10 @@ namespace Rasa.Managers
         /// </summary>
         public void RequestAuctionStatus(Client client, RequestAuctionStatusPacket packet)
         {
+            // At an auction house: the auctioneer the window was opened from has to be in reach.
+            if (NpcManager.NpcInReach(client, packet.EntityId, NpcManager.IsAuctioneerNpc, "an auctioneer") == null)
+                return;
+
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             var auctions = unitOfWork.Auctions.GetAuctionsBySeller(client.Player.Id);
             var now = DateTime.UtcNow;
@@ -197,6 +205,10 @@ namespace Rasa.Managers
         /// <summary>Takes a listing down and puts the item back in the seller's pack. The deposit is not refunded.</summary>
         public void RequestCancelAuction(Client client, RequestCancelAuctionPacket packet)
         {
+            // At an auction house: the auctioneer the window was opened from has to be in reach.
+            if (NpcManager.NpcInReach(client, packet.EntityId, NpcManager.IsAuctioneerNpc, "an auctioneer") == null)
+                return;
+
             var item = EntityManager.Instance.GetItem(packet.ItemEntityId);
 
             if (item == null || !client.Player.Inventory.AuctionItems.Contains(packet.ItemEntityId))
@@ -253,6 +265,10 @@ namespace Rasa.Managers
 
         public void RequestCreateAuction(Client client, RequestCreateAuctionPacket packet)
         {
+            // At an auction house: the auctioneer the window was opened from has to be in reach.
+            if (NpcManager.NpcInReach(client, packet.EntityId, NpcManager.IsAuctioneerNpc, "an auctioneer") == null)
+                return;
+
             var item = EntityManager.Instance.GetItem(packet.ItemEntityId);
             var slotId = FindPersonalSlotOf(client, packet.ItemEntityId);
 
@@ -342,6 +358,10 @@ namespace Rasa.Managers
         /// </summary>
         public void RequestQueryAuctions(Client client, RequestQueryAuctionsPacket packet)
         {
+            // At an auction house: the auctioneer the window was opened from has to be in reach.
+            if (NpcManager.NpcInReach(client, packet.EntityId, NpcManager.IsAuctioneerNpc, "an auctioneer") == null)
+                return;
+
             if (!AuctionCategory.Names.TryGetValue(packet.CategoryId, out var category))
             {
                 QueryFailed(client, PlayerMessage.PmAuctionNoResultsFound);

@@ -79,7 +79,7 @@ namespace Rasa.Managers
 
         public void RequestNpcConverse(Client client, RequestNPCConversePacket packet)
         {
-            var creature = EntityManager.Instance.GetCreature(packet.EntityId);
+            var creature = NpcInReach(client, packet.EntityId, null, "an NPC");
 
             if (creature == null)
                 return;
@@ -405,9 +405,55 @@ namespace Rasa.Managers
         }
         #endregion
 
+        #region Reach
+
+        /// <summary>
+        /// How far from an NPC a player may talk to it, trade with it or use its auction house.
+        /// The same allowance RequestUseObject gives objects: the client opens these windows from
+        /// a few metres, and a player who steps back while one is open is still served.
+        /// </summary>
+        public const float NpcInteractionRange = 20f;
+
+        /// <summary>
+        /// The NPC with this id, if it is alive on the player's map within NpcInteractionRange
+        /// and is what the request needs it to be; otherwise null. Nothing checked any of this:
+        /// every vendor, repair, sale and auction request named an NPC by id and was served from
+        /// anywhere on any map - the vendor's stock and every auction house were a click away
+        /// from the middle of a fight or a dungeon.
+        /// </summary>
+        public static Creature NpcInReach(Client client, ulong entityId, Func<Npc, bool> isRole, string role)
+        {
+            var player = client?.Player;
+            var creature = EntityManager.Instance.GetCreature(entityId);
+
+            if (player == null || creature?.Npc == null || (isRole != null && !isRole(creature.Npc)))
+            {
+                Logger.WriteLog(LogType.Security, $"AccountId = {client?.AccountEntry?.Id} named {entityId} as {role}, and it is not one.");
+                return null;
+            }
+
+            if (creature.State == CharacterState.Dead || creature.MapContextId != player.MapContextId
+                || System.Numerics.Vector3.Distance(player.Position, creature.Position) > NpcInteractionRange)
+            {
+                Logger.WriteLog(LogType.Debug, $"{player.FamilyName} asked {role} {entityId} for something from out of reach; ignored.");
+                return null;
+            }
+
+            return creature;
+        }
+
+        public static bool IsVendorNpc(Npc npc) => npc.Vendor != null;
+
+        public static bool IsAuctioneerNpc(Npc npc) => npc.NpcIsAuctioneer;
+
+        #endregion
+
         #region Auctioneer
         public void RequestNPCOpenAuctionHouse(Client client, ulong entityId)
         {
+            if (NpcInReach(client, entityId, IsAuctioneerNpc, "an auctioneer") == null)
+                return;
+
             client.CallMethod(entityId, new OpenAuctionHousePacket());
         }
         #endregion
@@ -436,6 +482,9 @@ namespace Rasa.Managers
             var creature = EntityManager.Instance.GetCreature(packet.EntityId);
 
             if (creature?.Npc?.Vendor?.VendorItems == null)
+                return;
+
+            if (NpcInReach(client, packet.EntityId, IsVendorNpc, "a vendor") == null)
                 return;
 
             if (!EntityManager.Instance.VendorItems.TryGetValue(packet.EntityId, out var entityList))
@@ -490,6 +539,9 @@ namespace Rasa.Managers
             // its sell price. Adding an item that was already there merged it with itself and
             // wrote the doubled stack to the row, then inserted a second inventory row for the
             // same item id; on the next login the player had two of it, both doubled.
+            if (NpcInReach(client, packet.VendorEntityId, IsVendorNpc, "a vendor") == null)
+                return;
+
             var buyback = client.Player.Inventory.BuybackItems;
 
             if (!buyback.Contains(packet.ItemEntityId))
@@ -551,6 +603,9 @@ namespace Rasa.Managers
             // stock: without that, any item entity id the client had ever been shown - another
             // player's rifle, a corpse's loot - could be "bought" here at its template's BuyPrice,
             // which is 0 for anything no vendor sells.
+            if (NpcInReach(client, packet.VendorEntityId, IsVendorNpc, "a vendor") == null)
+                return;
+
             if (!EntityManager.Instance.VendorItems.TryGetValue(packet.VendorEntityId, out var stock)
                 || !stock.Contains(packet.ItemEntityId))
             {
@@ -690,7 +745,7 @@ namespace Rasa.Managers
                 return false;
 
             if (EntityManager.Instance.VendorItems.ContainsKey(vendorEntityId))
-                return true;
+                return NpcInReach(client, vendorEntityId, IsVendorNpc, "a vendor") != null;
 
             Logger.WriteLog(LogType.Security, $"AccountId = {client.AccountEntry.Id} asked {vendorEntityId} for repairs, and it is not a vendor.");
 
@@ -779,6 +834,9 @@ namespace Rasa.Managers
             var itemEntityId = packet.ItemEntityId;
 
             if (packet.Quantity <= 0)
+                return;
+
+            if (NpcInReach(client, packet.VendorEntityId, IsVendorNpc, "a vendor") == null)
                 return;
 
             // Sold already, or also held somewhere a sale does not clear. An item is in one list

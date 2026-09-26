@@ -57,8 +57,16 @@ namespace Rasa.Managers
         /// <summary>Whether the Miasma is a cloud now: it does nothing until it coalesces.</summary>
         public static bool IsDissipated(Creature creature)
         {
+            // A loop, not Any(): this is asked of every creature on every think, and Any with a
+            // lambda that captures the creature allocates a closure and a delegate each time.
             lock (CloudsLock)
-                return Clouds.Any(c => c.Miasma == creature);
+            {
+                foreach (var cloud in Clouds)
+                    if (cloud.Miasma == creature)
+                        return true;
+
+                return false;
+            }
         }
 
         /// <summary>The Miasma turns to a cloud, if it is not one already; whether it did.</summary>

@@ -853,7 +853,7 @@ namespace Rasa.Managers
 
             // let's calculate damage
             var damageRange = weaponClassInfo.MaxDamage - weaponClassInfo.MinDamage;
-            var damage = weaponClassInfo.MinDamage + new Random().Next(0, damageRange + 1);
+            var damage = weaponClassInfo.MinDamage + Random.Shared.Next(0, damageRange + 1);
 
             // A worn weapon hits softer (Durability): full damage down to 75% condition, half at
             // 25% and below. Then the shot wears it, by its share of a second of firing - if it

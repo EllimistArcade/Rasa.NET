@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -151,9 +151,16 @@ namespace Rasa.Managers
         /// <summary>Whether the creature is in its cocoon, or hatching out of one: it does nothing else.</summary>
         public static bool IsBusy(Creature creature)
         {
+            // A loop, not Any(): this is asked of every creature on every think, and Any with a
+            // lambda that captures the creature allocates a closure and a delegate each time.
             lock (SummonsLock)
-                return Cocoons.Any(c => c.Grub == creature)
-                    || Hatching.TryGetValue(creature, out var until) && Environment.TickCount64 < until;
+            {
+                foreach (var cocoon in Cocoons)
+                    if (cocoon.Grub == creature)
+                        return true;
+
+                return Hatching.TryGetValue(creature, out var until) && Environment.TickCount64 < until;
+            }
         }
 
         /// <summary>How long hatching takes: CR_BIRTH_ATTA_COCOON's recovery.</summary>

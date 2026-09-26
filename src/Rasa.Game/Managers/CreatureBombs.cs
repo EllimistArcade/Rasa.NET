@@ -172,8 +172,16 @@ namespace Rasa.Managers
         /// <summary>Whether the creature is winding up its self-destruct, or a Stalker its egg drop: it does nothing else.</summary>
         public static bool IsSelfDestructing(Creature creature)
         {
+            // A loop, not Any(): this is asked of every creature on every think, and Any with a
+            // lambda that captures the creature allocates a closure and a delegate each time.
             lock (BombsLock)
-                return Bombs.Any(b => b.Source == creature && b.Effect == null);
+            {
+                foreach (var bomb in Bombs)
+                    if (bomb.Source == creature && bomb.Effect == null)
+                        return true;
+
+                return false;
+            }
         }
 
         private static ActionLevelInfo LevelOf(CreatureAction action)

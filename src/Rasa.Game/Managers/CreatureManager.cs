@@ -213,7 +213,7 @@ namespace Rasa.Managers
                 // give experience
                 var experience = creature.Level * 100; // base experience
                 var experienceRange = creature.Level * 10;
-                experience += (uint)(new Random().Next() % (experienceRange * 2 + 1)) - experienceRange;
+                experience += (uint)(Random.Shared.Next() % (experienceRange * 2 + 1)) - experienceRange;
 
                 // todo: Depending on level difference reduce experience
                 ManifestationManager.Instance.GainExperience(client, experience);

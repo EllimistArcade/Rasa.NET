@@ -41,6 +41,17 @@ namespace Rasa.Structures
         /// </summary>
         public readonly HashSet<Actor> ActorsWithEffects = new HashSet<Actor>();
 
+        /// <summary>
+        /// Reused copies of the cell table for the passes that walk every cell while something
+        /// under them may add a cell (GetCell creates the ones it is asked for): the creature
+        /// think every 250 ms, and the creature armour regeneration every second. Each used to
+        /// copy the table afresh - sixteen bytes a cell, over the large object heap's threshold
+        /// once a map has touched five thousand cells, four times a second per map. The loop
+        /// thread runs one pass at a time, so one buffer each is enough.
+        /// </summary>
+        internal readonly List<MapCell> ThinkCells = new List<MapCell>();
+        internal readonly List<MapCell> RegenCells = new List<MapCell>();
+
         // Dynamic Object List
         public List<DynamicObject> DynamicObjects = new List<DynamicObject>();
 

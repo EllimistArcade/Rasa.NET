@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 
 namespace Rasa.Managers
@@ -79,13 +79,21 @@ namespace Rasa.Managers
         /// <summary>One second of armour regeneration for every creature on the map.</summary>
         public static void Regenerate(MapChannel mapChannel)
         {
-            foreach (var cell in mapChannel.MapCellInfo.Cells.Values.ToList())
+            // Over a reused copy of the cell table, and each cell's creatures by index: this used
+            // to copy the table and then every cell's creature list, once a second per map.
+            var cells = mapChannel.RegenCells;
+
+            cells.Clear();
+            cells.AddRange(mapChannel.MapCellInfo.Cells.Values);
+
+            foreach (var cell in cells)
             {
                 if (cell == null)
                     continue;
 
-                foreach (var creature in cell.CreatureList.ToList())
+                for (var i = 0; i < cell.CreatureList.Count; i++)
                 {
+                    var creature = cell.CreatureList[i];
                     if (!Regenerates(creature) || !creature.Attributes.TryGetValue(Attributes.Armor, out var armor))
                         continue;
 

@@ -319,7 +319,7 @@ namespace Rasa.Managers
             var tCell = CellManager.Instance.GetCell(mapChannel, cellX, cellZ);
             if (tCell != null && tCell.CreatureList.Count > 1)
             {
-                var randomCreatureIndex = new Random().Next(tCell.CreatureList.Count);
+                var randomCreatureIndex = Random.Shared.Next(tCell.CreatureList.Count);
                 // get the creature
                 var tCreature = tCell.CreatureList[randomCreatureIndex];
                 // is it a different alive creature?
@@ -599,8 +599,8 @@ namespace Rasa.Managers
                     else
                     {
                         // random position bias added to every node (to make groups look like they do not run on the same path)
-                        creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[0] = ((new Random().Next() % 1001) - 500) / 500.0f * creature.Controller.AiPathFollowing.GeneralPath.NodeOffsetRandomization;
-                        creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[1] = ((new Random().Next() % 1001) - 500) / 500.0f * creature.Controller.AiPathFollowing.GeneralPath.NodeOffsetRandomization;
+                        creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[0] = ((Random.Shared.Next() % 1001) - 500) / 500.0f * creature.Controller.AiPathFollowing.GeneralPath.NodeOffsetRandomization;
+                        creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[1] = ((Random.Shared.Next() % 1001) - 500) / 500.0f * creature.Controller.AiPathFollowing.GeneralPath.NodeOffsetRandomization;
                         // update home position to be at the (old) current node
                         creature.HomePos.Position = new Vector3(currentTargetNodePos[0], currentTargetNodePos[1], currentTargetNodePos[2]);
                     }
@@ -831,7 +831,7 @@ namespace Rasa.Managers
                     UpdateEntityMovement(targetDistX, targetDistY, targetDistZ, creature, mapChannel, 0.0f, false, delta);
 
                     // execute action and quit
-                    var dmg = (int)(action.MinDamage + (new Random().Next() % (action.MaxDamage - action.MinDamage + 1)));
+                    var dmg = (int)(action.MinDamage + (Random.Shared.Next() % (action.MaxDamage - action.MinDamage + 1)));
 
                     // An attack that is a damage over time, or an effect alone, lands no hit: its
                     // row's damage is the effect's (CreatureEffectAttacks).
@@ -944,7 +944,7 @@ namespace Rasa.Managers
                     else if (targetDistSqr < 0.1f)
                     {
                         // if too near, move out of enemy by running to random point somewhere x units around the creature
-                        var angle = (new Random().Next() / 32767.0f) * 6.28318f; // random angle
+                        var angle = (Random.Shared.Next() / 32767.0f) * 6.28318f; // random angle
                         var distance = 2.5f; // keep 2.5 meter distance
                         pathTarget.X = targetPosition.X + (float)Math.Cos(angle) * distance;
                         pathTarget.Y = targetPosition.Y;
@@ -1100,7 +1100,7 @@ namespace Rasa.Managers
             controller.ActionWander.Errand = false;
             controller.ActionWander.Arriving = false;
             controller.ActionWander.MovingMs = 0;
-            controller.ActionWander.IdleMs = staggered ? new Random().Next((int)WanderIntervalMs) : 0;
+            controller.ActionWander.IdleMs = staggered ? Random.Shared.Next((int)WanderIntervalMs) : 0;
             controller.Path.Clear();
             controller.PathIndex = 0;
         }
@@ -1295,13 +1295,16 @@ namespace Rasa.Managers
             // todo: When on heavy load, the server should increase the time between calls to
             //       this function. (check player updating as a reference)
 
-            // mapChannel.MapCellInfo.Cells can be modified, so we create temp list;
-            var tempCells = mapChannel.MapCellInfo.Cells.ToList();
+            // A thinking creature can add a cell to the table (GetCell makes the ones it is asked
+            // for), so the walk is over a copy - one kept on the map and refilled, not a new list
+            // on every think (MapChannel.ThinkCells).
+            var tempCells = mapChannel.ThinkCells;
 
-            foreach (var entry in tempCells)
+            tempCells.Clear();
+            tempCells.AddRange(mapChannel.MapCellInfo.Cells.Values);
+
+            foreach (var mapCell in tempCells)
             {
-                var mapCell = entry.Value;
-
                 if (mapCell == null) // should never happen, but still do a check for safety
                     continue;
                 // creatures
@@ -1472,9 +1475,30 @@ namespace Rasa.Managers
             return OpensNow(creature, unit);
         }
 
+        /// <summary>
+        /// The actions soonest ready first, equals in the order the creature has them - what
+        /// OrderBy gave, as one list and an insertion sort over a handful of entries rather than
+        /// the LINQ machinery, on every think of every fighting creature.
+        /// </summary>
         public static List<CreatureAction> ByReadiness(IEnumerable<CreatureAction> actions)
         {
-            return actions.OrderBy(a => a.CooldownTimer).ToList();
+            var list = new List<CreatureAction>(actions);
+
+            for (var i = 1; i < list.Count; i++)
+            {
+                var action = list[i];
+                var j = i - 1;
+
+                while (j >= 0 && list[j].CooldownTimer > action.CooldownTimer)
+                {
+                    list[j + 1] = list[j];
+                    j--;
+                }
+
+                list[j + 1] = action;
+            }
+
+            return list;
         }
 
         public void SetActionFighting(Creature creature, ulong targetEntityId)
@@ -1579,7 +1603,7 @@ namespace Rasa.Managers
 
             if (away.LengthSquared() < 0.01f)
             {
-                var angle = new Random().NextDouble() * Math.PI * 2;
+                var angle = Random.Shared.NextDouble() * Math.PI * 2;
                 away = new Vector3((float)Math.Cos(angle), 0, (float)Math.Sin(angle));
             }
 
@@ -1770,8 +1794,8 @@ namespace Rasa.Managers
             creature.Controller.Path.Clear();
             creature.Controller.PathIndex = 0;
             // random position bias added to every node (to make groups look like they do not run on the same path)
-            creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[0] =  ((new Random().Next() % 1001) - 500) / 500.0f * creature.Controller.AiPathFollowing.GeneralPath.NodeOffsetRandomization;
-            creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[1] = ((new Random().Next() % 1001) - 500) / 500.0f * creature.Controller.AiPathFollowing.GeneralPath.NodeOffsetRandomization;
+            creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[0] =  ((Random.Shared.Next() % 1001) - 500) / 500.0f * creature.Controller.AiPathFollowing.GeneralPath.NodeOffsetRandomization;
+            creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[1] = ((Random.Shared.Next() % 1001) - 500) / 500.0f * creature.Controller.AiPathFollowing.GeneralPath.NodeOffsetRandomization;
 
             Logger.WriteLog(LogType.AI, $"path 0{creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[0]}");
             Logger.WriteLog(LogType.AI, $"path 1{creature.Controller.AiPathFollowing.RandomPathNodeBiasXZ[1]}");
@@ -1899,7 +1923,7 @@ namespace Rasa.Managers
         private void UpdateCreatureTimers(Creature creature, long delta)
         {
             creature.LastAgression += delta;
-            creature.LastRestTime += delta + new Random().Next(1, 100);
+            creature.LastRestTime += delta + Random.Shared.Next(1, 100);
             creature.Controller.TimerPathUpdateLock -= delta;
             creature.Controller.ActionFighting.SightRecheckIn -= delta;
 

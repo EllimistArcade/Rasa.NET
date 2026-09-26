@@ -97,6 +97,47 @@ namespace Rasa.Structures
                 return _hate.OrderByDescending(e => e.Value).ToList();
         }
 
+        /// <summary>Top's working list; the loop thread's alone, and empty between calls.</summary>
+        private readonly List<KeyValuePair<ulong, double>> _ranked = new List<KeyValuePair<ulong, double>>();
+
+        /// <summary>Most hated first, keeping the table's order among equals - what OrderByDescending gave.</summary>
+        private static void SortMostHatedFirst(List<KeyValuePair<ulong, double>> entries)
+        {
+            for (var i = 1; i < entries.Count; i++)
+            {
+                var entry = entries[i];
+                var j = i - 1;
+
+                while (j >= 0 && entries[j].Value < entry.Value)
+                {
+                    entries[j + 1] = entries[j];
+                    j--;
+                }
+
+                entries[j + 1] = entry;
+            }
+        }
+
+        /// <summary>
+        /// Drops every entry <paramref name="gone"/> says can never be fought again. Allocates only
+        /// when there is something to drop.
+        /// </summary>
+        public void RemoveWhere(Func<ulong, bool> gone)
+        {
+            List<ulong> drop = null;
+
+            lock (_lock)
+            {
+                foreach (var entry in _hate)
+                    if (gone(entry.Key))
+                        (drop ??= new List<ulong>()).Add(entry.Key);
+
+                if (drop != null)
+                    foreach (var id in drop)
+                        _hate.Remove(id);
+            }
+        }
+
         /// <summary>
         /// Who the creature should be fighting: the most hated entry that <paramref name="canFight"/>
         /// allows, except that the current target keeps it unless someone hates it more by
@@ -106,8 +147,31 @@ namespace Rasa.Structures
         /// </summary>
         public ulong Top(Func<ulong, bool> canFight, ulong current, int takeoverPercent)
         {
-            var ranked = Ranked();
-            var best = ranked.FirstOrDefault(e => canFight(e.Key));
+            // Asked of every fighting creature on every think. It used to rank the table with
+            // OrderByDescending(...).ToList() and search that with a closure; the ranking is
+            // now an insertion sort into a list the table keeps (a handful of entries, and
+            // stable, so ties fall as they did), and the search a loop. canFight is called
+            // outside the table's lock, as before.
+            var ranked = _ranked;
+
+            ranked.Clear();
+
+            lock (_lock)
+                foreach (var entry in _hate)
+                    ranked.Add(entry);
+
+            SortMostHatedFirst(ranked);
+
+            var best = default(KeyValuePair<ulong, double>);
+
+            foreach (var entry in ranked)
+                if (canFight(entry.Key))
+                {
+                    best = entry;
+                    break;
+                }
+
+            ranked.Clear();
 
             if (best.Key == 0)
                 return 0;

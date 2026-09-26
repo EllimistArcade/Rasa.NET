@@ -238,9 +238,8 @@ namespace Rasa.Managers
         /// </summary>
         public static ulong ChooseTarget(Creature creature)
         {
-            foreach (var entry in creature.Hate.Ranked())
-                if (EntityManager.Instance.GetEntityType(entry.Key) == 0)
-                    creature.Hate.Remove(entry.Key);
+            // Not Ranked(): nothing here needs an order, and this runs every think.
+            creature.Hate.RemoveWhere(id => EntityManager.Instance.GetEntityType(id) == 0);
 
             var current = creature.Controller?.ActionFighting.TargetEntityId ?? 0;
 

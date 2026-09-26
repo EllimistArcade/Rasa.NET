@@ -373,8 +373,8 @@ namespace Rasa.Managers
             }
             else if (count != 1)
             {
-                pos.X += new Random().Next() % 5 - 2;
-                pos.Z += new Random().Next() % 5 - 2;
+                pos.X += Random.Shared.Next() % 5 - 2;
+                pos.Z += Random.Shared.Next() % 5 - 2;
             }
 
             return NavMeshManager.SnapToGround(mapChannel, pos);

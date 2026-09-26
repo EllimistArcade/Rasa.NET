@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -111,8 +111,16 @@ namespace Rasa.Managers
         /// <summary>Whether the creature is winding up a heal or a revive, or lying down before its self revive: it does nothing else.</summary>
         public static bool IsCasting(Creature creature)
         {
+            // A loop, not Any(): this is asked of every creature on every think, and Any with a
+            // lambda that captures the creature allocates a closure and a delegate each time.
             lock (CastsLock)
-                return Casts.Any(c => c.Caster == creature);
+            {
+                foreach (var cast in Casts)
+                    if (cast.Caster == creature)
+                        return true;
+
+                return false;
+            }
         }
 
         private static ActionLevelInfo LevelOf(CreatureAction action)

@@ -42,11 +42,11 @@ namespace Rasa.Structures
             SpawnPool = spawnPool;
             MapContextId = spawnPool.MapContextId;
             Position = new Vector3(
-                spawnPool.Position.X + (2.0f - (new Random().Next() % 100) * 0.04f),
+                spawnPool.Position.X + (2.0f - (Random.Shared.Next() % 100) * 0.04f),
                 spawnPool.Position.Y,
-                spawnPool.Position.Z + (2.0f - (new Random().Next() % 100) * 0.04f)
+                spawnPool.Position.Z + (2.0f - (Random.Shared.Next() % 100) * 0.04f)
                 );
-            Rotation = (new Random().Next() % 640) * 0.01f;
+            Rotation = (Random.Shared.Next() % 640) * 0.01f;
         }
         
         /// <summary>
@@ -73,7 +73,7 @@ namespace Rasa.Structures
                 MapContextId = client.Player.MapContextId;
 
             Position = client.Player.Position;
-            Rotation = (new Random().Next() % 640) * 0.01f;
+            Rotation = (Random.Shared.Next() % 640) * 0.01f;
             DynamicObjectType = DynamicObjectType.DropshipTeleporter;
             Destination = destination;
             DestinationMapId = destinationMapId;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -74,8 +74,16 @@ namespace Rasa.Managers
         /// <summary>Whether the Kael is mid-charge: carried, and doing nothing else until its blow lands.</summary>
         public static bool IsCharging(Creature creature)
         {
+            // A loop, not Any(): this is asked of every creature on every think, and Any with a
+            // lambda that captures the creature allocates a closure and a delegate each time.
             lock (ChargesLock)
-                return Charges.Any(c => c.Kael == creature);
+            {
+                foreach (var charge in Charges)
+                    if (charge.Kael == creature)
+                        return true;
+
+                return false;
+            }
         }
 
         /// <summary>The windup the client plays for a charge over this distance at this speed, in ms.</summary>

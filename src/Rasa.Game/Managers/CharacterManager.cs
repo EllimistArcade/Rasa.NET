@@ -89,6 +89,10 @@ namespace Rasa.Managers
 
         public void RequestCharacterName(Client client, int gender)
         {
+            // Asked for by the character creation screen and nowhere else.
+            if (client.State != ClientState.CharacterSelection)
+                return;
+
             using var unitOfWork = _gameUnitOfWorkFactory.CreateWorld();
             var name = unitOfWork.RandomNames.GetFirstName((Gender)gender);
             client.CallMethod(SysEntity.ClientMethodId, new GeneratedCharacterNamePacket
@@ -99,6 +103,10 @@ namespace Rasa.Managers
 
         public void RequestFamilyName(Client client)
         {
+            // Asked for by the character creation screen and nowhere else.
+            if (client.State != ClientState.CharacterSelection)
+                return;
+
             using var unitOfWork = _gameUnitOfWorkFactory.CreateWorld();
             var name = unitOfWork.RandomNames.GetLastName();
             client.CallMethod(SysEntity.ClientMethodId, new GeneratedFamilyNamePacket

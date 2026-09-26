@@ -536,6 +536,15 @@ namespace Rasa.Game
         /// </summary>
         private bool IsExpected(GameOpcode methodId, PythonPacket packet)
         {
+            // Nothing at all before the world login: the worldless methods are for the character
+            // screen and the loading screen, both of which come after it. They were reachable from
+            // a connection that had only done the key exchange, with no account behind it.
+            if (!IsAuthenticated())
+            {
+                ReportOutOfState(methodId);
+                return false;
+            }
+
             if (IsInWorld || WorldlessMethods.Contains(methodId))
                 return true;
 

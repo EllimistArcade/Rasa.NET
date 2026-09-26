@@ -34,6 +34,15 @@ namespace Rasa.Queue
         /// <summary>When the connection was accepted; a handshake that has not finished in time is closed.</summary>
         public DateTime ConnectedTime { get; } = DateTime.Now;
 
+        /// <summary>
+        /// Wires the socket up and nothing more: no I/O happens until <see cref="Start"/>. The
+        /// manager builds this inside its client-list lock, and anything that touches the
+        /// socket here can run this connection's handlers on the same thread - a receive that
+        /// completes synchronously dispatches straight into the handshake, which goes on to
+        /// Enqueue and from there to Server.Clients. Doing that under QueueManager.Clients
+        /// nested the two list locks in the opposite order to the world loop, which holds
+        /// Server.Clients for its whole tick and takes QueueManager.Clients in Arrived.
+        /// </summary>
         public QueueClient(QueueManager manager, LengthedSocket socket)
         {
             Manager = manager;
@@ -42,8 +51,16 @@ namespace Rasa.Queue
             Socket.OnError += OnError;
             Socket.OnDrop += OnDrop;
 
-            Socket.ReceiveAsync();
+            State = QueueState.Authenticating;
+        }
 
+        /// <summary>
+        /// Sends the server key and starts reading. Called by the manager once this client is on
+        /// its list and the list's lock has been released; see the constructor for why that
+        /// order matters.
+        /// </summary>
+        public void Start()
+        {
             Socket.Send(new ServerKeyPacket
             {
                 PublicKey = Manager.Config.PublicKey,
@@ -51,7 +68,11 @@ namespace Rasa.Queue
                 Generator = Manager.Config.Generator
             });
 
-            SetState(QueueState.Authenticating);
+            // A send that could not go out has already closed the connection.
+            if (State == QueueState.Disconnected)
+                return;
+
+            Socket.ReceiveAsync();
         }
 
         private void OnReceive(BufferData data)

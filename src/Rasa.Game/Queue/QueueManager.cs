@@ -16,6 +16,15 @@ namespace Rasa.Queue
 
     public class QueueManager
     {
+        /// <summary>
+        /// Lock order, which every path here keeps to: Server.Clients may be held when
+        /// <see cref="Clients"/> is taken (the world loop's Arrived), and _queuedClients may be
+        /// held when <see cref="Clients"/> is taken (a redirect whose send drops the connection
+        /// closes it, and Close leaves the list). Nothing takes Server.Clients or _queuedClients
+        /// while holding <see cref="Clients"/>, and nothing takes Server.Clients while holding
+        /// _queuedClients. Nothing that can run socket I/O is called under <see cref="Clients"/>:
+        /// a synchronous completion runs this connection's handlers on the same thread.
+        /// </summary>
         private readonly Queue<QueueClient> _queuedClients = new Queue<QueueClient>();
 
         public List<QueueClient> Clients { get; } = new List<QueueClient>();
@@ -173,14 +182,24 @@ namespace Rasa.Queue
             Socket.AcceptAsync();
 
             var address = socket.RemoteAddress;
+            QueueClient client = null;
 
+            // Counted and added under the lock, so two accepts from one address cannot both
+            // pass the check; started after it, because starting runs socket I/O whose
+            // completion can run the whole handshake on this thread (see QueueClient).
             lock (Clients)
             {
                 if (Clients.Count(c => address.Equals(c.Socket.RemoteAddress)) < MaxConnectionsPerAddress)
                 {
-                    Clients.Add(new QueueClient(this, socket));
-                    return;
+                    client = new QueueClient(this, socket);
+                    Clients.Add(client);
                 }
+            }
+
+            if (client != null)
+            {
+                client.Start();
+                return;
             }
 
             socket.Close();
@@ -213,9 +232,16 @@ namespace Rasa.Queue
 
         public void Enqueue(QueueClient client)
         {
+            // Read before the queue lock, not under it: IsFull counts Server.Clients, which the
+            // world loop holds for its whole tick, and waiting for it while holding a queue lock
+            // nests the queue's locks inside the world's in one place and outside them in
+            // another. Nothing is lost by reading it first: the count was only ever a snapshot,
+            // free to change the moment it was taken, with or without this lock held.
+            var full = Server.IsFull;
+
             lock (_queuedClients)
             {
-                if (!Server.IsFull)
+                if (!full)
                 {
                     // TODO: need a position update before redirect?
                     client.Redirect(Server.PublicAddress, Server.Config.GameConfig.Port);

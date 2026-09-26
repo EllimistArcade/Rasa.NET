@@ -320,6 +320,20 @@ namespace Rasa.Game
             switch (protocolPacket.Type)
             {
                 case ClientMessageOpcode.Login:
+                    // Once per connection, as its first message. Nothing checked this: a second
+                    // Login from a connection already at the character screen or in the world ran
+                    // the whole login again - a new account entry and character selection - over a
+                    // manifestation still registered and standing in its map's cells, and the
+                    // already-logged-in check only looks at other connections. The client sends it
+                    // once, straight after the key exchange, so anything else is not the client.
+                    if (State != ClientState.Connected)
+                    {
+                        Logger.WriteLog(LogType.Security,
+                            $"Client {Socket.RemoteAddress} (account {AccountEntry?.Id}) sent a second Login in state {State}; disconnecting.");
+                        Close();
+                        return;
+                    }
+
                     var loginMsg = GetMessageAs<LoginMessage>(protocolPacket);
 
                     if (loginMsg.Version.Length != 8 || loginMsg.Version != "1.16.5.0")

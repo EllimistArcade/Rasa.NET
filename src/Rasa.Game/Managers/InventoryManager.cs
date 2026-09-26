@@ -262,14 +262,20 @@ namespace Rasa.Managers
                 return;
             }
 
+            // The tab is recorded first and the price taken second, as the clan lockbox's tabs are:
+            // taken first, a failure writing the tab left the player charged for nothing. If the
+            // charge is refused the tab goes back.
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            unitOfWork.CharacterLockboxes.UpdatePurashedTabs(client.AccountEntry.Id, packet.TabId);
+
             if (!ManifestationManager.Instance.LossCredits(client, price))
+            {
+                unitOfWork.CharacterLockboxes.UpdatePurashedTabs(client.AccountEntry.Id, owned);
                 return;
+            }
 
             // update Player
             client.Player.LockboxTabs = packet.TabId;
-            // update Db
-            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
-            unitOfWork.CharacterLockboxes.UpdatePurashedTabs(client.AccountEntry.Id, packet.TabId);
             // send data to client
             client.CallMethod(SysEntity.ClientInventoryManagerId, new LockboxTabPermissionsPacket(packet.TabId));
         }
@@ -1280,12 +1286,36 @@ namespace Rasa.Managers
             // amount was boxed and unboxed as an int, an InvalidCastException, so the clan
             // kept every deposit, the depositor kept the money, and the client was
             // disconnected. If the second step fails now the player is short, not the clan.
-            CharacterManager.Instance.UpdateCharacter(client, characterUpdate, (int)(-amount));
+            //
+            // Both sides are now written in one transaction, so a failure between them leaves
+            // neither changed. The character side used to go through CharacterManager on a unit of
+            // work of its own and commit on its own, before the clan's.
+            try
+            {
+                using var transaction = unitOfWork.BeginTransaction();
 
-            if (creditType == 1)
-                unitOfWork.Clans.UpdateCredits(client.Player.ClanId, (uint)lockboxAfter);
-            else
-                unitOfWork.Clans.UpdatePrestige(client.Player.ClanId, (uint)lockboxAfter);
+                if (creditType == 1)
+                {
+                    unitOfWork.Characters.UpdateCharacterCredits(client.Player.Id, (int)playerAfter);
+                    unitOfWork.Clans.UpdateCredits(client.Player.ClanId, (uint)lockboxAfter);
+                }
+                else
+                {
+                    unitOfWork.Characters.UpdateCharacterPrestige(client.Player.Id, (int)playerAfter);
+                    unitOfWork.Clans.UpdatePrestige(client.Player.ClanId, (uint)lockboxAfter);
+                }
+
+                unitOfWork.Complete();
+                transaction.Commit();
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Clan transfer of {amount} {currency} for {client.Player.FamilyName} failed to commit; nothing moved: {e}");
+                return;
+            }
+
+            client.Player.Credits[currency] = (int)playerAfter;
+            client.CallMethod(client.Player.EntityId, new UpdateCreditsPacket(currency, (int)playerAfter, 0));
 
             var lockboxCredits = creditType == 1 ? (uint)lockboxAfter : clanInfo.Credits;
             var lockboxPrestige = creditType == 2 ? (uint)lockboxAfter : clanInfo.Prestige;

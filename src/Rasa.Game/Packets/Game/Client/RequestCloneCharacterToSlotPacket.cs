@@ -73,6 +73,13 @@ namespace Rasa.Packets.Game.Client
 
             Scale = Math.Clamp(Scale, MinHeight, MaxHeight);
 
+            // As creation holds them: a real race, and male or female.
+            if (RaceId < Race.Human || RaceId > Race.Thrax)
+                return CreateCharacterResult.CharacterCreationInvalidRace;
+
+            if (Gender > 1)
+                return CreateCharacterResult.InvalidEncoding;
+
             return CreateCharacterResult.Success;
         }
     }

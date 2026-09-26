@@ -261,6 +261,14 @@ namespace Rasa.Managers
 
         public void ChangeTitle(Client client, uint titleId)
         {
+            // One the character has earned, or none. Any id was taken, and the title shows in
+            // /who to everyone.
+            if (titleId != 0 && !client.Player.Titles.Contains(titleId))
+            {
+                Logger.WriteLog(LogType.Security, $"{client.Player.FamilyName} asked to wear title {titleId}, which they do not have. Refused.");
+                return;
+            }
+
             //if (titleId != 0)
             //{
             client.Player.CurrentTitle = titleId;
@@ -2690,6 +2698,14 @@ namespace Rasa.Managers
             if (AbilityManager.IsCharging(player))
                 return false;
 
+            // Stunned or knocked down: the fire and ability paths already refuse, and moving is
+            // refused the same way, with the client put back where the server has them.
+            if (Stuns.IsStunned(player))
+            {
+                RefuseMove(client, movement, "while stunned");
+                return false;
+            }
+
             var verdict = JudgeMove(player.Position, movement.Position, player.MovementSpeed,
                 now - player.MoveBudgetTick, player.MoveBudget);
 
@@ -3110,7 +3126,7 @@ namespace Rasa.Managers
                 else
                     client.CellIgnoreSelfCallMethod(client, new PerformWindupPacket(PerformType.TwoArgs, ActionId.WeaponReload, reloadActionId));
 
-                client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponReload, reloadActionId, foundAmmo, ReloadTimeFor(client.Player, weapon)));
+                client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponReload, reloadActionId, foundAmmo, ReloadTimeFor(client.Player, weapon)) { SourceId = weapon.EntityId });
                 return;
             }
 
@@ -3138,7 +3154,7 @@ namespace Rasa.Managers
             else
                 client.CellIgnoreSelfCallMethod(client, new PerformWindupPacket(PerformType.TwoArgs, ActionId.WeaponReload, (uint)weaponClassInfo.ReloadActionId));
 
-            client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponReload, (uint)weaponClassInfo.ReloadActionId, foundAmmo, ReloadTimeFor(client.Player, weapon)));
+            client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, ActionId.WeaponReload, (uint)weaponClassInfo.ReloadActionId, foundAmmo, ReloadTimeFor(client.Player, weapon)) { SourceId = weapon.EntityId });
         }
 
         /// <summary>
@@ -3703,7 +3719,13 @@ namespace Rasa.Managers
             // It loads nothing, and the jam stays. Everyone in range was shown the windup and is
             // told it ended; the player's own client already cancelled it, and is told the request
             // is closed.
-            if (action.IsInrerrupted)
+            //
+            // A reload is for the weapon it was started on (SourceId). Arming another one during
+            // the windup used to have that one filled and un-jammed on the first one's time - a
+            // pistol's reload for a launcher, or a jam cleared in a pistol's reload time. It ends
+            // like an interrupted one instead.
+            if (action.IsInrerrupted
+                || (action.SourceId != 0 && InventoryManager.Instance.CurrentWeapon(client)?.EntityId != action.SourceId))
             {
                 client.CellIgnoreSelfCallMethod(client, new ActionInterruptPacket(client.Player.EntityId, ActionId.WeaponReload, action.ActionArgId));
                 ActorManager.ResolveInterruptedRequest(client, ActionId.WeaponReload, action.ActionArgId);

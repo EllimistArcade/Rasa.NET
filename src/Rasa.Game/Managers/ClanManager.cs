@@ -60,6 +60,9 @@ namespace Rasa.Managers
         private readonly uint _minClanNameLength = 3;
         private readonly uint _maxClanNameLength = 20;
         private readonly byte _clankRankLeader = 3;
+
+        /// <summary>The longest rank title stored; the column is varchar(64).</summary>
+        private const int MaxRankTitleLength = 32;
         private readonly int _requiredCreditsForClanCreation = 10000;
 
         // Arbitrary limit right now
@@ -783,16 +786,33 @@ namespace Rasa.Managers
             if (packet == null)
                 throw new ArgumentNullException(nameof(packet));
 
+            // Four ranks, 0 to the leader's; a title that is text of a sensible length. Nothing was
+            // checked: a clanless caller dereferenced a null clan, a null title broke the NOT NULL
+            // column, and an oversized one made every later SetClanData for the clan too big to
+            // send, so its members stopped getting clan data at all.
+            var title = packet.Title?.Trim();
+
+            if (packet.Rank > _clankRankLeader || string.IsNullOrEmpty(title) || title.Length > MaxRankTitleLength
+                || title.Any(char.IsControl))
+                return;
+
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             ClanEntry clan = unitOfWork.Clans.GetClanByCharacterId(client.Player.Id);
+
+            if (clan == null)
+                return;
+
+            if (new Censor(unitOfWork.CensoredWords.GetCensoredWords()).ContainsProfanity(title))
+                return;
+
             List<ClanMemberEntry> allMembers = GetClanMembers(clan.Id);
             ClanMemberEntry clanLeader = allMembers.FirstOrDefault(x => x.Rank == _clankRankLeader);
 
             // Only the clan leader can change ranks
             if (clanLeader != null && clanLeader.CharacterId == client.Player.Id)
             {
-                if(unitOfWork.Clans.UpdateRankTitleByClanId(clan.Id, packet.Rank, packet.Title))
+                if(unitOfWork.Clans.UpdateRankTitleByClanId(clan.Id, packet.Rank, title))
                 {   
                     // Get the clan now that the rank title is updated
                     ClanEntry updatedClan = unitOfWork.Clans.GetClanById(clan.Id);

@@ -363,6 +363,9 @@ namespace Rasa.Structures
         /// <summary>The player whose finisher is winding up on this CRIT_PREDEATH_EFFECT; 0 while nobody has claimed it.</summary>
         public ulong FinisherId { get; set; }
 
+        /// <summary>Whether a finisher's claim has already held this window open past its time.</summary>
+        public bool FinisherExtended { get; set; }
+
         #endregion
 
         #region Explosive Nanites

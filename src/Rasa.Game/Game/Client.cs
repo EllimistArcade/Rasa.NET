@@ -699,6 +699,13 @@ namespace Rasa.Game
             [GameOpcode.SaveCharacterOptions] = ("options", 1, 5),
             [GameOpcode.RequestSetAbilitySlot] = ("drawer", 10, 30),
             [GameOpcode.RequestSwapAbilitySlots] = ("drawer", 10, 30),
+
+            // Adding by account id answers with that account's family and character names and
+            // level; unthrottled, it walked the whole account table.
+            [GameOpcode.AddFriend] = ("social", 1, 5),
+            [GameOpcode.AddFriendByName] = ("social", 1, 5),
+            [GameOpcode.AddIgnore] = ("social", 1, 5),
+            [GameOpcode.AddIgnoreByName] = ("social", 1, 5),
         };
 
         private readonly Dictionary<string, (double Tokens, long Tick)> _rateBuckets = new();

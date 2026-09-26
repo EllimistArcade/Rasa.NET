@@ -254,8 +254,13 @@ namespace Rasa.Managers
             // Held open past its time: the clients' tooltip timer is told, or it would read
             // zero while the finisher winds up. The target window's icon keeps its first time
             // until the finishing animation's effect goes on and it re-reads them all.
-            if (until > window.ExpiresTick)
+            //
+            // Once per window. A claim that was interrupted and claimed again extended it each
+            // time, so the creature could be kept Dying - untargetable, and nobody's kill - for as
+            // long as one player kept pressing and cancelling.
+            if (until > window.ExpiresTick && !window.FinisherExtended)
             {
+                window.FinisherExtended = true;
                 window.ExpiresTick = until;
                 GameEffectManager.Instance.UpdateTooltip(mapChannel, creature, window);
             }

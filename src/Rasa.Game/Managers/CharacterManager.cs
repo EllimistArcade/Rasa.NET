@@ -242,6 +242,9 @@ namespace Rasa.Managers
         {
             var nameResult = CheckNewName(unitOfWork, packet.CharacterName);
 
+            if (nameResult == CreateCharacterResult.Success && !AppearanceIsValid(packet.AppearanceData))
+                nameResult = CreateCharacterResult.InvalidEncoding;
+
             if (nameResult != CreateCharacterResult.Success)
             {
                 SendCharacterCreateFailed(client, nameResult);
@@ -523,6 +526,27 @@ namespace Rasa.Managers
         /// script's letters and a trailing newline, and never asked the censor - so names could be
         /// made that look like someone else's, or that rename would have refused.
         /// </summary>
+        /// <summary>
+        /// Every appearance entry names a real equipment slot and an item template the server
+        /// knows. An unknown template threw in CreateCharacterAppearanceEntries after the character
+        /// row was already saved, leaving a character with no appearance, no starter kit and, on
+        /// a first character, no family name; and any slot number was stored and shown to others.
+        /// </summary>
+        private static bool AppearanceIsValid(IDictionary<EquipmentData, AppearanceData> appearance)
+        {
+            if (appearance == null || appearance.Count > 32)
+                return false;
+
+            foreach (var entry in appearance)
+                if (!Enum.IsDefined(typeof(EquipmentData), entry.Key)
+                    || entry.Value == null
+                    || entry.Value.SlotId != entry.Key
+                    || !ItemManager.Instance.ItemTemplateItemClass.ContainsKey(entry.Value.Class))
+                    return false;
+
+            return true;
+        }
+
         private static CreateCharacterResult CheckNewName(ICharUnitOfWork unitOfWork, string name)
         {
             if (!IsValidName(name, out var error))
@@ -607,6 +631,9 @@ namespace Rasa.Managers
         private uint? InternalCreate(Client client, RequestCreateCharacterInSlotPacket packet, ICharUnitOfWork unitOfWork)
         {
             var nameResult = CheckNewName(unitOfWork, packet.CharacterName);
+
+            if (nameResult == CreateCharacterResult.Success && !AppearanceIsValid(packet.AppearanceData))
+                nameResult = CreateCharacterResult.InvalidEncoding;
 
             // The family name is new unless it is exactly the one the account already has, which
             // was accepted under whatever rules were current then and is left alone.

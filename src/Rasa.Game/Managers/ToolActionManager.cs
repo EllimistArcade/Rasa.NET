@@ -357,7 +357,8 @@ namespace Rasa.Managers
             // to return here and send nothing, which left the client holding the action in
             // __unresolvedActions forever - so the action is resolved on the way out instead: no
             // effect and no message, but closed.
-            if (!stillArmed || target == null)
+            // And still in reach once the windup has run.
+            if (!stillArmed || target == null || !InToolReach(client, target))
             {
                 Resolve(mapChannel, action, hits);
                 return;
@@ -736,6 +737,32 @@ namespace Rasa.Managers
             return ValidateTarget(client, packet);
         }
 
+        /// <summary>Slack on a tool's range, as the other range checks here allow.</summary>
+        private const float ToolRangeSlack = 2.5f;
+
+        /// <summary>Reach for a tool whose weapon data gives no range.</summary>
+        private const float DefaultToolRange = 20f;
+
+        /// <summary>
+        /// The target is on the player's own map and within the armed tool's range. Themselves
+        /// always are.
+        /// </summary>
+        private static bool InToolReach(Client client, Actor target)
+        {
+            var player = client.Player;
+
+            if (target == player)
+                return true;
+
+            if (target.MapContextId != player.MapContextId)
+                return false;
+
+            var range = InventoryManager.Instance.CurrentWeapon(client)?.ItemTemplate?.WeaponInfo?.Range ?? 0;
+            var reach = (range > 0 ? range : DefaultToolRange) + ToolRangeSlack;
+
+            return Vector3.Distance(player.Position, target.Position) <= reach;
+        }
+
         private PlayerMessage? ValidateTarget(Client client, RequestToolActionPacket packet)
         {
             // No tool sets TARGET_LOCATION, so a location here did not come from a tool module.
@@ -777,6 +804,12 @@ namespace Rasa.Managers
             // to be one. A player is always friendly to another.
             if (creature != null && creature.TargetCategory != TargetCategory.Friendly)
                 return PlayerMessage.PmTargetInvalid;
+
+            // On the same map and within the tool's reach. The target was looked up in the global
+            // tables with no distance at all, so a healing disc, repair tool or armour augment
+            // worked on a squad mate anywhere - on another map included.
+            if (!InToolReach(client, targetActor))
+                return PlayerMessage.PmTargetOutOfRange;
 
             // repairtool.py refuses a dead player outright; healdisc.py allows a corpse only at
             // Healing 3 or better. ToDo: repairtool also refuses dead BIOLOGICAL creatures, which

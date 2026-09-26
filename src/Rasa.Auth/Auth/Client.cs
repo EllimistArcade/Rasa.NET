@@ -380,6 +380,15 @@ namespace Rasa.Auth
         #region Handlers
         private void MsgLogin(LoginPacket packet)
         {
+            // Too many wrong passwords from here lately: refused as a wrong password, without
+            // looking, so the answer says nothing about this one.
+            if (Server.IsLoginBlocked(Socket.RemoteAddress))
+            {
+                SendPacket(new LoginFailPacket(FailReason.UserNameOrPassword));
+                Close();
+                return;
+            }
+
             using var unitOfWork = _authUnitOfWorkFactory.Create();
 
             try
@@ -388,6 +397,7 @@ namespace Rasa.Auth
             }
             catch (EntityNotFoundException)
             {
+                Server.RecordLoginFailure(Socket.RemoteAddress);
                 SendPacket(new LoginFailPacket(FailReason.UserNameOrPassword));
                 Close();
                 Logger.WriteLog(LogType.Security, $"User ({packet.UserName}) tried to log in with an invalid username!");
@@ -395,6 +405,7 @@ namespace Rasa.Auth
             }
             catch (PasswordCheckFailedException e)
             {
+                Server.RecordLoginFailure(Socket.RemoteAddress);
                 SendPacket(new LoginFailPacket(FailReason.UserNameOrPassword));
                 Close();
                 Logger.WriteLog(LogType.Security, e.Message);
@@ -407,6 +418,8 @@ namespace Rasa.Auth
                 Logger.WriteLog(LogType.Security, e.Message);
                 return;
             }
+
+            Server.RecordLoginSuccess(Socket.RemoteAddress);
 
             unitOfWork.AuthAccountRepository.UpdateLoginData(AccountEntry.Id, Socket.RemoteAddress);
             unitOfWork.Complete();

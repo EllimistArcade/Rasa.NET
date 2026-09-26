@@ -294,8 +294,12 @@ namespace Rasa.Managers
                 spot = summoner.Position + Vector3.Normalize(target.Position - summoner.Position) * TurretDistance;
             else
             {
+                // Beside the summoner on the walkable surface, where the map has one: a random
+                // point two metres off could be inside a rock or over an edge, where the summon can
+                // neither see its target nor find a path to it.
                 var angle = Random.NextDouble() * Math.PI * 2;
-                spot = summoner.Position + new Vector3((float)Math.Cos(angle) * 2f, 0, (float)Math.Sin(angle) * 2f);
+                spot = NavMeshManager.RandomPointAround(mapChannel, summoner.Position, 2f)
+                       ?? summoner.Position + new Vector3((float)Math.Cos(angle) * 2f, 0, (float)Math.Sin(angle) * 2f);
             }
 
             CreatureManager.Instance.SetLocation(summon, NavMeshManager.SnapToGround(mapChannel, spot), summoner.Rotation, summoner.MapContextId);

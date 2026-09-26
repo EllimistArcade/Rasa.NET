@@ -28,7 +28,16 @@ namespace Rasa.Structures
         /// something, or what .track set. Not the selected Target. See Managers.TrackingTargets.
         /// </summary>
         public ulong TrackingTargetEntityId { get; set; }
-        public double MovementSpeed { get; set; }
+
+        /// <summary>
+        /// What the effects on the actor make its speed: 1.0 is normal, a slow below it
+        /// (GameEffectManager.UpdateMovementMod). BehaviorManager moves a creature at its speed
+        /// times this, so it starts at 1.0 for every actor: it used to start at 0 for creatures,
+        /// which only a movement effect or ClearEffects ever raised, and a creature with neither -
+        /// every one fresh from a spawn pool or a summon - could turn to face its target but never
+        /// took a step towards it, nor wandered.
+        /// </summary>
+        public double MovementSpeed { get; set; } = 1.0d;
         public bool WeaponReady { get; set; }
         // action data
         public int CurrentAction { get; set; }

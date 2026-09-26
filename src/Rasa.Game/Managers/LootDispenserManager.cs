@@ -303,6 +303,8 @@ namespace Rasa.Managers
             if (attached == null)
                 return;
 
+            List<uint> unclaimedRows = null;
+
             foreach (var lootEntityId in attached)
             {
                 var loot = mapChannel.LootDispensers[lootEntityId];
@@ -335,9 +337,43 @@ namespace Rasa.Managers
                     EntityManager.Instance.UnregisterEntity(lootItem.EntityId);
                     EntityManager.Instance.UnregisterItem(lootItem.EntityId);
                     EntityManager.Instance.FreeEntity(lootItem.EntityId);
+
+                    if (lootItem.Item.Id != 0)
+                        (unclaimedRows ??= new List<uint>()).Add(lootItem.Item.Id);
                 }
 
                 EntityManager.Instance.FreeEntity(lootEntityId);
+            }
+
+            DeleteUnclaimedRows(unclaimedRows);
+        }
+
+        /// <summary>
+        /// Deletes the items-table rows of rolled loot that nobody took.
+        ///
+        /// CreateItem writes the row when the loot is rolled - the corpse window needs a real item
+        /// behind every line it draws - and a take moves the item, row and all, into the looter's
+        /// inventory. An item left on a corpse that despawned, was eaten, filched or revived had
+        /// its entity freed above, but its row stayed: no inventory row points at it and nothing
+        /// ever reads it, and at one rolled item in every two kills the table grew by thousands a
+        /// day for the life of the database. One unit of work for the corpse; a database error
+        /// is logged and costs only the rows, never the despawn.
+        /// </summary>
+        private static void DeleteUnclaimedRows(List<uint> itemIds)
+        {
+            if (itemIds == null || itemIds.Count == 0)
+                return;
+
+            try
+            {
+                using var unitOfWork = Server.GameUnitOfWorkFactory.CreateChar();
+
+                unitOfWork.Items.DeleteItems(itemIds);
+                unitOfWork.Complete();
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Could not delete the rows of {itemIds.Count} unlooted item(s) ({string.Join(", ", itemIds)}): {e}");
             }
         }
 

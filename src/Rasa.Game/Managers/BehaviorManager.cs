@@ -165,6 +165,76 @@ namespace Rasa.Managers
         {
         }
 
+        /// <summary>
+        /// The nearest thing in one cell this creature would pick a fight with, within range,
+        /// if it is nearer than what has been found so far.
+        /// </summary>
+        private static void ScanCell(Creature creature, MapCell cell, float range, ref float foundDistance, ref ulong foundId)
+        {
+            foreach (var client in cell.ClientList)
+            {
+                // Cell lists can hold a client whose character is already gone. A player is
+                // FRIENDLY - sought by HOSTILE creatures only - whatever Polymorph has made
+                // them look like.
+                if (client.Player == null || !TargetCategories.Seeks(creature.TargetCategory, client.Player.CombatCategory))
+                    continue;
+
+                // Gone, and waiting to be taken out of the world: nothing to pick a fight with.
+                if (client.Player.Disconected)
+                    continue;
+
+                if (client.Player.GmFlagAlwaysFriendly)
+                    continue;
+
+                if (client.Player.Attributes[Attributes.Health].Current <= 0)
+                    continue;
+
+                // Cloaked (Cloak Wave): it cannot be noticed however close it stands. Nor can
+                // someone watching a camera script, who has no controls to answer with.
+                if (Detection.IsHidden(client.Player) || CameraScripts.IsWatching(client.Player))
+                    continue;
+
+                // check distance so creature attack closes target
+                var dist = Vector3.Distance(creature.Position, client.Player.Position);
+
+                // Stealth Armor: noticed that much closer (Manifestation.DetectionRangePercent).
+                if (dist <= range * client.Player.DetectionRangePercent / 100f)
+                {
+                    // set target and change state
+                    if (dist < foundDistance)
+                    {
+                        foundId = client.Player.EntityId;
+                        foundDistance = dist;
+                    }
+                }
+            }
+
+            foreach (var tCreature in cell.CreatureList)
+            {
+                if (tCreature.Attributes[Attributes.Health].Current <= 0 || tCreature.State == CharacterState.Dying)
+                    continue;
+
+                if (tCreature == creature)
+                    continue;
+
+                if (!TargetCategories.Seeks(creature.TargetCategory, tCreature.TargetCategory))
+                    continue;
+
+                // check distance
+                var dist = Vector3.Distance(creature.Position, tCreature.Position);
+
+                if (dist <= range)
+                {
+                    // set target and change state
+                    if (dist < foundDistance)
+                    {
+                        foundId = tCreature.EntityId;
+                        foundDistance = dist;
+                    }
+                }
+            }
+        }
+
         /// <CheckForAttackableEntityInRange>
         /// Checks for enemy creatures and players within the given range
         /// </CheckForAttackableEntityInRange>
@@ -183,70 +253,35 @@ namespace Rasa.Managers
             if (creature.TargetCategory != TargetCategory.Hostile && creature.TargetCategory != TargetCategory.Friendly)
                 return false;
 
-            foreach (var cell in CellManager.CellsIn(mapChannel, creature.Cells))
+            // Only the cells the range can reach. This used to walk the whole 5x5 matrix - 128 m
+            // across - for an aggro range that is 18 m unless something raised it, on every think
+            // of every idle creature on the map, player nearby or not. A range under one cell
+            // fits in the 3x3 around the cell the creature is standing in now; anything longer
+            // keeps the matrix, which is as far as anything can see.
+            var reach = (int)Math.Ceiling(range / CellManager.CellSize);
+
+            if (reach >= 2)
             {
-                foreach (var client in cell.ClientList)
-                {
-                    // Cell lists can hold a client whose character is already gone. A player is
-                    // FRIENDLY - sought by HOSTILE creatures only - whatever Polymorph has made
-                    // them look like.
-                    if (client.Player == null || !TargetCategories.Seeks(creature.TargetCategory, client.Player.CombatCategory))
-                        continue;
+                foreach (var cell in CellManager.CellsIn(mapChannel, creature.Cells))
+                    ScanCell(creature, cell, range, ref foundEntity_distance, ref foundEntity_entityId);
+            }
+            else
+            {
+                var cells = mapChannel.MapCellInfo.Cells;
 
-                    // Gone, and waiting to be taken out of the world: nothing to pick a fight with.
-                    if (client.Player.Disconected)
-                        continue;
+                // As CellManager.GetCell numbers them; a cell the map has not got is empty ground.
+                var centreX = (uint)(creature.Position.X / CellManager.CellSize + CellManager.CellBias);
+                var centreZ = (uint)(creature.Position.Z / CellManager.CellSize + CellManager.CellBias);
 
-                    if (client.Player.GmFlagAlwaysFriendly)
-                        continue;
-
-                    if (client.Player.Attributes[Attributes.Health].Current <= 0)
-                        continue;
-
-                    // Cloaked (Cloak Wave): it cannot be noticed however close it stands. Nor can
-                    // someone watching a camera script, who has no controls to answer with.
-                    if (Detection.IsHidden(client.Player) || CameraScripts.IsWatching(client.Player))
-                        continue;
-
-                    // check distance so creature attack closes target
-                    var dist = Vector3.Distance(creature.Position, client.Player.Position);
-
-                    // Stealth Armor: noticed that much closer (Manifestation.DetectionRangePercent).
-                    if (dist <= range * client.Player.DetectionRangePercent / 100f)
+                for (var dx = -reach; dx <= reach; dx++)
+                    for (var dz = -reach; dz <= reach; dz++)
                     {
-                        // set target and change state
-                        if (dist < foundEntity_distance)
-                        {
-                            foundEntity_entityId = client.Player.EntityId;
-                            foundEntity_distance = dist;
-                        }
+                        var cellX = (uint)(centreX + dx);
+                        var cellZ = (uint)(centreZ + dz);
+
+                        if (cells.TryGetValue((cellX & 0xFFFF) | (cellZ << 16), out var cell))
+                            ScanCell(creature, cell, range, ref foundEntity_distance, ref foundEntity_entityId);
                     }
-                }
-
-                foreach (var tCreature in cell.CreatureList)
-                {
-                    if (tCreature.Attributes[Attributes.Health].Current <= 0 || tCreature.State == CharacterState.Dying)
-                        continue;
-
-                    if (tCreature == creature)
-                        continue;
-
-                    if (!TargetCategories.Seeks(creature.TargetCategory, tCreature.TargetCategory))
-                        continue;
-
-                    // check distance
-                    var dist = Vector3.Distance(creature.Position, tCreature.Position);
-
-                    if (dist <= range)
-                    {
-                        // set target and change state
-                        if (dist < foundEntity_distance)
-                        {
-                            foundEntity_entityId = tCreature.EntityId;
-                            foundEntity_distance = dist;
-                        }
-                    }
-                }
             }
 
             if (foundEntity_entityId != 0)

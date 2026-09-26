@@ -489,6 +489,15 @@ namespace Rasa.Game
 
                     Player.Position = moveMessage.Movement.Position;
 
+                    // Through a hidden teleport (SecretPassages): the player is already at its far
+                    // end - their own client and everyone around told - and the step that took them
+                    // there is spent. Before the fall check: a jumper caught mid-air has not landed.
+                    if (SecretPassages.OnMove(this, movedFrom, Player.Position))
+                    {
+                        ManifestationManager.Instance.NotifyPlayerActivity(this);
+                        break;
+                    }
+
                     // A fall, if this Move ended one (FallDamage), and the flags for a GM watching them.
                     FallDamage.OnMove(this, movedFrom, Player.Position, Environment.TickCount64);
                     FallDamage.ShowMoveFlags(this, moveMessage, movedFrom);

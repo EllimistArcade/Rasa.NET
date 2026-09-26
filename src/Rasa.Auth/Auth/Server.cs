@@ -375,7 +375,14 @@ namespace Rasa.Auth
             var cutoff = DateTime.UtcNow - CommunicatorLoginTimeout;
 
             lock (GameServers)
+            {
+                // A connection that has logged in is a game server, however it got into the
+                // queue; it goes out of the queue, not off the link. One already let go (a login
+                // refused before its accept was handled) has nothing left to close.
+                GameServerQueue.RemoveAll(c => c.ServerId != 0 || c.IsDisconnected);
+
                 stale = GameServerQueue.Where(c => c.ConnectedTime < cutoff).ToList();
+            }
 
             if (stale.Count == 0)
                 return;
@@ -390,10 +397,21 @@ namespace Rasa.Auth
         {
             AuthCommunicator.AcceptAsync();
 
-            lock (GameServers)
-                GameServerQueue.Add(new CommunicatorClient(socket, this));
-
             Logger.WriteLog(LogType.Network, $"A Game server has connected! Remote: {socket.RemoteAddress}");
+
+            // The client starts receiving in its constructor, and a game server sends its login the
+            // moment it connects, so the login can be handled on a completion thread before this
+            // line runs - it used to be, every time on loopback ("has authenticated!" logged before
+            // "has connected!"). AuthenticateGameServer then found nothing to take out of the queue,
+            // the connection was added to it here afterwards as if still waiting, and 30 s later
+            // ExpireCommunicatorLogins closed the live game server. Both sides decide under the
+            // GameServers lock: a connection that has already claimed a server id, or has already
+            // been refused and let go, is not queued.
+            var client = new CommunicatorClient(socket, this);
+
+            lock (GameServers)
+                if (client.ServerId == 0 && !client.IsDisconnected)
+                    GameServerQueue.Add(client);
         }
 
         public bool AuthenticateGameServer(LoginRequestPacket packet, CommunicatorClient client)

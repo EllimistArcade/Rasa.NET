@@ -97,6 +97,9 @@ namespace Rasa.Auth
 
         private int _disconnected;
 
+        /// <summary>Whether this link has been let go (Disconnect has run).</summary>
+        internal bool IsDisconnected => Volatile.Read(ref _disconnected) != 0;
+
         /// <summary>
         /// Once per link: a drop closes the socket, and the close completes the receive that
         /// was still armed with an error, which comes back through OnError.

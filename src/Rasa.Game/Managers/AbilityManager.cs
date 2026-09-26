@@ -383,6 +383,24 @@ namespace Rasa.Managers
                 }
             }
 
+            // A point on the ground, when the ability is aimed at one: where a turret, trap, rift or
+            // fire support beacon goes, or the centre of an area blast. It was taken as sent, so any
+            // of those could be put anywhere on the map - in the air, inside a base, on another
+            // player - with the range the table gives the ability never consulted. Held to that range
+            // like an entity target; an ability whose range is 0 has no use for a point and gets none.
+            Vector3? location = null;
+
+            if (packet.Target.Kind == ActionTargetKind.Location && info.MaxRange > 0)
+            {
+                if (!LocationInRange(player, packet.Target.Location, info))
+                {
+                    Fail(client, actionId, level, PlayerMessage.PmTargetOutOfRange);
+                    return;
+                }
+
+                location = packet.Target.Location;
+            }
+
             var wantsHostile = IsDirectDamage(action, info) || HostileEffectModules.Contains(action.Module);
 
             // A friendly buff lands on a player; a creature is not a friend to buff.
@@ -453,7 +471,7 @@ namespace Rasa.Managers
 
             mapChannel.PerformRecovery.Add(new ActionData(player, actionId, level, target?.EntityId ?? 0, windupMs)
             {
-                TargetLocation = packet.Target.Kind == ActionTargetKind.Location ? packet.Target.Location : null,
+                TargetLocation = location,
                 ItemId = packet.ItemId
             });
         }
@@ -521,6 +539,19 @@ namespace Rasa.Managers
 
         /// <summary>The action's name from the tables, or null for an id they do not have.</summary>
         public string ActionName(ActionId actionId) => _actions.TryGetValue(actionId, out var action) ? action.Name : null;
+
+        /// <summary>
+        /// A target point that is a real position within the ability's range of the performer,
+        /// height included. A NaN or infinite coordinate fails every comparison, which would have
+        /// read as in range, so those are refused outright.
+        /// </summary>
+        private static bool LocationInRange(Manifestation player, Vector3 location, ActionLevelInfo info)
+        {
+            if (!float.IsFinite(location.X) || !float.IsFinite(location.Y) || !float.IsFinite(location.Z))
+                return false;
+
+            return info.MaxRange > 0 && Vector3.Distance(player.Position, location) <= info.MaxRange + RangeSlack;
+        }
 
         /// <summary>Whether this server knows how to apply the ability; see the class remarks.</summary>
         private static bool CanResolve(ActionInfo action, ActionLevelInfo info)
@@ -815,6 +846,10 @@ namespace Rasa.Managers
                 if (target != null && Vector3.Distance(player.Position, target.Position) > info.MaxRange + RangeSlack)
                     return PlayerMessage.PmTargetOutOfRange;
             }
+
+            // The point too, since the performer can have walked away from it during the windup.
+            if (action.TargetLocation.HasValue && !LocationInRange(player, action.TargetLocation.Value, info))
+                return PlayerMessage.PmTargetOutOfRange;
 
             return null;
         }

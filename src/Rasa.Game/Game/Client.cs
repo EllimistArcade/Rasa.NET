@@ -204,8 +204,20 @@ namespace Rasa.Game
             {
                 IBasePacket packet;
 
+                // Everything queued for this client this tick goes to the socket in one call,
+                // which packs the frames into as few pooled blocks as they fit in and sends each
+                // block once (LengthedSocket.Send). They used to go one Send apiece: a block and a
+                // trip into the socket layer for every relayed move, shot and hit.
+                _outgoingBatch.Clear();
+
                 while ((packet = _packetQueue.PopOutgoing()) != null)
-                    SendPacket(packet);
+                    if (Stamp(packet) is { } stamped)
+                        _outgoingBatch.Add(stamped);
+
+                if (_outgoingBatch.Count > 0)
+                    Socket.Send(_outgoingBatch);
+
+                _outgoingBatch.Clear();
             }
             catch (Exception e)
             {
@@ -341,17 +353,32 @@ namespace Rasa.Game
 
         public void SendPacket(IBasePacket packet)
         {
-            var pPacket = packet as ProtocolPacket;
-            if (pPacket == null)
+            var pPacket = Stamp(packet);
+
+            if (pPacket != null)
+                Socket.Send(pPacket);
+        }
+
+        /// <summary>The outgoing queue's contents for one flush; the main loop's alone, reused each tick.</summary>
+        private readonly List<IBasePacket> _outgoingBatch = new();
+
+        /// <summary>
+        /// Gives a packet its channel's next sequence number, in the order it is handed to the
+        /// socket - which is the order the client will read them in. Null, logged, for anything
+        /// that is not a ProtocolPacket.
+        /// </summary>
+        private ProtocolPacket Stamp(IBasePacket packet)
+        {
+            if (!(packet is ProtocolPacket pPacket))
             {
                 Logger.WriteLog(LogType.Error, $"SendPacket() called with a non-ProtocolPacket ({packet?.GetType().Name ?? "null"}), dropping it.");
-                return;
+                return null;
             }
 
             if (pPacket.Channel != 0)
                 pPacket.SequenceNumber = SendSequence[pPacket.Channel]++;
 
-            Socket.Send(pPacket);
+            return pPacket;
         }
 
         private void HandleProtocolPacket(ProtocolPacket protocolPacket)

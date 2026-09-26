@@ -84,6 +84,14 @@ namespace Rasa.Game
         private int _pendingBytes;
         private const int MaxPendingBytes = 512 * 1024;
 
+        /// <summary>
+        /// Packets handled for this connection in one tick. The rest wait in the inbound stream
+        /// for the next one, so a client that sends faster than this falls behind and, once that
+        /// backlog passes MaxPendingBytes, is disconnected. The real client sends a handful of
+        /// packets a tick - movement at most every one - so this is far above anything it does.
+        /// </summary>
+        private const int MaxPacketsPerTick = 64;
+
 
         private static PacketRouter<ClientPacketHandler, GameOpcode> PacketRouter { get; } = new PacketRouter<ClientPacketHandler, GameOpcode>();
 
@@ -133,8 +141,22 @@ namespace Rasa.Game
             {
                 DrainPendingChunks();
 
+                // A backlog this client has built up faster than MaxPacketsPerTick lets it be read.
+                if (_incomingDataQueue.Length > MaxPendingBytes)
+                {
+                    Logger.WriteLog(LogType.Security, $"Client {Socket.RemoteAddress} has {_incomingDataQueue.Length} bytes of unread input (limit {MaxPendingBytes}), disconnecting.");
+                    Close();
+                    return;
+                }
+
+                var handled = 0;
+
                 foreach (var protocolPacket in DecodeIncomingPackets())
                 {
+                    // Stopping the enumeration leaves everything after this packet in the stream.
+                    if (++handled > MaxPacketsPerTick)
+                        break;
+
                     try
                     {
                         HandleProtocolPacket(protocolPacket);
@@ -473,6 +495,11 @@ namespace Rasa.Game
                     if (!IsExpected(csmPacket.MethodId, csmPacket.Packet))
                         return;
 
+                    // Methods whose every call goes out to everyone nearby, at the rate a person
+                    // could use them.
+                    if (!WithinRate(csmPacket.MethodId))
+                        return;
+
                     // MethodId, not Packet.Opcode: an opcode with no handler leaves Packet null.
                     ManifestationManager.Instance.NotifyPlayerActivity(this, csmPacket.MethodId);
 
@@ -632,6 +659,73 @@ namespace Rasa.Game
             _refusalLogged = true;
             _refusalsSinceLog = 0;
             _nextRefusalLogTick = now + RefusalLogQuietMs;
+        }
+
+        /// <summary>
+        /// Methods that each send something to every player in range, or queue work on the map,
+        /// grouped into shared allowances: (bucket, calls per second, burst). Nothing limited them,
+        /// and every other client's send queue is cut off at 512 packets - so one client repeating
+        /// a crouch or a gesture as fast as the wire allows filled the queues of everyone around it
+        /// and had them disconnected. The rates are well above what a person does by hand.
+        /// </summary>
+        private static readonly Dictionary<GameOpcode, (string Bucket, double PerSecond, double Burst)> RateLimited = new()
+        {
+            [GameOpcode.SetDesiredCrouchState] = ("crouch", 4, 8),
+            [GameOpcode.RequestGesture] = ("gesture", 2, 5),
+            [GameOpcode.RequestGestureWeapon] = ("gesture", 2, 5),
+            [GameOpcode.RequestUseObject] = ("use", 4, 8),
+            [GameOpcode.RequestVisualCombatMode] = ("stance", 10, 20),
+            [GameOpcode.RadialChat] = ("chat", 3, 8),
+            [GameOpcode.Shout] = ("chat", 3, 8),
+            [GameOpcode.Emote] = ("chat", 3, 8),
+            [GameOpcode.PartyChat] = ("chat", 3, 8),
+            [GameOpcode.ClanChat] = ("chat", 3, 8),
+            [GameOpcode.ClanLeadersChat] = ("chat", 3, 8),
+            [GameOpcode.GuildChat] = ("chat", 3, 8),
+            [GameOpcode.ChannelChat] = ("chat", 3, 8),
+            [GameOpcode.Whisper] = ("chat", 3, 8),
+            [GameOpcode.Reply] = ("chat", 3, 8),
+        };
+
+        private readonly Dictionary<string, (double Tokens, long Tick)> _rateBuckets = new();
+        private long _rateDroppedSinceLog;
+        private long _nextRateLogTick;
+
+        /// <summary>
+        /// A token bucket per group: refills at PerSecond up to Burst, one token a call. A call
+        /// with no token is dropped, and the drops are logged at most every RefusalLogQuietMs.
+        /// </summary>
+        private bool WithinRate(GameOpcode methodId)
+        {
+            if (!RateLimited.TryGetValue(methodId, out var limit))
+                return true;
+
+            var now = Environment.TickCount64;
+
+            var (tokens, tick) = _rateBuckets.TryGetValue(limit.Bucket, out var bucket) ? bucket : (limit.Burst, now);
+
+            tokens = Math.Min(limit.Burst, tokens + (now - tick) * limit.PerSecond / 1000d);
+
+            if (tokens >= 1)
+            {
+                _rateBuckets[limit.Bucket] = (tokens - 1, now);
+                return true;
+            }
+
+            _rateBuckets[limit.Bucket] = (tokens, now);
+            _rateDroppedSinceLog++;
+
+            if (now >= _nextRateLogTick)
+            {
+                Logger.WriteLog(LogType.Security,
+                    $"{Player?.FamilyName ?? Socket.RemoteAddress.ToString()} is sending {methodId} faster than {limit.PerSecond}/s; "
+                    + $"{_rateDroppedSinceLog} call(s) dropped since the last of these.");
+
+                _rateDroppedSinceLog = 0;
+                _nextRateLogTick = now + RefusalLogQuietMs;
+            }
+
+            return false;
         }
 
         private T GetMessageAs<T>(ProtocolPacket protocolPacket)

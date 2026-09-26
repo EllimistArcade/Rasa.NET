@@ -192,6 +192,17 @@ namespace Rasa.Managers
                 return;
             }
 
+            // One use at a time. Every request queued another windup and recovery, and each
+            // recovery goes to everyone nearby, with no limit on how many one player could have
+            // waiting. The client's own action queue holds one use; a second is not it.
+            if (client.Player.MapChannel.PerformRecovery.Any(a => a.Actor == client.Player && a.ActionId == ActionId.UseObject))
+                return;
+
+            // Whoever is using it, once each (added below only if absent). The list was appended to on every request and
+            // nothing removes a footlocker's users, so it grew for as long as the server ran;
+            // connections that have closed are dropped from it here as well.
+            obj.TriggeredByPlayers.RemoveAll(c => c.State == ClientState.Disconnected);
+
             switch (obj.DynamicObjectType)
             {
                 case DynamicObjectType.ControlPoint:
@@ -207,7 +218,8 @@ namespace Rasa.Managers
                         client.CallMethod(packet.EntityId, new UsePacket(client.Player.EntityId, obj.StateId, 10000));
                         client.Player.MapChannel.PerformRecovery.Add(actionData);
 
-                        obj.TriggeredByPlayers.Add(client);
+                        if (!obj.TriggeredByPlayers.Contains(client))
+                            obj.TriggeredByPlayers.Add(client);
                         break;
                     }
                 case DynamicObjectType.Lockbox:
@@ -216,7 +228,8 @@ namespace Rasa.Managers
                         client.CallMethod(packet.EntityId, new UsePacket(client.Player.EntityId, obj.StateId, 100));
                         client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, packet.ActionId, packet.ActionArgId, 100));
 
-                        obj.TriggeredByPlayers.Add(client);
+                        if (!obj.TriggeredByPlayers.Contains(client))
+                            obj.TriggeredByPlayers.Add(client);
                         break;
                     }
                 case DynamicObjectType.Logos:
@@ -231,7 +244,8 @@ namespace Rasa.Managers
                         client.CallMethod(packet.EntityId, new UsePacket(client.Player.EntityId, obj.StateId, 10000));
                         client.Player.MapChannel.PerformRecovery.Add(actionData);
 
-                        obj.TriggeredByPlayers.Add(client);
+                        if (!obj.TriggeredByPlayers.Contains(client))
+                            obj.TriggeredByPlayers.Add(client);
                         break;
                     }
                 case DynamicObjectType.Kraftwerks:

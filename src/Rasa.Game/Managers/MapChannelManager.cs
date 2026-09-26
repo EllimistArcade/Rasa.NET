@@ -211,6 +211,9 @@ namespace Rasa.Managers
 
             PartyManager.Instance.ExpireHeldMembers();
 
+            // Clan feuds whose time is up.
+            Guard("ClanFeuds.Worker", null, () => ClanFeuds.Instance.Worker());
+
             // Server-wide lists, ticked once. These used to run inside the per-map loop below,
             // guarded by that map having players, so with N populated maps every auto-fire
             // timer and every dropship advanced N times per tick.
@@ -504,6 +507,11 @@ namespace Rasa.Managers
 
             ClanManager.Instance.InitializePlayerClanData(client);
             InventoryManager.Instance.InitClanInventory(client);
+
+            // The clan's feuds, for the tracker and the Clan Warfare list: after a login the client
+            // knows of none, and after a map link this only refreshes them.
+            ClanFeuds.Instance.PlayerEnteredWorld(client);
+
             CommunicatorManager.Instance.PlayerEnterMap(client);
             PartyManager.Instance.PlayerEnteredWorld(client);
         }

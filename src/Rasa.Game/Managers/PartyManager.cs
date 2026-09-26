@@ -430,6 +430,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            if (!CanSquadTogether(requesterParty, requester, leaderParty, client))
+            {
+                Message(client, PlayerMessage.PmPartyJoinFailedFeudingMembers);
+                Message(requester, PlayerMessage.PmPartyJoinFailedFeudingMembers);
+                return;
+            }
+
             Message(client, PlayerMessage.PmPartyInvitationAccepted, "invitee", requester.Player.FamilyName);
 
             if (leaderParty == null)
@@ -499,6 +506,14 @@ namespace Rasa.Managers
             {
                 Message(client, PlayerMessage.PmPartyIsFull);
                 Message(inviter, PlayerMessage.PmPartyIsFull);
+                inviter.CallMethod(SysEntity.ClientPartyManagerId, new SquadRequestSuccessPacket(invite.DisplayName));
+                return;
+            }
+
+            if (!CanSquadTogether(inviterParty, inviter, inviteeParty, client))
+            {
+                Message(client, PlayerMessage.PmPartyJoinFailedFeudingMembers);
+                Message(inviter, PlayerMessage.PmPartyJoinFailedFeudingMembers);
                 inviter.CallMethod(SysEntity.ClientPartyManagerId, new SquadRequestSuccessPacket(invite.DisplayName));
                 return;
             }
@@ -1338,6 +1353,61 @@ namespace Rasa.Managers
             }
 
             return party.Members.ToList();
+        }
+
+        /// <summary>
+        /// Whether two sides - each a squad, or a lone player when their squad is null - may become
+        /// one squad: not if it would hold members of two clans at feud
+        /// (PM_PARTY_JOIN_FAILED_FEUDING_MEMBERS). Members online are the ones whose clan is known.
+        /// </summary>
+        internal static bool CanSquadTogether(Party first, Client firstAlone, Party second, Client secondAlone)
+        {
+            var clans = ClansOf(first, firstAlone).Concat(ClansOf(second, secondAlone));
+
+            return !ClanFeuds.Instance.AnyFeuding(clans);
+        }
+
+        private static IEnumerable<uint> ClansOf(Party party, Client alone) =>
+            party != null
+                ? OnlineClients(party).Select(c => c.Player?.ClanId ?? 0)
+                : new[] { alone?.Player?.ClanId ?? 0 };
+
+        /// <summary>
+        /// A feud has begun between two clans (or a member joined one of them): no squad may hold
+        /// both. From each squad that does, the members of the clan its leader is not in are taken
+        /// out - of the smaller side if the leader is in neither - each told why
+        /// (PM_PARTY_KICKED_BY_FEUDING). Only members online are known to be in a clan.
+        /// </summary>
+        internal void SeparateFeuding(uint clanA, uint clanB)
+        {
+            if (clanA == 0 || clanB == 0 || clanA == clanB)
+                return;
+
+            foreach (var party in Parties.Values.ToList())
+            {
+                if (!Parties.ContainsKey(party.Id))
+                    continue;
+
+                var online = OnlineClients(party);
+                var sideA = online.Where(c => c.Player?.ClanId == clanA).ToList();
+                var sideB = online.Where(c => c.Player?.ClanId == clanB).ToList();
+
+                if (sideA.Count == 0 || sideB.Count == 0)
+                    continue;
+
+                var leaderClan = online.Find(c => c.AccountEntry?.Id == party.PartyLeaderId)?.Player?.ClanId ?? 0;
+                var keepA = leaderClan == clanA || leaderClan != clanB && sideA.Count >= sideB.Count;
+
+                foreach (var client in keepA ? sideB : sideA)
+                {
+                    // Taking members out can disband the squad under us.
+                    if (!Parties.ContainsKey(party.Id))
+                        break;
+
+                    RemoveMember(party, party.Find(client.AccountEntry.Id), false);
+                    Message(client, PlayerMessage.PmPartyKickedByFeuding);
+                }
+            }
         }
 
         private static List<Client> OnlineClients(Party party)

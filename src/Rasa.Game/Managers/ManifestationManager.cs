@@ -15,6 +15,7 @@ namespace Rasa.Managers
     using Packets.Manifestation.Server;
     using Packets.MapChannel.Client;
     using Packets.MapChannel.Server;
+    using Packets.Wargame.Server;
     using Repositories.UnitOfWork;
     using Structures;
     using Structures.Char;
@@ -1879,6 +1880,13 @@ namespace Rasa.Managers
             // And what they have targeted, which their combat stance aims at.
             if (!forSelf && Targets.Current(player) is var target && target != 0)
                 entityData.Add(new TargetIdPacket(target));
+
+            // The clan feuds they are in, to their own client and everyone who meets them: the
+            // client tells ally from enemy by it. Every actor starts in none.
+            var wargames = ClanFeuds.Instance.WargameDataOf(player);
+
+            if (wargames.Count > 0)
+                entityData.Add(new WargameDataPacket(wargames));
 
             return entityData;
         }

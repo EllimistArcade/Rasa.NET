@@ -141,6 +141,7 @@ namespace Rasa.Managers
             RegisterCommand(".effect", GmLevel.GameMaster, EffectCommand);
             RegisterCommand(".moveflags", GmLevel.GameMaster, MoveFlagsCommand);
             RegisterCommand(".falldamage", GmLevel.GameMaster, FallDamageCommand);
+            RegisterCommand(".feud", GmLevel.GameMaster, FeudCommand);
             RegisterCommand(".bark", GmLevel.GameMaster, BarkCommand);
             RegisterCommand(".comehere", GmLevel.GameMaster, ComeHereCommand);
             RegisterCommand(".createobj", GmLevel.GameMaster, CreateObjectCommand);
@@ -494,6 +495,122 @@ namespace Rasa.Managers
             CommunicatorManager.Instance.SystemMessage(_client, tracker.WatchFlags
                 ? "Watching your move flags: jump, fall and swim, and each change is shown. .moveflags again to stop."
                 : "Stopped watching your move flags.");
+        }
+
+        /// <summary>
+        /// .feud: clan feuds (ClanFeuds).
+        ///  - .feud - the feuds running, with time left and score, and the challenges waiting;
+        ///  - .feud start &lt;clan&gt; &lt;clan&gt; - starts one between two clans, by id or by a name with no
+        ///    spaces, skipping every rule (PvP, leaders online) - for testing with few players;
+        ///  - .feud end &lt;id&gt; [tie|cancel|&lt;winning clan&gt;] - ends one, as its clock would (most kills
+        ///    wins) unless told otherwise;
+        ///  - .feud length [minutes] - how long a feud started from now lasts.
+        /// </summary>
+        private void FeudCommand(string[] parts)
+        {
+            var feuds = ClanFeuds.Instance;
+            var sub = parts.Length > 1 ? parts[1].ToLowerInvariant() : "list";
+
+            Structures.Char.ClanEntry Clan(string text) =>
+                uint.TryParse(text, out var id) ? ClanManager.Instance.Clans.GetValueOrDefault(id)?.Value
+                    : ClanManager.Instance.Clans.Values.Select(c => c.Value).FirstOrDefault(c => c != null && string.Equals(c.Name, text, StringComparison.OrdinalIgnoreCase));
+
+            string Name(uint clanId) => $"{ClanManager.Instance.Clans.GetValueOrDefault(clanId)?.Value?.Name ?? "?"} ({clanId})";
+
+            switch (sub)
+            {
+                case "list":
+                {
+                    var running = feuds.Feuds;
+                    var waiting = feuds.Challenges;
+
+                    if (running.Count == 0 && waiting.Count == 0)
+                    {
+                        CommunicatorManager.Instance.SystemMessage(_client, $"No clan feuds or challenges. New feuds last {feuds.Duration.TotalMinutes:0} minutes.");
+                        return;
+                    }
+
+                    foreach (var feud in running.OrderBy(f => f.Id))
+                        CommunicatorManager.Instance.SystemMessage(_client,
+                            $"Feud {feud.Id}: {Name(feud.ChallengerClanId)} {feud.ChallengerKills} : {feud.TargetKills} {Name(feud.TargetClanId)}, {feuds.SecondsLeft(feud) / 60}m {feuds.SecondsLeft(feud) % 60}s left");
+
+                    foreach (var challenge in waiting.OrderBy(c => c.WargameId))
+                        CommunicatorManager.Instance.SystemMessage(_client,
+                            $"Challenge {challenge.WargameId}: {Name(challenge.ChallengerClanId)} challenged {Name(challenge.TargetClanId)}, unanswered");
+
+                    return;
+                }
+
+                case "start" when parts.Length >= 4:
+                {
+                    var first = Clan(parts[2]);
+                    var second = Clan(parts[3]);
+
+                    if (first == null || second == null || first.Id == second.Id)
+                    {
+                        CommunicatorManager.Instance.SystemMessage(_client, "usage: .feud start <clan> <clan> - two different clans, by id or by a name with no spaces");
+                        return;
+                    }
+
+                    var feud = feuds.Start(first, second);
+
+                    CommunicatorManager.Instance.SystemMessage(_client, feud == null
+                        ? $"{first.Name} and {second.Name} are already at feud."
+                        : $"Feud {feud.Id} started: {first.Name} against {second.Name}, {feuds.Duration.TotalMinutes:0} minutes.");
+                    return;
+                }
+
+                case "end" when parts.Length >= 3 && uint.TryParse(parts[2], out var feudId):
+                {
+                    var feud = feuds.Feuds.Find(f => f.Id == feudId);
+
+                    if (feud == null)
+                    {
+                        CommunicatorManager.Instance.SystemMessage(_client, $"No feud {feudId}.");
+                        return;
+                    }
+
+                    var how = parts.Length >= 4 ? parts[3] : null;
+
+                    if (how == null)
+                        feuds.Expire(feud);
+                    else if (how.Equals("tie", StringComparison.OrdinalIgnoreCase))
+                        feuds.End(feud, ClanFeuds.Outcome.Tied);
+                    else if (how.Equals("cancel", StringComparison.OrdinalIgnoreCase))
+                        feuds.End(feud, ClanFeuds.Outcome.Cancelled);
+                    else if (Clan(how) is Structures.Char.ClanEntry winner && feud.Involves(winner.Id))
+                        feuds.End(feud, ClanFeuds.Outcome.Won, winner.Id);
+                    else
+                    {
+                        CommunicatorManager.Instance.SystemMessage(_client, "usage: .feud end <id> [tie|cancel|<winning clan>]");
+                        return;
+                    }
+
+                    CommunicatorManager.Instance.SystemMessage(_client, $"Feud {feudId} ended.");
+                    return;
+                }
+
+                case "length":
+                {
+                    if (parts.Length >= 3)
+                    {
+                        if (!double.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var minutes) || minutes <= 0 || minutes > 7 * 24 * 60)
+                        {
+                            CommunicatorManager.Instance.SystemMessage(_client, "usage: .feud length <minutes> - more than 0, at most a week");
+                            return;
+                        }
+
+                        feuds.Duration = TimeSpan.FromMinutes(minutes);
+                    }
+
+                    CommunicatorManager.Instance.SystemMessage(_client, $"Clan feuds started from now last {feuds.Duration.TotalMinutes:0.#} minutes (default {ClanFeuds.DefaultDuration.TotalMinutes:0}).");
+                    return;
+                }
+
+                default:
+                    CommunicatorManager.Instance.SystemMessage(_client, "usage: .feud [list] | start <clan> <clan> | end <id> [tie|cancel|<winning clan>] | length [minutes]");
+                    return;
+            }
         }
 
         /// <summary>

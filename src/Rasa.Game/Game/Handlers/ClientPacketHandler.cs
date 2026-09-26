@@ -761,7 +761,7 @@
         [PacketHandler(GameOpcode.ChallengeClanToFeud)]
         private void ChallengeClanToFeud(ChallengeClanToFeudPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: ChallengeClanToFeudPacket");
+            ClanFeuds.Instance.ChallengeClanToFeud(Client, packet.ClanName, packet.Invite);
         }
 
         [PacketHandler(GameOpcode.ChangeClanName)]
@@ -809,7 +809,7 @@
         [PacketHandler(GameOpcode.FeudChallengeResponse)]
         private void FeudChallengeResponse(FeudChallengeResponsePacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: FeudChallengeResponsePacket");
+            ClanFeuds.Instance.FeudChallengeResponse(Client, packet.ClanName, packet.AcceptChalange);
         }
 
         [PacketHandler(GameOpcode.GotoMob)]
@@ -857,7 +857,7 @@
         [PacketHandler(GameOpcode.RevokeClanFeud)]
         private void RevokeClanFeud(RevokeClanFeudPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: RevokeClanFeudPacket");
+            ClanFeuds.Instance.RevokeClanFeud(Client, packet.ClanName);
         }
 
         [PacketHandler(GameOpcode.Shout)]
@@ -869,7 +869,7 @@
         [PacketHandler(GameOpcode.SurrenderClanFeud)]
         private void SurrenderClanFeud(SurrenderClanFeudPacket packet)
         {
-            Logger.WriteLog(LogType.Debug, "ToDo: SurrenderClanFeudPacket");
+            ClanFeuds.Instance.SurrenderClanFeud(Client, packet.ClanName);
         }
 
         [PacketHandler(GameOpcode.SurrenderWargame)]

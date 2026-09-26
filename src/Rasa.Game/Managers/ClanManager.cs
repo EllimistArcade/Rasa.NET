@@ -657,6 +657,9 @@ namespace Rasa.Managers
 
             //update clan inventory from db
             InventoryManager.Instance.SetupLocalClanInventory(client);
+
+            // Into the clan's feuds, if it is in any.
+            ClanFeuds.Instance.MemberJoined(client);
         }
 
         internal void CleanupClan(Client client)
@@ -667,7 +670,12 @@ namespace Rasa.Managers
             // way through, disconnecting whoever sent it with the rows deleted and the cache not.
             client.Player.Inventory.ResetClanInventory();
 
+            var oldClanId = client.Player.ClanId;
+
             client.Player.ClanId = 0;
+
+            // Out of the clan's feuds: a kick, a leave or a disband all come through here.
+            ClanFeuds.Instance.MemberLeft(client, oldClanId);
         }
 
         internal void InviteToClanByName(Client client, InviteToClanByNamePacket packet)
@@ -901,6 +909,9 @@ namespace Rasa.Managers
                 RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
                 return;
             }
+
+            // Its feuds are cancelled and its challenges dropped while the members are still in it.
+            ClanFeuds.Instance.ClanDisbanded(clan.Id);
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 

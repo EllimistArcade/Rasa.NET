@@ -38,6 +38,36 @@ namespace Rasa.Navigation
 
         public DtNavMesh NavMesh => _navMesh;
 
+        /// <summary>
+        /// How low and how high the map goes, as far as the navmesh knows. Lowest is the lowest
+        /// of any walkable vertex and of the tiles' bounds, which are the bounds of all the
+        /// geometry the mesh was built from, walkable or not; highest is the highest walkable
+        /// vertex. Null for a mesh with no tiles.
+        /// </summary>
+        public (float Lowest, float HighestWalkable)? HeightRange()
+        {
+            var lowest = float.MaxValue;
+            var highest = float.MinValue;
+
+            for (var i = 0; i < _navMesh.GetMaxTiles(); i++)
+            {
+                var data = _navMesh.GetTile(i)?.data;
+
+                if (data?.header == null)
+                    continue;
+
+                lowest = Math.Min(lowest, data.header.bmin.Y);
+
+                for (var k = 1; k < data.header.vertCount * 3; k += 3)
+                {
+                    lowest = Math.Min(lowest, data.verts[k]);
+                    highest = Math.Max(highest, data.verts[k]);
+                }
+            }
+
+            return lowest <= highest ? (lowest, highest) : null;
+        }
+
         /// <summary>The nearest walkable point to <paramref name="position"/>, or null when nothing is within the search extents.</summary>
         public Vector3? Nearest(Vector3 position)
         {

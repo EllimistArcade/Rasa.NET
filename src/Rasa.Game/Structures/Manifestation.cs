@@ -117,7 +117,21 @@ namespace Rasa.Structures
 
             // Put somewhere, not fallen there: whatever descent was under way is over.
             Fall.Reset();
+
+            // Where to put them back if they fall out of the world before they have stood anywhere
+            // (Managers.SafetyFloor). Map changes set MapContextId before placing.
+            ArrivalPosition = position;
+            ArrivalMapContextId = MapContextId;
         }
+
+        /// <summary>The last place on the map the player stood on walkable ground (Managers.SafetyFloor), and which map; null until they have.</summary>
+        public Vector3? LastSafePosition { get; set; }
+        public uint LastSafeMapContextId { get; set; }
+        public long LastSafeTick { get; set; }
+
+        /// <summary>Where the player was last put or entered the world, and on which map (Managers.SafetyFloor).</summary>
+        public Vector3? ArrivalPosition { get; set; }
+        public uint ArrivalMapContextId { get; set; }
 
         /// <summary>The descent under way, if any, for falling damage (Managers.FallDamage).</summary>
         public FallTracker Fall { get; } = new FallTracker();

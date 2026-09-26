@@ -540,6 +540,10 @@ namespace Rasa.Managers
 
             CommunicatorManager.Instance.PlayerEnterMap(client);
             PartyManager.Instance.PlayerEnteredWorld(client);
+
+            // A character saved below the map's floor - out of the world when they left it - is put
+            // back; any other is noted as where they arrived.
+            SafetyFloor.OnEnteredWorld(client);
         }
 
         public void PassClientToCharacterSelection(Client client)

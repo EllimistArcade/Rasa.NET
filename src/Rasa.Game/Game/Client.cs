@@ -529,9 +529,22 @@ namespace Rasa.Game
                         break;
                     }
 
+                    // Out of the world (SafetyFloor): below the map's floor, and put back where they
+                    // last stood. After the secret passages, whose panes are far above any floor.
+                    var moveTick = Environment.TickCount64;
+
+                    if (SafetyFloor.OnMove(this, Player.Position, moveTick))
+                    {
+                        ManifestationManager.Instance.NotifyPlayerActivity(this);
+                        break;
+                    }
+
                     // A fall, if this Move ended one (FallDamage), and the flags for a GM watching them.
-                    FallDamage.OnMove(this, movedFrom, Player.Position, Environment.TickCount64);
+                    FallDamage.OnMove(this, movedFrom, Player.Position, moveTick);
                     FallDamage.ShowMoveFlags(this, moveMessage, movedFrom);
+
+                    // Standing somewhere, not falling: where they go back to if they later fall out.
+                    SafetyFloor.NoteStanding(this, moveTick);
                     Player.Rotation = moveMessage.Movement.ViewDirection.X;
                     Movement = moveMessage.Movement;
 

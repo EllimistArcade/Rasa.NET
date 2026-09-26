@@ -29,6 +29,15 @@ namespace Rasa.Structures
         /// <summary>The map's navmesh, or null when no navmesh/&lt;map&gt;.nav was built for it. See NavMeshManager.</summary>
         public Navigation.NavMeshQuery NavMesh { get; set; }
 
+        /// <summary>
+        /// The height below which a player has fallen out of the world and is put back
+        /// (Managers.SafetyFloor); null when the map has no navmesh. Set with the navmesh.
+        /// </summary>
+        public float? SafetyFloorY { get; set; }
+
+        /// <summary>The highest walkable surface on the map, from its navmesh; null without one.</summary>
+        public float? TopWalkableY { get; set; }
+
         /// <summary>What stands between two points on the map, for cover; null when no navmesh/&lt;map&gt;.cover was built. See Managers.Cover.</summary>
         public Navigation.CoverMesh Cover { get; set; }
         // effect

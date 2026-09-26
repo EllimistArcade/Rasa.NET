@@ -106,6 +106,13 @@ namespace Rasa.Managers
                 {
                     mapChannel.NavMesh = new NavMeshQuery(NavMeshFile.Read(path));
                     LoadedMaps++;
+
+                    // The floor under the map, for players who fall out of the world (SafetyFloor).
+                    if (mapChannel.NavMesh.HeightRange() is var (lowest, highest))
+                    {
+                        mapChannel.SafetyFloorY = SafetyFloor.FloorFor(lowest);
+                        mapChannel.TopWalkableY = highest;
+                    }
                 }
                 catch (Exception e)
                 {

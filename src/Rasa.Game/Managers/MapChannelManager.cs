@@ -639,51 +639,84 @@ namespace Rasa.Managers
             inventory.Clear();
         }
 
+        /// <summary>
+        /// Takes a player out of the map: out of the managers that track them, out of the entity
+        /// tables and the cells, off the map's client list, and - on a logout - back to the
+        /// character screen.
+        ///
+        /// Every step runs in <see cref="RemovalStep"/>, which logs a failure and goes on to the
+        /// next. It used to be one straight run, with the database writes second and the cells
+        /// near the end, and the caller clears RemoveFromMap before calling and drops the client
+        /// from the list if this throws - so a SqliteException out of the position save (a busy
+        /// database, a full disk) or a throw from an effect's OnDetached left a manifestation
+        /// registered and standing in its cells with nothing that would ever look at it again.
+        /// Worse, if the throw came after the inventories were emptied, every player who later
+        /// walked into those cells was introduced to it, and building its entity data indexed
+        /// its empty equipment list: the newcomer's MapLoaded threw and they were disconnected,
+        /// for as long as the server ran. A step that fails now costs what that step does - a
+        /// save, a notice - and the player still leaves.
+        ///
+        /// Each step also tolerates having been done already (lists emptied, ids unregistered,
+        /// cells left), so a second removal of the same player is harmless.
+        /// </summary>
         public void RemovePlayer(Client client, bool logout)
         {
+            var player = client.Player;
+            var mapChannel = player.MapChannel;
+
             // A target is an entity on this map; the client does not always re-target after a
             // map change, and MissileLaunch refuses cross-map targets, so drop it here.
-            client.Player.Target = 0;
+            player.Target = 0;
 
-            // unregister Communicator
-            CommunicatorManager.Instance.PlayerExitMap(client);
+            // Position and time played to the database, chat channels left, friends told.
+            RemovalStep(client, "leaving chat and saving position", () => CommunicatorManager.Instance.PlayerExitMap(client));
+
             // unregister mapChannelClient
-            EntityManager.Instance.UnregisterEntity(client.Player.EntityId);
-            EntityManager.Instance.UnregisterPlayer(client.Player.EntityId);
-            EntityManager.Instance.UnregisterActor(client.Player.EntityId);
+            RemovalStep(client, "unregistering the character", () =>
+            {
+                EntityManager.Instance.UnregisterEntity(player.EntityId);
+                EntityManager.Instance.UnregisterPlayer(player.EntityId);
+                EntityManager.Instance.UnregisterActor(player.EntityId);
+            });
 
             // unregister character Inventory
-            DestroyInventory(client, client.Player.Inventory.EquippedInventory);
-            DestroyInventory(client, client.Player.Inventory.HomeInventory);
-            DestroyInventory(client, client.Player.Inventory.PersonalInventory);
-            DestroyInventory(client, client.Player.Inventory.WeaponDrawer);
+            RemovalStep(client, "releasing the inventory", () =>
+            {
+                DestroyInventory(client, player.Inventory.EquippedInventory);
+                DestroyInventory(client, player.Inventory.HomeInventory);
+                DestroyInventory(client, player.Inventory.PersonalInventory);
+                DestroyInventory(client, player.Inventory.WeaponDrawer);
 
-            // The auction house's pick-up items are this player's; they are loaded again from
-            // their rows on arrival, like the lists above, and were left registered each time.
-            DestroyInventory(client, client.Player.Inventory.InboxItems);
+                // The auction house's pick-up items are this player's; they are loaded again from
+                // their rows on arrival, like the lists above, and were left registered each time.
+                DestroyInventory(client, player.Inventory.InboxItems);
 
-            // Listed items are the auction house's (AuctionHouseManager.Listed), which keeps them
-            // while the seller is away and gives the same objects back on their next load; the
-            // seller's list of them only goes.
-            client.Player.Inventory.AuctionItems.Clear();
+                // Listed items are the auction house's (AuctionHouseManager.Listed), which keeps
+                // them while the seller is away and gives the same objects back on their next
+                // load; the seller's list of them only goes.
+                player.Inventory.AuctionItems.Clear();
+            });
 
             // The Recently Sold list lasts the session: a map change keeps it, and the arrival
             // shows it again (NpcManager.ResendBuyback).
             if (logout)
-                NpcManager.Instance.DiscardBuybackItems(client);
+                RemovalStep(client, "discarding the buyback list", () => NpcManager.Instance.DiscardBuybackItems(client));
 
-            ActorActionManager.Instance.RemoveActor(client.Player);
+            RemovalStep(client, "removing queued actions", () => ActorActionManager.Instance.RemoveActor(player));
 
             // Effects are per map as far as the clients know - nobody on the next map was told
             // about them - and a sprint left running would keep draining adrenaline unseen.
             // A map change keeps the timed buffs aside, clocks stopped, to go on again on arrival
             // (EffectCarry); a logout keeps nothing.
-            if (logout)
-                EffectCarry.Drop(client.Player);
-            else
-                EffectCarry.Stash(client.Player);
+            RemovalStep(client, "clearing effects", () =>
+            {
+                if (logout)
+                    EffectCarry.Drop(player);
+                else
+                    EffectCarry.Stash(player);
 
-            GameEffectManager.Instance.ClearEffects(client.Player.MapChannel, client.Player);
+                GameEffectManager.Instance.ClearEffects(mapChannel, player);
+            });
 
             // The weapon is put away with them. A manifestation arriving on a map starts with
             // nothing in its hands - the client transitions to _no_tool and is never told
@@ -692,7 +725,7 @@ namespace Rasa.Managers
             // of the session: the server thought a weapon was out that the player could see was
             // not, which let a tool action through that the client refuses (basetoolaction.py
             // checks IsWeaponReady) and skipped the draw the fire path performs for itself.
-            client.Player.WeaponReady = false;
+            player.WeaponReady = false;
 
             // The combat stance goes the same way. The client's manifestation arrives at peace -
             // ClearMap removed it and the new map creates it afresh - but the flag stayed as it
@@ -700,52 +733,58 @@ namespace Rasa.Managers
             // zoned in stance was put back into it with a hold, which outlasts the client's own
             // 2.5 s return to peace. The RequestVisualCombatMode that would have cleared it is one
             // the client sends after the server has already set Loading, which is dropped.
-            client.Player.InCombatMode = false;
-            client.Player.RequestedCombatMode = false;
-            client.Player.AutoFireCombatMode = false;
+            player.InCombatMode = false;
+            player.RequestedCombatMode = false;
+            player.AutoFireCombatMode = false;
 
             // And whatever it was following or walking up to: that is on the map being left.
-            client.Player.TrackingTargetEntityId = 0;
+            player.TrackingTargetEntityId = 0;
 
             // Before the player leaves the cells, while their minions can still be told to go:
             // "Player-controlled subordinates will teleport with their masters, but not change
             // maps." Leaving the map is leaving them behind, so they are dismissed, not orphaned.
-            MinionManager.Instance.DismissAll(client);
+            RemovalStep(client, "dismissing minions", () => MinionManager.Instance.DismissAll(client));
 
-            CellManager.Instance.RemoveFromWorld(client);
-            MapLinkManager.Instance.RemovePlayer(client);
-            RegionManager.Instance.RemovePlayer(client);
-            ManifestationManager.Instance.RemovePlayerCharacter(client);
-            ClanManager.Instance.RemovePlayer(client);
-            LookingForGroupManager.Instance.RemovePlayer(client);
-            SummonManager.Instance.RemovePlayer(client);
-            TradeManager.Instance.RemovePlayer(client);
-            PartyManager.Instance.RemovePlayer(client);
-            PetitionManager.Instance.RemovePlayer(client);
+            RemovalStep(client, "leaving the cells", () => CellManager.Instance.RemoveFromWorld(client));
+            RemovalStep(client, "leaving map links", () => MapLinkManager.Instance.RemovePlayer(client));
+            RemovalStep(client, "leaving regions", () => RegionManager.Instance.RemovePlayer(client));
+            RemovalStep(client, "removing the character", () => ManifestationManager.Instance.RemovePlayerCharacter(client));
+            RemovalStep(client, "leaving the clan roster", () => ClanManager.Instance.RemovePlayer(client));
+            RemovalStep(client, "leaving looking-for-group", () => LookingForGroupManager.Instance.RemovePlayer(client));
+            RemovalStep(client, "cancelling summons", () => SummonManager.Instance.RemovePlayer(client));
+            RemovalStep(client, "cancelling trade", () => TradeManager.Instance.RemovePlayer(client));
+            RemovalStep(client, "leaving the squad", () => PartyManager.Instance.RemovePlayer(client));
+            RemovalStep(client, "closing petitions", () => PetitionManager.Instance.RemovePlayer(client));
 
             // Leaving the world, not the map: the cooldowns still running go to the database, to
             // be picked up when the character is next loaded.
             if (logout)
-                ActionReuse.Save(client);
+                RemovalStep(client, "saving cooldowns", () => ActionReuse.Save(client));
 
-            if (logout)
-                if (client.Player.Disconected == false)
-                {
-                    PassClientToCharacterSelection(client);
-                    client.Player.Disconected = true;
-                }
-
-            // remove from list
-            for (var i = 0; i < client.Player.MapChannel.ClientList.Count; i++)
+            if (logout && player.Disconected == false)
             {
-                if (client == client.Player.MapChannel.ClientList[i])
-                {
-                    client.Player.MapChannel.ClientList.RemoveAt(i);
-                    //mapClient.MapChannel.PlayerCount--;
-                    break;
-                }
+                RemovalStep(client, "returning to character selection", () => PassClientToCharacterSelection(client));
+                player.Disconected = true;
             }
 
+            // remove from list
+            mapChannel?.ClientList.Remove(client);
+        }
+
+        /// <summary>
+        /// One step of <see cref="RemovePlayer"/>. A failure is logged against the player and the
+        /// step, and the removal carries on: see RemovePlayer for why no step may stop the rest.
+        /// </summary>
+        private static void RemovalStep(Client client, string step, Action work)
+        {
+            try
+            {
+                work();
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Removing {client.Player?.FamilyName} from the world: {step} failed, carrying on with the rest: {e}");
+            }
         }
 
         /// <summary>

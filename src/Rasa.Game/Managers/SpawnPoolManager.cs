@@ -293,17 +293,31 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// What one spawn of the pool will be: the loaded template of each creature to make, once
+        /// per creature. The callers read the count, and SpawnCreatures each entry's DbId, and
+        /// CreateCreature makes the real creatures from the templates.
+        ///
+        /// This used to put a new Creature in the list for each one - a copy of the template that
+        /// nothing ever used beyond its DbId. Every Actor takes an entity id as it is constructed,
+        /// and these were never freed, so each spawn spent one id per creature for nothing; and
+        /// since GetEntityId hands out freed ids first, the ids the despawns gave back were the
+        /// ones these took, and the real creatures always came off the top of the counter.
+        /// </summary>
         internal List<Creature> CreateListOfCreatures(SpawnPool spawnPool)
         {
             var creatureList = new List<Creature>();
 
             foreach (var spawnSlot in spawnPool.SpawnSlot)
             {
-                var spawnCreatureCount = new Random().Next(spawnSlot.CountMin, spawnSlot.CountMax + 1);
+                var spawnCreatureCount = Random.Shared.Next(spawnSlot.CountMin, spawnSlot.CountMax + 1);
+
+                if (!CreatureManager.Instance.LoadedCreatures.TryGetValue(spawnSlot.CreatureId, out var template))
+                    continue;
 
                 for (var i = 0; i < spawnCreatureCount; i++)
                 {
-                    creatureList.Add(new Creature(CreatureManager.Instance.LoadedCreatures[spawnSlot.CreatureId]));
+                    creatureList.Add(template);
 
                     if (creatureList.Count > 63)    // cannot spawn more than 64 creatures at once
                         break;

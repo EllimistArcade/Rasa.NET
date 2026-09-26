@@ -209,6 +209,11 @@ namespace Rasa.Managers
             // it was left in the map's table forever, with its id.
             LootDispenserManager.Instance.RemoveForCreature(mapChannel, creature);
 
+            // Its entries in the per-creature tables keyed by entity id, before the id is freed
+            // for the next creature.
+            CreatureHabits.Forget(creature);
+            CreatureBuffs.Forget(creature);
+
             // Unregister once, whoever was or was not watching.
             EntityManager.Instance.UnregisterEntity(creature.EntityId);
             EntityManager.Instance.UnregisterCreature(creature.EntityId);

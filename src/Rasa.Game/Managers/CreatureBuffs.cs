@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -90,6 +90,19 @@ namespace Rasa.Managers
 
         private static readonly Dictionary<ulong, long> WarcryAt = new Dictionary<ulong, long>();
         private static readonly object WarcryLock = new object();
+
+        /// <summary>
+        /// A creature leaving the world: its warcry clock goes with it, rather than staying in the
+        /// table for good and being inherited by the next creature given its entity id.
+        /// </summary>
+        public static void Forget(Creature creature)
+        {
+            if (creature == null)
+                return;
+
+            lock (WarcryLock)
+                WarcryAt.Remove(creature.EntityId);
+        }
 
         public static bool Is(CreatureAction action) =>
             action != null && (action.ActionId == ThraxRage || action.ActionId == ThraxScourge || action.ActionId == HarvesterWarcry

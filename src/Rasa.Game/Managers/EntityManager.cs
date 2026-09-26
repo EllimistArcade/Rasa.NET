@@ -14,7 +14,14 @@ namespace Rasa.Managers
         private static readonly object InstanceLock = new object();
         private ulong _entityId = 1000;
         private object _entityIdLock = new object();
-        private List<ulong> _freeEntityIds = new List<ulong>();
+        /// <summary>
+        /// Ids given back, handed out again first-in first-out, and a set of the same ids for the
+        /// is-it-already-there check. This was one List: the check was a linear Contains and the
+        /// hand-out a RemoveAt(0) that shifts the whole list, both O(n) in the number of ids
+        /// waiting - and a map reset or a restart of a busy zone puts thousands there at once.
+        /// </summary>
+        private readonly Queue<ulong> _freeEntityIds = new Queue<ulong>();
+        private readonly HashSet<ulong> _freeEntityIdSet = new HashSet<ulong>();
 
         public Dictionary<ulong, EntityType> RegisteredEntities = new Dictionary<ulong, EntityType>();
         public Dictionary<ulong, Item> Items = new Dictionary<ulong, Item>();
@@ -95,9 +102,9 @@ namespace Rasa.Managers
                 {
                     if (_freeEntityIds.Count > 0)
                     {
-                        var freeEntityId = _freeEntityIds[0];
+                        var freeEntityId = _freeEntityIds.Dequeue();
 
-                        _freeEntityIds.RemoveAt(0);
+                        _freeEntityIdSet.Remove(freeEntityId);
 
                         return freeEntityId;
                     }
@@ -158,8 +165,8 @@ namespace Rasa.Managers
             }
 
             lock (_entityIdLock)
-                if(!_freeEntityIds.Contains(id))
-                    _freeEntityIds.Add(id);
+                if (_freeEntityIdSet.Add(id))
+                    _freeEntityIds.Enqueue(id);
         }
 
         public void RegisterEntity(ulong entityId, EntityType type)

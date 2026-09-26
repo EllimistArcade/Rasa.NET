@@ -31,7 +31,8 @@ namespace Rasa.Structures
         /// <param name="side">Whose ship: FRIENDLY for the AFS (human) dropship, HOSTILE for the Bane one.</param>
         public Dropship(TargetCategory side, DropshipType dropshipType, SpawnPool spawnPool = null)
         {
-            EntityId = EntityManager.Instance.GetEntityId;
+            // EntityId is the one DynamicObject's constructor has already taken. This took a
+            // second over it, and the first was never freed: an id lost per dropship built.
             EntityClassId = side == TargetCategory.Friendly ? Data.EntityClasses.UsableCrSpawnerHumDropshipV01 : Data.EntityClasses.UsableCrSpawnerBaneDropshipV01;
             TargetCategory = side;
             StateId = UseObjectState.CsStateBegin;
@@ -56,7 +57,8 @@ namespace Rasa.Structures
         public Dropship(TargetCategory side, DropshipType dropshipType, Client client, DropshipRole role, Vector3 destination = new Vector3(), uint destinationMapId = 0)
         {
             Role = role;
-            EntityId = EntityManager.Instance.GetEntityId;
+            // EntityId is the one DynamicObject's constructor has already taken. This took a
+            // second over it, and the first was never freed: an id lost per dropship built.
             EntityClassId = side == TargetCategory.Friendly ? Data.EntityClasses.UsableCrSpawnerHumDropshipV01 : Data.EntityClasses.UsableCrSpawnerBaneDropshipV01;
             TargetCategory = side;
             StateId = UseObjectState.CsStateBegin;

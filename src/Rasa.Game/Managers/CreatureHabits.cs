@@ -81,6 +81,26 @@ namespace Rasa.Managers
 
         private static CreatureAction HabitOf(Creature creature) => creature?.Actions?.FirstOrDefault(Is);
 
+        /// <summary>
+        /// A creature leaving the world: its entries go. The three tables are keyed by entity id
+        /// and were only ever written - an errand only cleared on arrival - so every creature
+        /// with a habit that ever spawned stayed in them, one that died on an errand kept the
+        /// corpse it was going for alive with it, and a new creature given a recycled id
+        /// inherited the old one's busy time, next look and errand.
+        /// </summary>
+        public static void Forget(Creature creature)
+        {
+            if (creature == null)
+                return;
+
+            lock (Lock)
+            {
+                NextLook.Remove(creature.EntityId);
+                Errands.Remove(creature.EntityId);
+                BusyUntil.Remove(creature.EntityId);
+            }
+        }
+
         /// <summary>Whether the creature is in the middle of a habit's animation - eating, looting, scanning.</summary>
         public static bool IsBusy(Creature creature)
         {

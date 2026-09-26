@@ -1015,48 +1015,65 @@ namespace Rasa.Managers
              * we can take closer look at this later
              */
 
-            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
-
-            //deposit
-            if (amount >= 500)
+            if (amount > -500 && amount < 500)
             {
-                if (client.Player.Credits[CurencyType.Credits] >= amount)
-                {
-                    var deposit = client.Player.LockboxCredits + amount;
-
-                    // The lockbox is credited only if the purse was actually debited. The check
-                    // above already covers it, but the two halves are written separately here and
-                    // a lockbox that gains what nobody lost is credits made out of nothing.
-                    if (!ManifestationManager.Instance.LossCredits(client, amount))
-                        return;
-
-                    client.CallMethod(client.Player.EntityId, new LockboxFundsPacket(deposit));
-
-                    client.Player.LockboxCredits = deposit;
-                    unitOfWork.CharacterLockboxes.UpdateCredits(client.AccountEntry.Id, deposit);
-                }
-                else
-                    CommunicatorManager.Instance.SystemMessage(client, "Not enof credit's in inventory\nP.S. Go earn some credits :)");
-            }
-            // withdraw
-            else if (amount <= -500)
-            {
-                if (client.Player.LockboxCredits >= -amount)
-                {
-                    var withdraw = client.Player.LockboxCredits + amount;
-
-                    ManifestationManager.Instance.GainCredits(client, -amount);
-                    client.CallMethod(client.Player.EntityId, new LockboxFundsPacket(withdraw));
-
-                    client.Player.LockboxCredits = withdraw;
-                    unitOfWork.CharacterLockboxes.UpdateCredits(client.AccountEntry.Id, withdraw);
-                }
-                else
-                    CommunicatorManager.Instance.SystemMessage(client, "Not enof credit's in Lockbox\nP.S. Dont be greedy :)");
-            }
-            else
                 CommunicatorManager.Instance.SystemMessage(client, "Minimum transfer value is 500 credits");
+                return;
+            }
 
+            // Worked in long: purse and lockbox are both int columns. The sums were int + int, so a
+            // big enough deposit wrapped the lockbox negative (and stranded it, since a withdrawal
+            // needs the balance to cover it), a withdrawal past int.MaxValue was clamped off the
+            // purse while the lockbox still paid it out in full, and -int.MinValue is itself
+            // negative, which made a withdrawal of int.MinValue pass the balance check.
+            long purse = client.Player.Credits[CurencyType.Credits];
+            long lockbox = client.Player.LockboxCredits;
+
+            var purseAfter = purse - amount;
+            var lockboxAfter = lockbox + amount;
+
+            if (purseAfter < 0)
+            {
+                CommunicatorManager.Instance.SystemMessage(client, "Not enof credit's in inventory\nP.S. Go earn some credits :)");
+                return;
+            }
+
+            if (lockboxAfter < 0)
+            {
+                CommunicatorManager.Instance.SystemMessage(client, "Not enof credit's in Lockbox\nP.S. Dont be greedy :)");
+                return;
+            }
+
+            if (purseAfter > int.MaxValue || lockboxAfter > int.MaxValue)
+            {
+                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmInsufficientDepositFunds, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                return;
+            }
+
+            // Both balances in one transaction: the purse and the lockbox used to be written by two
+            // separate commits, so a failure between them made or lost the difference.
+            try
+            {
+                using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+                using var transaction = unitOfWork.BeginTransaction();
+
+                unitOfWork.Characters.UpdateCharacterCredits(client.Player.Id, (int)purseAfter);
+                unitOfWork.CharacterLockboxes.UpdateCredits(client.AccountEntry.Id, (int)lockboxAfter);
+
+                unitOfWork.Complete();
+                transaction.Commit();
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"Lockbox transfer of {amount} for {client.Player.FamilyName} failed to commit; nothing moved: {e}");
+                return;
+            }
+
+            client.Player.Credits[CurencyType.Credits] = (int)purseAfter;
+            client.Player.LockboxCredits = (int)lockboxAfter;
+
+            client.CallMethod(client.Player.EntityId, new UpdateCreditsPacket(CurencyType.Credits, (int)purseAfter, 0));
+            client.CallMethod(client.Player.EntityId, new LockboxFundsPacket((int)lockboxAfter));
         }
 
         /// <summary>

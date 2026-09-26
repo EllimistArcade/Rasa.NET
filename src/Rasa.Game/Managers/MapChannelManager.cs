@@ -160,7 +160,6 @@ namespace Rasa.Managers
                 MapChannelArray.Add(mapInfo.Id, newMapChannel);
             }
             Timer.Add("AutoFire", 100, true, null);
-            Timer.Add("CheckForLogingClients", 1000, true, null);
             Timer.Add("CheckForObjects", 1000, true, null);
             Timer.Add("ClientEffectUpdate", 500, true, null);
             Timer.Add("CellUpdateVisibility", 1000, true, null);
@@ -231,15 +230,26 @@ namespace Rasa.Managers
                 // A /killmap asked for since the last tick: done here, between thinks.
                 Guard("MapReset.Worker", mapChannel, () => MapReset.Worker(mapChannel));
 
-                if (Timer.IsTriggered("CheckForLogingClients"))
-                    if (mapChannel.QueuedClients.Count > 0)
-                    {
-                        // create new mapClient
-                        var dequedClient = mapChannel.QueuedClients.Dequeue();
+                // Everyone who has been sent into this map since the last tick goes onto its list.
+                //
+                // This used to move one client per map per second (a 1000 ms timer, one Dequeue),
+                // a pace carried over from the original server, where the dequeue did the work of
+                // bringing a player in. Here MapLoaded does that work, and does not wait for the
+                // dequeue: a player is registered, in the cells and walking about as soon as their
+                // client has loaded. The list is only how the per-player workers find them -
+                // visibility, regeneration, inactivity, map links, regions, and the removal pass
+                // that takes out a player whose connection has dropped - so after a restart with a
+                // few hundred players coming back to one map, the last of them spent minutes in
+                // the world with a frozen view of it, no regeneration, and nothing to notice them
+                // leave. The workers already pass over a client that is still loading, which is
+                // what most dequeued clients were even at one a second.
+                while (mapChannel.QueuedClients.Count > 0)
+                {
+                    var queued = mapChannel.QueuedClients.Dequeue();
 
-                        // add it to list
-                        mapChannel.ClientList.Add(dequedClient);
-                    }
+                    if (queued != null && !mapChannel.ClientList.Contains(queued))
+                        mapChannel.ClientList.Add(queued);
+                }
 
                 if (mapChannel.ClientList.Count > 0)
                 {

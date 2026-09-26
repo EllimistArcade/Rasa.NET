@@ -318,6 +318,8 @@ namespace Rasa.Auth
                             server.Value.RequestServerInfo();
             });
 
+            Timer.Add("CommunicatorLoginExpire", 5000, true, ExpireCommunicatorLogins);
+
             Logger.WriteLog(LogType.Network, $"*** Listening for Game servers on port {Config.CommunicatorConfig.Port}");
 
             return true;
@@ -349,6 +351,36 @@ namespace Rasa.Auth
                 + "with the password can register as a game server and receive players' login keys. Set long passwords in "
                 + "Servers (and the matching ServerInfoConfig.Password on each game server), or bind the communicator to "
                 + "127.0.0.1 when auth and game run on the same machine, or firewall the port.");
+        }
+
+        /// <summary>How long a connection to the communicator port has to log in as a game server.</summary>
+        private static readonly TimeSpan CommunicatorLoginTimeout = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Closes communicator connections that have not logged in within CommunicatorLoginTimeout.
+        ///
+        /// A connection sat in GameServerQueue until it sent a LoginRequest or its socket failed.
+        /// A game server logs in the moment it connects, so anything still waiting after that is
+        /// not one - a port scanner, a health check, a misconfigured server - and each held a
+        /// pooled receive buffer and its args for as long as it stayed open. Run from the auth
+        /// loop's timer; the closes happen outside the GameServers lock, because closing goes
+        /// through DisconnectCommunicator, which regenerates the server list.
+        /// </summary>
+        private void ExpireCommunicatorLogins()
+        {
+            List<CommunicatorClient> stale;
+            var cutoff = DateTime.UtcNow - CommunicatorLoginTimeout;
+
+            lock (GameServers)
+                stale = GameServerQueue.Where(c => c.ConnectedTime < cutoff).ToList();
+
+            if (stale.Count == 0)
+                return;
+
+            Logger.WriteLog(LogType.Network, $"Closing {stale.Count} communicator connection(s) that did not log in as a game server within {CommunicatorLoginTimeout.TotalSeconds:F0} s.");
+
+            foreach (var client in stale)
+                client.Disconnect();
         }
 
         private void OnCommunicatorAccept(LengthedSocket socket)

@@ -23,6 +23,9 @@ namespace Rasa.Auth
         public ushort CurrentPlayers { get; set; }
         public ushort MaxPlayers { get; set; }
         public DateTime LastRequestTime { get; set; }
+
+        /// <summary>When the connection was accepted; one that has not logged in within Server.CommunicatorLoginTimeout is closed.</summary>
+        public DateTime ConnectedTime { get; } = DateTime.UtcNow;
         public IPAddress PublicAddress { get; set; }
 
         private readonly PacketRouter<CommunicatorClient, CommOpcode> _router = new PacketRouter<CommunicatorClient, CommOpcode>();
@@ -98,7 +101,7 @@ namespace Rasa.Auth
         /// Once per link: a drop closes the socket, and the close completes the receive that
         /// was still armed with an error, which comes back through OnError.
         /// </summary>
-        private void Disconnect()
+        internal void Disconnect()
         {
             if (Interlocked.Exchange(ref _disconnected, 1) != 0)
                 return;

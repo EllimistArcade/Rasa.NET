@@ -311,6 +311,8 @@ namespace Rasa.Game
             // was down are caught by this first pass and by the check at login.
             Timer.Add("AuctionExpire", 300000, true, () => AuctionHouseManager.Instance.ExpireAuctions());
 
+            Timer.Add("PreLoginExpire", 5000, true, ExpirePreLogin);
+
             Timer.Add("QueueManagerUpdate", Config.QueueConfig.UpdateInterval, true, () =>
             {
                 QueueManager.Update(Config.ServerInfoConfig.MaxPlayers - CurrentPlayers);
@@ -373,6 +375,19 @@ namespace Rasa.Game
                 args.AcceptSocket.Shutdown(SocketShutdown.Both);
         }
 
+        /// <summary>How long a world connection has to finish the key exchange, and then to log in.</summary>
+        private static readonly TimeSpan PreLoginTimeout = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// World connections from one address that may be short of a login at once. Logged-in
+        /// connections are limited by accounts; these were limited by nothing, and each holds a
+        /// receive buffer from the pool the whole process shares.
+        /// </summary>
+        private const int MaxPreLoginPerAddress = 8;
+
+        private long _nextAcceptRefusalLogTick;
+        private int _acceptRefusalsSinceLog;
+
         private void OnAccept(LengthedSocket newSocket)
         {
             ListenerSocket.AcceptAsync();
@@ -380,7 +395,54 @@ namespace Rasa.Game
             if (newSocket == null)
                 return;
 
+            var address = newSocket.RemoteAddress;
+            int pending;
+
+            lock (Clients)
+                pending = Clients.Count(c => c.State == ClientState.Connected && address.Equals(c.Socket.RemoteAddress));
+
+            pending += LoginManager.CountFrom(address);
+
+            if (pending >= MaxPreLoginPerAddress)
+            {
+                newSocket.Close();
+
+                var refused = System.Threading.Interlocked.Increment(ref _acceptRefusalsSinceLog);
+                var now = Environment.TickCount64;
+
+                if (now >= System.Threading.Interlocked.Read(ref _nextAcceptRefusalLogTick))
+                {
+                    System.Threading.Interlocked.Exchange(ref _nextAcceptRefusalLogTick, now + 5000);
+                    System.Threading.Interlocked.Exchange(ref _acceptRefusalsSinceLog, 0);
+
+                    Logger.WriteLog(LogType.Security, $"Refused a world connection from {address}: {MaxPreLoginPerAddress} already waiting to log in from it ({refused} refused since the last of these).");
+                }
+
+                return;
+            }
+
             LoginManager.LoginSocket(newSocket);
+        }
+
+        /// <summary>
+        /// Closes world connections that have sat in the key exchange, or after it without logging
+        /// in, for longer than PreLoginTimeout. Neither stage had any timeout.
+        /// </summary>
+        private void ExpirePreLogin()
+        {
+            var exchanges = LoginManager.ExpireStalled(PreLoginTimeout);
+
+            List<Client> stalled;
+            var cutoff = DateTime.UtcNow - PreLoginTimeout;
+
+            lock (Clients)
+                stalled = Clients.Where(c => c.State == ClientState.Connected && c.ConnectedTime < cutoff).ToList();
+
+            foreach (var client in stalled)
+                client.Close(false);
+
+            if (exchanges + stalled.Count > 0)
+                Logger.WriteLog(LogType.Network, $"Closed {exchanges + stalled.Count} world connection(s) that did not log in within {PreLoginTimeout.TotalSeconds:F0} s.");
         }
 
         public LoginAccountEntry AuthenticateClient(Client client, uint accountId, uint oneTimeKey)

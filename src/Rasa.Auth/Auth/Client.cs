@@ -49,6 +49,9 @@ namespace Rasa.Auth
 
         /// <summary>Packets read off the socket but not yet handled by the main loop.</summary>
         private int _queuedPackets;
+
+        /// <summary>How long a new connection has to send its login.</summary>
+        private const int LoginTimeoutMs = 30000;
         private const int MaxQueuedPackets = 64;
 
         public Client(LengthedSocket socket, Server server, IAuthUnitOfWorkFactory authUnitOfWorkFactory)
@@ -79,6 +82,19 @@ namespace Rasa.Auth
 
             // This is here (after ProtocolVersionPacket), so it won't get encrypted
             Socket.OnEncrypt += OnEncrypt;
+
+            // A connection gets LoginTimeoutMs to send its login; the idle timeout below is for a
+            // logged-in one between steps, and is minutes long. Before this a connection that never
+            // logged in held its slot and buffer for the whole of it.
+            Timer.Add("login", LoginTimeoutMs, false, () =>
+            {
+                if (State != ClientState.Connected)
+                    return;
+
+                Logger.WriteLog(LogType.Network, "*** Client did not log in within {0} s! Ip: {1}", LoginTimeoutMs / 1000, Socket.RemoteAddress);
+
+                Close();
+            });
 
             Timer.Add("timeout", Server.Config.AuthConfig.ClientTimeout * 1000, false, () =>
             {

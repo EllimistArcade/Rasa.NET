@@ -186,6 +186,15 @@ namespace Rasa.Auth
                 args.AcceptSocket.Shutdown(SocketShutdown.Both);
         }
 
+        /// <summary>
+        /// Auth connections allowed from one address at once. Each login is its own short
+        /// connection, and nothing capped how many one address could hold open.
+        /// </summary>
+        private const int MaxConnectionsPerAddress = 16;
+
+        private long _nextAcceptRefusalLogTick;
+        private int _acceptRefusalsSinceLog;
+
         private void OnAccept(LengthedSocket newSocket)
         {
             ListenerSocket.AcceptAsync();
@@ -193,8 +202,29 @@ namespace Rasa.Auth
             if (newSocket == null)
                 return;
 
+            var address = newSocket.RemoteAddress;
+
             lock (Clients)
-                Clients.Add(new Client(newSocket, this, _authUnitOfWorkFactory));
+            {
+                if (Clients.Count(c => c.State != ClientState.Disconnected && address.Equals(c.Socket.RemoteAddress)) < MaxConnectionsPerAddress)
+                {
+                    Clients.Add(new Client(newSocket, this, _authUnitOfWorkFactory));
+                    return;
+                }
+            }
+
+            newSocket.Close();
+
+            var refused = System.Threading.Interlocked.Increment(ref _acceptRefusalsSinceLog);
+            var now = Environment.TickCount64;
+
+            if (now < System.Threading.Interlocked.Read(ref _nextAcceptRefusalLogTick))
+                return;
+
+            System.Threading.Interlocked.Exchange(ref _nextAcceptRefusalLogTick, now + 5000);
+            System.Threading.Interlocked.Exchange(ref _acceptRefusalsSinceLog, 0);
+
+            Logger.WriteLog(LogType.Security, $"Refused an auth connection from {address}: {MaxConnectionsPerAddress} already open from it ({refused} refused since the last of these).");
         }
         #endregion
 

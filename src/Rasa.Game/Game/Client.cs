@@ -110,8 +110,12 @@ namespace Rasa.Game
             _handler.RegisterClient(this);
         }
 
+        /// <summary>When this connection finished the key exchange; it has a short while to log in.</summary>
+        internal DateTime ConnectedTime { get; private set; }
+
         public void RegisterAtServer(Server server, LengthedSocket socket, ClientCryptData cryptData)
         {
+            ConnectedTime = DateTime.UtcNow;
             Socket = socket;
             Data = cryptData;
             Server = server;

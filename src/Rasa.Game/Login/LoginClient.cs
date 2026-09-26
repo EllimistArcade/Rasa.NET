@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using System;
+using System.Net.Sockets;
 
 namespace Rasa.Login
 {
@@ -18,6 +19,9 @@ namespace Rasa.Login
         public BigNum PrivateKey { get; } = new BigNum();
         public BigNum PublicKey { get; } = new BigNum();
         public BigNum K { get; } = new BigNum();
+
+        /// <summary>When the connection was accepted; a key exchange not finished in time is closed.</summary>
+        public DateTime ConnectedTime { get; } = DateTime.UtcNow;
 
         public LoginClient(LoginManager manager, LengthedSocket socket)
         {

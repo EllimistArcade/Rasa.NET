@@ -250,6 +250,7 @@ The `/ingame` endpoints take no key, and are the ones the startup log calls `end
 | `GET /monsterflags`, `POST /updatemonsterflags` | The flags of the creature classes, read and changed; see Game tools below. Off until turned on. |
 | `GET /lootpools`, `POST /updatelootpools` | The loot pools, read and replaced; see Game tools below. Off until turned on. |
 | `GET /usersonline` | Every account online, with the character it is playing; see Who is online below. Off until turned on. |
+| `POST /kickuser` | Disconnects an account that is online; see Kicking a player below. Off until turned on. |
 
 - `game_server_status` is `healthy` while the server has finished loading, is listening for players, has not been shut down, and its world loop ticked within `ApiConfig.LoopStallSeconds` (default `15`).
 - `app_server_status` is `healthy` while the link to the Auth server is up and logged in.
@@ -257,7 +258,7 @@ The `/ingame` endpoints take no key, and are the ones the startup log calls `end
 
 A request is refused with `403` from an address not on `AllowedIps`, `404` for a path that names no endpoint or one that is off, `405` for the wrong method, and `401` for a missing or wrong key or, at an `/ingame` endpoint, a code or token that is missing, wrong or no longer good.
 
-Each entry under `Endpoints` (`healthcheck`, `serverstatus`, `addaccount`, the `/ingame` ones, `monsterflags`, `updatemonsterflags`, `lootpools`, `updatelootpools`, and `usersonline`) has:
+Each entry under `Endpoints` (`healthcheck`, `serverstatus`, `addaccount`, the `/ingame` ones, `monsterflags`, `updatemonsterflags`, `lootpools`, `updatelootpools`, `usersonline` and `kickuser`) has:
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -328,6 +329,49 @@ It names accounts and characters, so it is off until its own entry turns it on, 
 
 ```bash
 curl -H "X-API-Key: <key for the player list>" http://127.0.0.1:8104/usersonline
+```
+
+#### Kicking a player
+`POST /kickuser` disconnects an account that is online, as the console's `kick` does: every connection of it, in the world or at the character screen, after telling the player "You have been disconnected by a game master: <reason>". The body is JSON, sent as `application/json`:
+
+```json
+{ "accountId": 12, "reason": "griefing", "admin": "Atomsk" }
+{ "familyName": "Hart", "reason": "griefing", "admin": "Atomsk" }
+```
+
+- `accountId` (a number, or a number in a string) or `familyName`, one of them and not both. A family name is matched as the in-game `.kick` matches it, case aside.
+- `reason` is what the player is told; it may be left out, and may be 256 characters.
+- `admin` is who is doing it, as you name them; it is required, and may be 64 characters. It goes in the server log's line for the kick, with the address the request came from, and in the API log.
+
+Every answer of its own is `200`:
+
+| Answer | Meaning |
+|---|---|
+| `{"kicked":true,"accountId":12,"familyName":"Hart"}` | Kicked. |
+| `{"kicked":false,"error":"not online"}` | Nobody of that account is online. |
+| `{"kicked":false,"error":"..."}` | The request will not do (no target, both, no admin, not JSON, not sent as `application/json`), or the game server is not ready or did not get to it within 10 seconds. |
+
+An address that is not allowed, a missing key and the rest are refused as for any endpoint. The API may kick any account, game masters too, as the console may. It changes something, so it is off until its own entry turns it on and is never public by `Rest.Public`; give it a key of its own:
+
+```json
+"kickuser": { "Enabled": true, "ApiKey": "<key for kicking>" }
+```
+
+```bash
+curl -X POST -H "X-API-Key: <key for kicking>" -H "Content-Type: application/json" \
+     -d '{"familyName":"Hart","reason":"griefing","admin":"Atomsk"}' http://127.0.0.1:8104/kickuser
+```
+
+#### The API log
+Every request the REST API is sent is written to the character database's `api_log` table once it has been answered, refused ones too: `created_at` (UTC), the `address` it came from, `method`, `path`, `query`, the answer's `status`, the `body` of a `POST`, `body_length`, and the start of the answer (`response`, up to 2000 characters).
+
+- Secrets are not kept: in a body or an answer, the value of any field whose name has `password`, `secret`, `token` or `apikey` in it, or ends in `code`, is written as `***` - the password of `/addaccount`, the code and token of the `/ingame` exchange. A key sent in a header is never written.
+- A body is kept up to 16000 characters; `body_length` is how long it was.
+- A connection that sends nothing, or never finishes a TLS handshake, asked for nothing and is not on it. Nor is the status port, which is not the REST API.
+- It is always on, and nothing is ever taken out of it.
+
+```sql
+select created_at, address, method, path, status, body from api_log order by id desc limit 50;
 ```
 
 #### Game tools

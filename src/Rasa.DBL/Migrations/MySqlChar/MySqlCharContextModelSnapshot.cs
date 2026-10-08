@@ -22,6 +22,66 @@ namespace Rasa.Migrations.MySqlChar
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("Rasa.Structures.Char.ApiLogEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<uint>("Id"));
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("address");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<int>("BodyLength")
+                        .HasColumnType("int")
+                        .HasColumnName("body_length");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("varchar(256)")
+                        .HasColumnName("path");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasColumnType("varchar(512)")
+                        .HasColumnName("query");
+
+                    b.Property<string>("Response")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("response");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "Address" }, "api_log_index_address");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "api_log_index_created_at");
+
+                    b.ToTable("api_log");
+                });
+
             modelBuilder.Entity("Rasa.Structures.Char.AuctionEntry", b =>
                 {
                     b.Property<uint>("ItemId")

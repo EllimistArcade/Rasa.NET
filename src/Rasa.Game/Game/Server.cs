@@ -229,6 +229,30 @@ namespace Rasa.Game
         /// </summary>
         private void RunOnLoop(string name, Action work) =>
             Timer.Add($"{name}:{Interlocked.Increment(ref _loopWorkSequence)}", 1, false, work);
+
+        /// <summary>
+        /// Runs work on the main loop's next pass and waits for what it gives, for a thread that
+        /// needs the answer - the REST API's. The default of T when the loop has not done it
+        /// within <paramref name="waitMs"/>; it may still be done after.
+        /// </summary>
+        private T RunOnLoopAndWait<T>(string name, Func<T> work, int waitMs) where T : class
+        {
+            var done = new System.Threading.Tasks.TaskCompletionSource<T>(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+
+            RunOnLoop(name, () =>
+            {
+                try
+                {
+                    done.TrySetResult(work());
+                }
+                catch (Exception e)
+                {
+                    done.TrySetException(e);
+                }
+            });
+
+            return done.Task.Wait(waitMs) ? done.Task.Result : null;
+        }
         #endregion
 
         public void Disconnect(Client client)
@@ -471,6 +495,11 @@ namespace Rasa.Game
             api.UpdateMonsterFlags.Store = monsterFlags;
             api.LootPools.Store = lootPools;
             api.UpdateLootPools.Store = lootPools;
+
+            // POST /kickuser kicks on the world loop and waits for it; every request the API is
+            // sent goes on its log, in the character database.
+            api.KickUser.Kick = order => RunOnLoopAndWait("kickuser", () => Api.KickUserEndpoint.Perform(order), Api.KickUserEndpoint.WaitMs);
+            api.Audit.Load(new Api.ApiAudit.ServerStore(GameUnitOfWorkFactory));
             api.Status.Started();
             _apiApplied = true;
             api.Apply(Config.ApiConfig);

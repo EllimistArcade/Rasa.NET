@@ -249,6 +249,7 @@ The `/ingame` endpoints take no key, and are the ones the startup log calls `end
 | `POST /ingame/session/exchange`, `GET /ingame/items`, `GET /ingame/items/categories`, `GET /ingame/items/{id}` | The in-game API; see [REST and in-game APIs](#rest-and-in-game-apis) above. Each is off until it is turned on. |
 | `GET /monsterflags`, `POST /updatemonsterflags` | The flags of the creature classes, read and changed; see Game tools below. Off until turned on. |
 | `GET /lootpools`, `POST /updatelootpools` | The loot pools, read and replaced; see Game tools below. Off until turned on. |
+| `GET /usersonline` | Every account online, with the character it is playing; see Who is online below. Off until turned on. |
 
 - `game_server_status` is `healthy` while the server has finished loading, is listening for players, has not been shut down, and its world loop ticked within `ApiConfig.LoopStallSeconds` (default `15`).
 - `app_server_status` is `healthy` while the link to the Auth server is up and logged in.
@@ -256,7 +257,7 @@ The `/ingame` endpoints take no key, and are the ones the startup log calls `end
 
 A request is refused with `403` from an address not on `AllowedIps`, `404` for a path that names no endpoint or one that is off, `405` for the wrong method, and `401` for a missing or wrong key or, at an `/ingame` endpoint, a code or token that is missing, wrong or no longer good.
 
-Each entry under `Endpoints` (`healthcheck`, `serverstatus`, `addaccount`, the `/ingame` ones, and `monsterflags`, `updatemonsterflags`, `lootpools`, `updatelootpools`) has:
+Each entry under `Endpoints` (`healthcheck`, `serverstatus`, `addaccount`, the `/ingame` ones, `monsterflags`, `updatemonsterflags`, `lootpools`, `updatelootpools`, and `usersonline`) has:
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -303,6 +304,30 @@ Because it changes something, this endpoint is stricter than the other two:
     }
   }
 }
+```
+
+#### Who is online
+`GET /usersonline` lists every account logged in to this game server, at the character screen or playing, by account id, with the character it is playing:
+
+```json
+{"count":2,"users":[
+  {"accountId":1,"characterId":12,"name":"Ellie","familyName":"Hart","classId":2,"className":"Soldier","level":15,"state":"ingame"},
+  {"accountId":3,"characterId":null,"name":null,"familyName":null,"classId":null,"className":null,"level":null,"state":"characterselection"}
+]}
+```
+
+- `name` is the character's own name and `familyName` the family name of the account's characters. `classId` is the class's number and `className` its name (`Recruit`, `Soldier`, `Specialist`, `Commando`, and so on).
+- `state` is `loggedin` or `characterselection` for an account that has not picked a character, whose character fields are all `null`, and `loading`, `ingame` or `teleporting` for one that has.
+- The list is read once a second from the world, so it can be a second old. `count` can be below `/serverstatus`'s `currentconnections`: that also counts players the queue is sending to the world port, who have not logged in here yet.
+
+It names accounts and characters, so it is off until its own entry turns it on, and `Rest.Public` never makes it public, as for `addaccount`. Give it a key of its own:
+
+```json
+"usersonline": { "Enabled": true, "ApiKey": "<key for the player list>" }
+```
+
+```bash
+curl -H "X-API-Key: <key for the player list>" http://127.0.0.1:8104/usersonline
 ```
 
 #### Game tools

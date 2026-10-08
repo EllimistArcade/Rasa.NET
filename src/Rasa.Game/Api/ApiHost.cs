@@ -37,6 +37,9 @@ namespace Rasa.Api
         public LootPoolsEndpoint LootPools { get; } = new LootPoolsEndpoint();
         public UpdateLootPoolsEndpoint UpdateLootPools { get; } = new UpdateLootPoolsEndpoint();
 
+        /// <summary>Who is online, for GET /usersonline: the world loop reads the clients into it once a second.</summary>
+        public OnlineUsers Users { get; } = new OnlineUsers();
+
         public ApiHost() : this(new ServerStatus())
         {
         }
@@ -61,6 +64,7 @@ namespace Rasa.Api
             Rest.Register(new IngameCreaturesEndpoint(IngameSessions));
             Rest.Register(new IngameCreatureActionsEndpoint(IngameSessions));
             Rest.Register(new IngameCreatureDetailsEndpoint(IngameSessions));
+            Rest.Register(new UsersOnlineEndpoint(Users));
         }
 
         /// <summary>The settings in force from now. A listener that cannot open its port stays off; the world is not held up.</summary>

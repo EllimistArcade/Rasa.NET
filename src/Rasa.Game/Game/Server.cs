@@ -240,11 +240,18 @@ namespace Rasa.Game
         /// <summary>CurrentPlayers, as the status listeners' sample asks for it.</summary>
         private Func<int> _playersHoldingASlot;
 
+        /// <summary>The accounts online, as GET /usersonline's sample asks for them.</summary>
+        private Func<IEnumerable<Api.OnlineUser>> _onlineUsers;
+
         public void MainLoop(long delta)
         {
             // For the status listeners (Api.ServerStatus), whose threads read only what is left
             // for them here: the loop is alive, and once a second how many players hold a slot.
             Api.ApiHost.Instance.Status.Beat(_playersHoldingASlot ??= () => CurrentPlayers, Config?.ServerInfoConfig?.MaxPlayers ?? 0, ListenerSocket != null);
+
+            // And, once a second, who is online and as which character (GET /usersonline): read
+            // here, where the clients' characters are, so the API's thread never touches one.
+            Api.ApiHost.Instance.Users.Sample(_onlineUsers ??= () => Api.OnlineUsers.Read(Clients));
 
             // The host is stopping (Ctrl+C, a service stop, docker stop): everyone saved and out,
             // on this thread, which owns the world (EvacuateForHost waits for it).

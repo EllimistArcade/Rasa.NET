@@ -84,7 +84,8 @@ namespace Rasa.Config
         /// An endpoint with no entry is on, and goes by <see cref="Public"/> and
         /// <see cref="ApiKey"/>. One that changes something, or gives out what the server's
         /// keeper may not want given out ("addaccount", which makes logins; gametools' four,
-        /// "monsterflags", "updatemonsterflags", "lootpools", "updatelootpools") is the other
+        /// "monsterflags", "updatemonsterflags", "lootpools", "updatelootpools"; "usersonline",
+        /// which names the accounts and characters online) is the other
         /// way about: off with no entry, on only by an Enabled of true in its own, and public
         /// only by a Public of true in its own, whatever <see cref="Public"/> says.
         /// </summary>

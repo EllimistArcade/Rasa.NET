@@ -337,6 +337,9 @@ namespace Rasa.Managers
                 mapChannel.MapChannelElapsed += delta;
                 Guard("DynamicObjectManager.DropshipsWorker", mapChannel, () => DynamicObjectManager.Instance.DropshipsWorker(mapChannel, delta));
 
+                // Passage teleports whose teleport-out effect has played (SecretPassages).
+                Guard("DynamicObjectManager.PassagesWorker", mapChannel, () => DynamicObjectManager.Instance.PassagesWorker(mapChannel));
+
                 // A /killmap asked for since the last tick: done here, between thinks.
                 Guard("MapReset.Worker", mapChannel, () => MapReset.Worker(mapChannel));
 

@@ -1736,15 +1736,31 @@ namespace Rasa.Managers
         /// </summary>
         private void BeginLocalTravel(Client client, MapChannel map, Vector3 destination, double rotation)
         {
+            var transfer = StartLocalTravel(client, map, destination, rotation, 0, false);
+
+            if (transfer != null)
+                DepartLocalTravel(client, transfer);
+        }
+
+        /// <summary>
+        /// The first half of a local teleport: the transfer, the player held where they stand, and
+        /// the teleport-out effect (PreTeleport, actor.py _StartPreTeleportFX: the body fading
+        /// out) shown to everyone who can see them. A teleport held for its effect leaves
+        /// holdMs later (PassagesWorker); the time is added to the deadline the client has to
+        /// answer it by. Null, with the client told, when travel is not configured.
+        /// </summary>
+        private PlayerTransfer StartLocalTravel(Client client, MapChannel map, Vector3 destination, double rotation, int holdMs, bool isPassage)
+        {
             var timeout = client.Server?.Config.GameConfig.TransferTimeoutSeconds ??
                 Config.GameConfig.DefaultTransferTimeoutSeconds;
             if (timeout <= 0)
             {
                 Logger.WriteLog(LogType.Error, "TransferTimeoutSeconds must be positive.");
                 RejectTravel(client, "Travel timeout configuration is invalid.");
-                return;
+                return null;
             }
 
+            var now = _clock();
             var transfer = new PlayerTransfer
             {
                 OriginMap = map,
@@ -1753,13 +1769,29 @@ namespace Rasa.Managers
                 DestinationMap = map,
                 DestinationPosition = destination,
                 DestinationRotation = rotation,
-                Deadline = checked(_clock() + timeout * 1000L),
-                IsDropship = false
+                Deadline = checked(now + timeout * 1000L + Math.Max(0, holdMs)),
+                IsDropship = false,
+                IsPassage = isPassage,
+                DepartAt = holdMs > 0 ? now + holdMs : 0
             };
             client.PendingTransfer = transfer;
             client.CallMethod(SysEntity.ClientMethodId, new RequestMovementBlockPacket());
 
             client.CellCallMethod(client, client.Player.EntityId, new PreTeleportPacket(TeleportType.Default));
+
+            return transfer;
+        }
+
+        /// <summary>
+        /// The second half: the player moved, their client told to play the teleport and answer
+        /// it, and everyone at the far end shown them there.
+        /// </summary>
+        private void DepartLocalTravel(Client client, PlayerTransfer transfer)
+        {
+            var destination = transfer.DestinationPosition;
+            var rotation = transfer.DestinationRotation;
+
+            transfer.DepartAt = 0;
             client.State = ClientState.Teleporting;
             client.SetWorldPosition(destination, rotation);
             CellManager.Instance.UpdateVisibility(client);
@@ -1778,10 +1810,21 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// How long a player who has walked into a passage that shows itself stands in its
+        /// teleport-out effect before they are moved: 3 seconds, the time the effect takes to
+        /// play out in footage of the Alia Caverns alcove, which then shows the arrival effect at
+        /// the shrine. Nothing in the client gives a time (actor.py has the states of a
+        /// pre-teleport delay, PRE_TELEPORT_DELAY to PRE_TELEPORT_FADE_OUT_COMPLETE, and nothing
+        /// sets them).
+        /// </summary>
+        internal const int PassageHoldMs = 3000;
+
+        /// <summary>
         /// A secret passage that shows itself (SecretPassages): the player who has walked into
-        /// it is taken to its far end as a waypoint takes them - the teleport's effect where
-        /// they stood and where they arrive, held until their client has answered. False when
-        /// they cannot travel now, and nothing has been done.
+        /// it is taken to its far end as a waypoint takes them, but held in its teleport-out
+        /// effect for PassageHoldMs first, where everyone around can see it, and shown arriving
+        /// to everyone at the far end - then held there until their client has answered. False
+        /// when they cannot travel now, and nothing has been done.
         /// </summary>
         internal bool TakePassage(Client client, Vector3 destination, double rotation)
         {
@@ -1794,9 +1837,60 @@ namespace Rasa.Managers
                     !CellManager.TryGetCellCoordinates(destination, out _, out _) || !double.IsFinite(rotation))
                     return false;
 
-                BeginLocalTravel(client, client.Player.MapChannel, destination, rotation);
+                StartLocalTravel(client, client.Player.MapChannel, destination, rotation, PassageHoldMs, true);
 
                 return client.PendingTransfer != null;
+            }
+        }
+
+        /// <summary>
+        /// Moves on the passage teleports whose effect has played (TakePassage). One whose player
+        /// can no longer go - dead, logging out, gone from the map - is called off: the effect
+        /// stopped for everyone who saw it start (actor.py Recv_TeleportFailed) and the player
+        /// let go where they stand.
+        /// </summary>
+        internal void PassagesWorker(MapChannel map)
+        {
+            if (map == null)
+                return;
+
+            var now = _clock();
+
+            foreach (var client in map.ClientList.ToArray())
+            {
+                var held = client?.PendingTransfer;
+
+                if (held == null || !held.IsPassage || held.DepartAt == 0 || now < held.DepartAt)
+                    continue;
+
+                lock (client.SyncRoot)
+                {
+                    var transfer = client.PendingTransfer;
+
+                    if (transfer != held || transfer.DepartAt == 0)
+                        continue;
+
+                    if (client.State != ClientState.Ingame || client.Player?.MapChannel != transfer.OriginMap ||
+                        client.Player.Disconected || client.Player.RemoveFromMap || client.Player.LogoutActive ||
+                        client.Player.State == CharacterState.Dead || !CellManager.Instance.IsInWorld(client))
+                    {
+                        client.PendingTransfer = null;
+
+                        if (client.Player != null && client.State != ClientState.Disconnected)
+                        {
+                            if (CellManager.Instance.IsInWorld(client))
+                                client.CellCallMethod(client, client.Player.EntityId, new TeleportFailedPacket());
+                            else
+                                client.CallMethod(client.Player.EntityId, new TeleportFailedPacket());
+
+                            client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());
+                        }
+
+                        continue;
+                    }
+
+                    DepartLocalTravel(client, transfer);
+                }
             }
         }
 
@@ -1946,11 +2040,19 @@ namespace Rasa.Managers
                 if (CheckTransferTimeout(client) || !PersistTransfer(client))
                     return;
 
+                var transfer = client.PendingTransfer;
+
                 client.PendingTransfer = null;
                 client.State = ClientState.Ingame;
                 Maps.ResumeMissionScenes(client);
                 ManifestationManager.Instance.FinishArrival(client);
                 client.CallMethod(client.Player.EntityId, new TeleportArrivalPacket());
+
+                // Through a passage: everyone already at the far end sees them arrive as well
+                // (actor.py _PlayTeleportArrivalFX), as at a dropship's pad.
+                if (transfer.IsPassage)
+                    client.CellIgnoreSelfCallMethod(client, new TeleportArrivalPacket());
+
                 client.CallMethod(SysEntity.ClientMethodId, new UnrequestMovementBlockPacket());
             }
         }

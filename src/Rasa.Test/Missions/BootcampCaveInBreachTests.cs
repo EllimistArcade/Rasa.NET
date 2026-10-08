@@ -48,10 +48,13 @@ namespace Rasa.Test.Missions
                     MigratedDatabaseTemplates.Migrate(context, () => context.Database.Migrate());
 
                 using var world = (WorldContext)PersistenceIntegrationTests.CreateContext(typeof(SqliteWorldContext), database);
+                var migrator = world.GetService<IMigrator>();
+
+                // As this migration left it: Fix_bootcamp_soldier_weapon_attacks, after it, gives the Field Gunner his machine gun's attack.
+                migrator.Migrate(Migration);
 
                 AssertBreach(world);
 
-                var migrator = world.GetService<IMigrator>();
                 migrator.Migrate(BridgeThraxStood);
 
                 var thrax = world.SpawnPoolEntries.AsNoTracking().Where(pool => pool.Id >= 510218 && pool.Id <= 510220).OrderBy(pool => pool.Id).ToList();

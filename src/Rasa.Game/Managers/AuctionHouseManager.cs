@@ -204,7 +204,7 @@ namespace Rasa.Managers
             item.OwnerId = client.Player.Id;
             item.OwnerSlotId = result.InboxSlot;
             client.Player.Inventory.InboxItems.Add(item.EntityId);
-            var seller = OnlineSeller(result.Auction.SellerId);
+            var seller = result.Seller;
             seller?.Player.Inventory.AuctionItems.Remove(item.EntityId);
 
             PublishBuyoutPacket(
@@ -215,7 +215,9 @@ namespace Rasa.Managers
                     result.BuyerCredits,
                     result.BuyerCredits - buyerBefore),
                 $"auction item {item.Id} buyer credits");
-            if (result.Seller != null)
+            // A seller on a loading screen has no manifestation on their client to tell: the
+            // arrival sends the whole purse (ManifestationManager.AssignPlayer, AllCredits).
+            if (result.Seller?.IsInWorld == true)
                 MissionApplication.TryPublish(
                     () => result.Seller.CallMethod(
                         result.Seller.Player.EntityId,
@@ -318,7 +320,7 @@ namespace Rasa.Managers
                         throw new BuyoutRejection(
                             PlayerMessage.PmAuctionPendingTransaction);
 
-                    seller = OnlineSeller(auction.SellerId);
+                    seller = LoadedSeller(auction.SellerId);
                     if (seller != null &&
                         (!seller.Player.Credits.TryGetValue(
                              CurencyType.Credits, out var runtimeSellerCredits) ||
@@ -888,7 +890,7 @@ namespace Rasa.Managers
                         result.Item.OwnerId = result.SellerId;
                         result.Item.OwnerSlotId = result.InboxSlot;
                         InventoryManager.Instance.PublishInboxDelivery(
-                            OnlineSeller(result.SellerId), result.Item);
+                            SellerInWorld(result.SellerId), result.Item);
                         RemoveFromSellersAuctionList(
                             result.SellerId, result.Item.EntityId, null);
                         Unlist(result.Item, InSomeonesInbox(result.Item.EntityId));
@@ -1008,7 +1010,7 @@ namespace Rasa.Managers
         /// </summary>
         private static void RemoveFromSellersAuctionList(uint sellerId, ulong entityId, uint? soldFor)
         {
-            var seller = OnlineSeller(sellerId);
+            var seller = LoadedSeller(sellerId);
 
             if (seller == null)
                 return;
@@ -1020,8 +1022,33 @@ namespace Rasa.Managers
                 : new AuctionExpiredPacket(entityId));
         }
 
-        private static Client OnlineSeller(uint sellerId) =>
-            Server.Clients.Find(c => c?.Player != null && c.Player.Id == sellerId && c.State == ClientState.Ingame);
+        /// <summary>
+        /// The seller's connection while their character is loaded on this server, or null: in the
+        /// world, between maps on a dropship or map link (Teleporting), or on the loading screen of
+        /// a login or a map change (Loading). The character and its purse are held from the moment
+        /// it is chosen, and every credit write after that checks the purse against the row.
+        ///
+        /// It used to be Ingame only. A sale while the seller was on a loading screen paid their
+        /// row and not the purse their session went by, and until they logged in again every write
+        /// that checks the two was refused without a word - vendor, repair, loot, mission rewards,
+        /// buyouts of their own and of their listings - while a lockbox transfer, a credit trade
+        /// or a clan deposit wrote the old purse over the row and the sale was gone for good.
+        /// Between maps the sold item also stayed on the list the arrival shows as Your Auctions.
+        ///
+        /// On the character screen a character has no session: the next choice loads the purse
+        /// from the row. A connection that has closed is the one before, not the one to pay.
+        /// </summary>
+        private static Client LoadedSeller(uint sellerId) =>
+            Server.Clients.Find(c => c?.Player != null && c.Player.Id == sellerId &&
+                (c.State == ClientState.Ingame || c.State == ClientState.Teleporting || c.State == ClientState.Loading));
+
+        /// <summary>
+        /// The seller's connection when the inventory it holds is the one the arrival shows, or
+        /// null. On a loading screen it is about to be loaded afresh from the rows
+        /// (InventoryManager.InitForClient), so nothing is put into it there.
+        /// </summary>
+        private static Client SellerInWorld(uint sellerId) =>
+            LoadedSeller(sellerId) is { IsInWorld: true } seller ? seller : null;
 
         /// <summary>
         /// The Item behind each listing, by database item id: one object per listing, owned here
@@ -1094,7 +1121,7 @@ namespace Rasa.Managers
                 return listed;
 
             // A seller who is logged in holds it among their auction items.
-            var seller = OnlineSeller(auction.SellerId);
+            var seller = LoadedSeller(auction.SellerId);
 
             if (seller != null)
                 foreach (var entityId in seller.Player.Inventory.AuctionItems)
@@ -1136,7 +1163,7 @@ namespace Rasa.Managers
         /// </summary>
         private static uint? AccountOf(uint sellerId, ICharUnitOfWork unitOfWork)
         {
-            var seller = OnlineSeller(sellerId);
+            var seller = LoadedSeller(sellerId);
 
             if (seller != null)
                 return seller.AccountEntry.Id;

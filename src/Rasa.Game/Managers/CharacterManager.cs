@@ -1426,9 +1426,16 @@ namespace Rasa.Managers
                         ? character?.Credit
                         : character?.Prestige;
 
-                    if (character == null || durable != current)
+                    if (character == null)
                         throw new GameplayRejectionException(
                             $"Durable {type} balance changed before update.");
+
+                    if (durable != current)
+                    {
+                        PutPurseRight(client, character);
+                        throw new GameplayRejectionException(
+                            $"Durable {type} balance changed before update.");
+                    }
 
                     if (type == CurencyType.Credits)
                         unitOfWork.Characters.UpdateCharacterCredits(client.Player.Id, next);
@@ -1450,6 +1457,56 @@ namespace Rasa.Managers
             client.CallMethod(client.Player.EntityId,
                 new UpdateCreditsPacket(type, next, next - current));
             return true;
+        }
+
+        /// <summary>
+        /// A purse that a credit write has found holding something other than the character's
+        /// row: put back to the row, the client shown the difference and the player told to try
+        /// again. Called where the write finds it, before the write is refused; true when the
+        /// purse was out of step.
+        ///
+        /// The row is what the server keeps and the purse is the session's copy of it: every write
+        /// pays the row first and the purse after, and most check the one against the other. A
+        /// write that paid the row alone - an auction sale to a seller on a loading screen did -
+        /// left the purse behind until the next login, and every write that checks was refused
+        /// without a word in the meantime: vendor, repair, loot (a squad mate's purse refused the
+        /// whole squad's), mission rewards, buyouts. The writes that did not check - a lockbox
+        /// transfer, a clan deposit, a credit trade - wrote the old purse over the row, and the
+        /// difference was gone for good; they check now as well.
+        /// </summary>
+        internal static bool PutPurseRight(Client client, CharacterEntry row)
+        {
+            var player = client?.Player;
+
+            if (player == null || row == null || row.Id != player.Id)
+                return false;
+
+            var putRight = false;
+
+            foreach (var (type, durable) in new[] { (CurencyType.Credits, row.Credit), (CurencyType.Prestige, row.Prestige) })
+            {
+                player.Credits.TryGetValue(type, out var held);
+                player.Credits[type] = durable;
+
+                if (held == durable)
+                    continue;
+
+                putRight = true;
+
+                Logger.WriteLog(LogType.Error,
+                    $"Character {player.Id} had {held} {type} where its row has {durable}; put back to the row.");
+
+                // A client on a loading screen has no manifestation to show it on: the arrival
+                // sends the whole purse (ManifestationManager.AssignPlayer).
+                if (client.IsInWorld)
+                    client.CallMethod(player.EntityId, new UpdateCreditsPacket(type, durable, durable - held));
+            }
+
+            if (putRight && client.IsInWorld)
+                CommunicatorManager.Instance.SystemMessage(client,
+                    "Your credits were out of date and have been corrected. Please try again.");
+
+            return putRight;
         }
     }
 }

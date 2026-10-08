@@ -177,7 +177,10 @@ namespace Rasa.Managers
                 !player.Credits.TryGetValue(CurencyType.Prestige, out var runtimePrestige) ||
                 durableCharacter.Credit != runtimeCredits ||
                 durableCharacter.Prestige != runtimePrestige)
+            {
+                CharacterManager.PutPurseRight(client, durableCharacter);
                 throw new GameplayRejectionException("Runtime currencies no longer match durable character state.");
+            }
 
             _previousCredits = durableCharacter.Credit;
             _previousPrestige = durableCharacter.Prestige;

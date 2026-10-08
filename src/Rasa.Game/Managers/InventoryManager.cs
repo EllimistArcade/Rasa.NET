@@ -1342,6 +1342,17 @@ namespace Rasa.Managers
                 using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
                 using var transaction = unitOfWork.BeginTransaction();
 
+                // The purse is written over the row, so the row has to hold what the purse does.
+                // A purse left behind by a write that paid the row alone used to be written over
+                // it, and the difference was gone (CharacterManager.PutPurseRight).
+                var row = unitOfWork.Characters.Find(client.Player.Id);
+
+                if (row == null || row.Credit != purse)
+                {
+                    CharacterManager.PutPurseRight(client, row);
+                    return;
+                }
+
                 unitOfWork.Characters.UpdateCharacterCredits(client.Player.Id, (int)purseAfter);
                 unitOfWork.CharacterLockboxes.UpdateCredits(client.AccountEntry.Id, (int)lockboxAfter);
 
@@ -1645,6 +1656,16 @@ namespace Rasa.Managers
             try
             {
                 using var transaction = unitOfWork.BeginTransaction();
+
+                // The purse is written over the row: as for the lockbox transfer, the row has to
+                // hold what the purse does (CharacterManager.PutPurseRight).
+                var row = unitOfWork.Characters.Find(client.Player.Id);
+
+                if (row == null || (creditType == 1 ? row.Credit : row.Prestige) != client.Player.Credits[currency])
+                {
+                    CharacterManager.PutPurseRight(client, row);
+                    return;
+                }
 
                 if (creditType == 1)
                 {

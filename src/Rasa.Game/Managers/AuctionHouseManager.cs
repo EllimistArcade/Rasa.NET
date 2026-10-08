@@ -297,11 +297,19 @@ namespace Rasa.Managers
                     var buyer = unitOfWork.Characters.Find(client.Player.Id);
                     var durableItem =
                         unitOfWork.CharacterInventories.FindByItemId(item.Id);
+                    if (buyer != null &&
+                        buyer.AccountId == client.AccountEntry.Id &&
+                        (!client.Player.Credits.TryGetValue(
+                             CurencyType.Credits, out var runtimeBuyerCredits) ||
+                         buyer.Credit != runtimeBuyerCredits))
+                    {
+                        CharacterManager.PutPurseRight(client, buyer);
+                        throw new BuyoutRejection(
+                            PlayerMessage.PmAuctionPendingTransaction);
+                    }
+
                     if (buyer == null ||
                         buyer.AccountId != client.AccountEntry.Id ||
-                        !client.Player.Credits.TryGetValue(
-                            CurencyType.Credits, out var runtimeBuyerCredits) ||
-                        buyer.Credit != runtimeBuyerCredits ||
                         durableItem == null ||
                         durableItem.CharacterId != auction.SellerId ||
                         durableItem.InventoryType !=
@@ -325,8 +333,11 @@ namespace Rasa.Managers
                         (!seller.Player.Credits.TryGetValue(
                              CurencyType.Credits, out var runtimeSellerCredits) ||
                          runtimeSellerCredits != durableSeller.Credit))
+                    {
+                        CharacterManager.PutPurseRight(seller, durableSeller);
                         throw new BuyoutRejection(
                             PlayerMessage.PmAuctionPendingTransaction);
+                    }
 
                     buyerAfter = checked(buyer.Credit - (int)auction.Price);
                     sellerAfter = checked(

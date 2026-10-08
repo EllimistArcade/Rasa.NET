@@ -388,8 +388,10 @@ namespace Rasa.Managers
             }
 
             var net = session.InitiatorCredits - session.TargetCredits;
-            var initiatorCredits = CreditsOnHand(a) - net;
-            var targetCredits = CreditsOnHand(b) + net;
+            var initiatorBefore = CreditsOnHand(a);
+            var targetBefore = CreditsOnHand(b);
+            var initiatorCredits = initiatorBefore - net;
+            var targetCredits = targetBefore + net;
 
             // One transaction for the whole exchange. Several of the repository methods call
             // SaveChanges for themselves, so without it a trade of four items and two balances
@@ -409,6 +411,23 @@ namespace Rasa.Managers
 
                 if (net != 0)
                 {
+                    // Each purse is written over its row, so each row has to hold what the purse
+                    // does. A purse left behind by a write that paid the row alone used to be
+                    // written over it, and the difference was gone (CharacterManager.PutPurseRight).
+                    var initiatorRow = unitOfWork.Characters.Find(a.Player.Id);
+                    var targetRow = unitOfWork.Characters.Find(b.Player.Id);
+                    var initiatorBehind = initiatorRow?.Credit != initiatorBefore;
+                    var targetBehind = targetRow?.Credit != targetBefore;
+
+                    if (initiatorBehind)
+                        CharacterManager.PutPurseRight(a, initiatorRow);
+
+                    if (targetBehind)
+                        CharacterManager.PutPurseRight(b, targetRow);
+
+                    if (initiatorBehind || targetBehind)
+                        throw new GameplayRejectionException("A purse did not hold what its row does.");
+
                     unitOfWork.Characters.UpdateCharacterCredits(a.Player.Id, initiatorCredits);
                     unitOfWork.Characters.UpdateCharacterCredits(b.Player.Id, targetCredits);
                 }

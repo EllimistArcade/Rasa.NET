@@ -1101,13 +1101,21 @@ namespace Rasa.Managers
                 {
                     var character = unitOfWork.Characters.Find(client.Player.Id);
                     if (character == null ||
-                        character.AccountId != client.AccountEntry.Id ||
-                        character.Credit != currentCredits)
+                        character.AccountId != client.AccountEntry.Id)
                         throw new GameplayRejectionException(
-                            "Durable character ownership or credits changed.");
+                            "Durable character ownership changed.");
+                    if (character.Credit != currentCredits)
+                    {
+                        CharacterManager.PutPurseRight(client, character);
+                        throw new GameplayRejectionException(
+                            "Durable character credits changed.");
+                    }
                     if (prestigeGranted && character.Prestige != currentPrestige)
+                    {
+                        CharacterManager.PutPurseRight(client, character);
                         throw new GameplayRejectionException(
                             "Durable character prestige changed.");
+                    }
 
                     var source = loot.AttachedObject?.MissionLootSource;
                     CharacterMissionObjectiveEntry rewardObjective = null;
@@ -1160,8 +1168,11 @@ namespace Rasa.Managers
                     {
                         var row = unitOfWork.Characters.Find(other.Recipient.Player.Id);
                         if (row == null || row.Credit != other.Before)
+                        {
+                            CharacterManager.PutPurseRight(other.Recipient, row);
                             throw new GameplayRejectionException(
                                 "A squad member's durable credits changed.");
+                        }
                         unitOfWork.Characters.UpdateCharacterCredits(other.Recipient.Player.Id, other.After);
                     }
 

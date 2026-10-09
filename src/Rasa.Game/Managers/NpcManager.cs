@@ -804,13 +804,17 @@ namespace Rasa.Managers
             // purchase the player cannot afford never reaches it.
             var total = (long) unitPrice * packet.Quantity;
 
-            if (client.Player.Credits[CurencyType.Credits] < total)
+            // Paid in what the counter is priced in, as the client's window shows it: prestige at
+            // a prestige vendor, credits anywhere else (VendorPackages).
+            var currency = VendorPackages.CurrencyOf(vendor.VendorPackageId);
+
+            if (!client.Player.Credits.TryGetValue(currency, out var funds) || funds < total)
             {
                 client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmInsufficientFunds, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
                 return;
             }
 
-            if (!_currencyManager.LossCredits(client, (int)total))
+            if (!_currencyManager.LossCurrency(client, currency, (int)total))
                 return;
 
             // A fresh item with its own row in the items table, holding the whole quantity.
@@ -818,7 +822,7 @@ namespace Rasa.Managers
 
             if (boughtItem == null)
             {
-                if (!_currencyManager.GainCredits(client, (int)total))
+                if (!_currencyManager.RefundCurrency(client, currency, (int)total))
                     Logger.WriteLog(LogType.Error,
                         $"Could not refund failed vendor purchase for character {client.Player.Id}.");
                 return;
@@ -848,7 +852,7 @@ namespace Rasa.Managers
 
                 if (placed == 0)
                 {
-                    if (!_currencyManager.GainCredits(client, (int)total))
+                    if (!_currencyManager.RefundCurrency(client, currency, (int)total))
                         Logger.WriteLog(LogType.Error,
                             $"Could not refund failed vendor purchase for character {client.Player.Id}.");
                     client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmInventoryFull, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
@@ -860,7 +864,7 @@ namespace Rasa.Managers
                 total = (long) unitPrice * quantity;
                 var refund = charged - total;
                 if (refund > 0 &&
-                    !_currencyManager.GainCredits(client, (int)refund))
+                    !_currencyManager.RefundCurrency(client, currency, (int)refund))
                     Logger.WriteLog(LogType.Error,
                         $"Could not refund partial vendor purchase for character {client.Player.Id}.");
             }

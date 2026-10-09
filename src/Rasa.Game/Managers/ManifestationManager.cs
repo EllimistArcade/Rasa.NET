@@ -2942,6 +2942,43 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// Takes <paramref name="amount"/> of a currency out of the player's purse: credits as
+        /// <see cref="LossCredits"/> does, prestige the same way - refused, having moved nothing,
+        /// if they have too little - and both kept and shown (UpdateCredits).
+        /// </summary>
+        public bool LossCurrency(Client client, CurencyType currency, int amount)
+        {
+            if (currency == CurencyType.Credits)
+                return LossCredits(client, amount);
+
+            if (amount < 0)
+            {
+                Logger.WriteLog(LogType.Error, $"LossCurrency({currency}, {amount}) for {client.Player?.FamilyName}: charges are positive amounts. Nothing moved.");
+                return false;
+            }
+
+            if (amount == 0)
+                return true;
+
+            if (!client.Player.Credits.TryGetValue(currency, out var held) || held < amount)
+                return false;
+
+            return _characterManager.UpdateCharacter(client, CharacterUpdate.Prestige, -amount);
+        }
+
+        /// <summary>
+        /// Gives back <paramref name="amount"/> of a currency taken for something that did not
+        /// happen: credits as <see cref="GainCredits"/> does, prestige kept and shown.
+        /// </summary>
+        public bool RefundCurrency(Client client, CurencyType currency, int amount)
+        {
+            if (currency == CurencyType.Credits)
+                return GainCredits(client, amount);
+
+            return amount > 0 && _characterManager.UpdateCharacter(client, CharacterUpdate.Prestige, amount);
+        }
+
+        /// <summary>
         /// .setlevel: puts a player at <paramref name="level"/> (1 to 50). Returns what happened,
         /// for the GM.
         ///

@@ -102,6 +102,11 @@ namespace Rasa.Managers
     ///    sent the board as it stands. The client keeps a row by the player's entity id and has
     ///    nothing that removes one, so a player back from a logout - another entity - has their
     ///    old row emptied on every client before the new one is sent (<see cref="Retire"/>).
+    ///  - When a match ends the teams break up, as the range had it: the team that won is put
+    ///    on the staging area's upper floor, where the range's vendors were, and everyone else
+    ///    at the main entrance (<see cref="End"/>). A team is chosen again at the teleporters,
+    ///    which the upper floor has a set of too. A player who is dead when it ends is taken
+    ///    off their team and left to revive.
     ///  - The control points' waypoints are closed, and the two depots stand for nothing yet.
     /// </summary>
     public class Battlegrounds
@@ -624,6 +629,18 @@ namespace Rasa.Managers
             return hospital.HasValue ? (hospital.Value, 0f) : ((Vector3, float)?)null;
         }
 
+        /// <summary>
+        /// Where the team that won a match is put when it ends: the arrival of the map's
+        /// TeamWinners link, enabled or not - on Edmund Range the staging area's upper floor.
+        /// Null on a map with none, whose winners go where everyone else does.
+        /// </summary>
+        public (Vector3 Position, float Rotation)? WinnersArrival(Match match)
+        {
+            var link = LinksOn(match.Map).FirstOrDefault(l => l.Kind == MapLinkKind.TeamWinners);
+
+            return link != null ? (link.DestPosition, link.DestRotation) : ((Vector3, float)?)null;
+        }
+
         /// <summary>The middle of a team's base: its hospital.</summary>
         public Vector3? BaseCentre(Match match, uint team)
         {
@@ -724,8 +741,12 @@ namespace Rasa.Managers
         /// </summary>
         public bool TakeLink(Client client, MapLink link)
         {
-            if (link == null || link.Kind < MapLinkKind.TeamRed || link.Kind > MapLinkKind.TeamLeave)
+            if (link == null || link.Kind < MapLinkKind.TeamRed || link.Kind > MapLinkKind.TeamWinners)
                 return false;
+
+            // Not a way anywhere: where the winners of a match are put.
+            if (link.Kind == MapLinkKind.TeamWinners)
+                return true;
 
             var match = MatchOf(client?.Player?.MapChannel);
 
@@ -861,7 +882,7 @@ namespace Rasa.Managers
         /// the staging area with <paramref name="toStaging"/>; a player who is leaving the map
         /// is going somewhere else already.
         /// </summary>
-        private void Leave(Match match, Member member, bool deserting, bool toStaging)
+        private void Leave(Match match, Member member, bool deserting, bool toStaging, bool announce = true)
         {
             if (!match.Members.Remove(member))
                 return;
@@ -893,7 +914,8 @@ namespace Rasa.Managers
                 foreach (var mate in match.Team(member.Team))
                     mate.Client.CallMethod(SysEntity.ClientTeamManagerId, new RemoveTeamMemberPacket(player.EntityId));
 
-                Tell(match, member.Team == Red ? PlayerMessage.PmPvpRedTeamLeave : PlayerMessage.PmPvpBlueTeamLeave, ("player", player.FamilyName ?? ""));
+                if (announce)
+                    Tell(match, member.Team == Red ? PlayerMessage.PmPvpRedTeamLeave : PlayerMessage.PmPvpBlueTeamLeave, ("player", player.FamilyName ?? ""));
 
                 // Out of the team's chat channel, whether or not there is a client left to tell.
                 CommunicatorManager.Instance.LeaveTeamChannel(client);
@@ -1468,8 +1490,8 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Ends the match with a winner, or with none: everyone told, the prestige given, the
-        /// deserters who saw it through forgiven, the field reset and everyone back in their base
-        /// for the next.
+        /// deserters who saw it through forgiven, the field reset, and the teams broken up - the
+        /// winners to the staging area's upper floor, everyone else to the main entrance.
         /// </summary>
         public void End(Match match, uint winner, string reason = null)
         {
@@ -1531,12 +1553,37 @@ namespace Rasa.Managers
 
             ResetField(match, announce: true);
 
-            // Behind their doors again.
-            foreach (var member in match.Members)
-                ToBase(match, member);
+            // The teams break up. Whoever won goes up to the staging area's upper floor, where
+            // the range's vendors were, and whoever lost or drew to the main entrance, where the
+            // door from the CELLAR Arena comes in; the next match is played by whoever chooses a
+            // team again. The scoreboard keeps the result for its time all the same. Nobody is
+            // told of each departure: the match's end says it for everyone.
+            var winners = WinnersArrival(match);
 
-            foreach (var member in match.Members)
-                ShowHospitals(match, member.Client);
+            foreach (var member in match.Members.ToList())
+            {
+                var won = winner != 0 && member.Team == winner;
+                var client = member.Client;
+
+                member.LeaveLink = null;
+                Leave(match, member, deserting: false, toStaging: false, announce: false);
+
+                if (client?.Player == null || client.State != ClientState.Ingame || client.PendingTransfer != null)
+                    continue;
+
+                // A body is not moved: it revives where its player chooses, and a player with
+                // no team who revives outside the staging area is brought to it (Police).
+                if (client.Player.State != CharacterState.Dead && client.Player.State != CharacterState.Dying)
+                {
+                    if (won && winners.HasValue)
+                        Teleport(client, winners.Value.Position, winners.Value.Rotation);
+                    else
+                        Teleport(client, match.Definition.StagingArrival, match.Definition.StagingRotation);
+                }
+
+                Say(client, "Choose a team at the teleporters to play the next match.");
+                ShowHospitals(match, client);
+            }
 
             MatchEnded?.Invoke(match, winner);
         }

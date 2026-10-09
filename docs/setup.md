@@ -218,6 +218,37 @@ A weapon's Steal and Debuff Resist modules fire on a hit by chance, and the clie
 
 The chance is per hit, so a weapon that hits more often fires them more often. A change to the file applies at once, without a restart; a missing section uses the defaults. How long a resist debuff lasts is not a setting: it is `arg2`, in seconds, of the module's row in the world database's `module_effect` table (10 as migrated), and is read at startup. What each module does is in the [GM command reference](gm-commands.md).
 
+### Races and hybrids
+Which races a player can pick in the character creation window is set in the `GameDataConfig` section of `Rasa.Game`'s appsettings.json:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `EnabledRaces` | `[ 1, 2, 3, 4 ]` | The races the server offers at all, by id: `1` Human, `2` Forean Hybrid, `3` Brann Hybrid, `4` Thrax Hybrid. Human is always offered, listed or not; an id that is not a race is dropped, with a line in the log. A missing setting offers all four; an empty list `[]` offers Human only. |
+| `AlwaysUnlockHybrids` | `true` | `true` (or a missing setting): every race in `EnabledRaces` is offered to every account. `false`: an account is offered Human and the hybrids it has unlocked by completing their missions, and still only those in `EnabledRaces`. |
+
+```json
+{
+  "GameDataConfig": {
+    "EnabledRaces": [ 1, 2, 3, 4 ],
+    "AlwaysUnlockHybrids": false
+  }
+}
+```
+
+A race that is not offered shows in the window locked, with the client's own "Unlock this hybrid by completing certain missions in game." The server refuses it too, so a modified client cannot create or clone a character of that race.
+
+With `AlwaysUnlockHybrids` set to `false`, a hybrid is unlocked for the whole account, all of its characters, when one of its characters completes the mission whose finishing text grants it:
+
+| Hybrid | Mission | Where |
+|---|---|---|
+| Forean | 1861 Traitor on the Run | Elder Q'uoa, Thoria Das (Concordia Divide) |
+| Brann | 1851 Remedy | Connant, Baylor Base (Torden Mires) |
+| Thrax | 1899 Genome Sweet Genome | Zupa Eugin, Viddea Quarter, Staal (Ligo Crucible) |
+
+The player is told "Hybrid Access Granted" as the mission's reward is handed over. The unlock is kept in the `hybrid_unlocks` column of the character database's `account` table (`1` Forean, `2` Brann, `4` Thrax, added together) and is recorded whatever the setting, so turning `AlwaysUnlockHybrids` off later still leaves each account what it has earned. None of the three missions is in the server's mission content yet, so with the setting off nobody can unlock a hybrid until they are added.
+
+A change to either setting applies at once, without a restart: a player sees it the next time they reach the character selection screen. A character already made keeps its race whatever the settings say.
+
 ### REST API
 `Rasa.Game` can report its status, create accounts, and let the [game tools](../gametools/README.md) read and change creature flags and loot pools, over HTTP on a port of its own. It is configured in the `ApiConfig.Rest` section of its appsettings.json:
 
@@ -483,7 +514,7 @@ The Auth server logs what is in force at startup and whenever it changes (`Passw
 
 - `GameConfig` owns the public game endpoint, listener backlog, the 60-second transfer acknowledgement timeout, the 6-metre corpse-looting distance, and the optional GM performance-metrics interval. The metrics interval is `0` by default, which disables those packets.
 - `QueueConfig`, `CommunicatorConfig`, `ServerInfoConfig`, and `SocketAsyncConfig` own their existing queue, auth-communicator, server-list, and socket settings.
-- `GameDataConfig` owns enabled races (`EnabledRaces`, the races the server offers at all), `AlwaysUnlockHybrids` (default `true`: every enabled race is offered to every account; `false`: an account is offered a human plus the hybrids it has unlocked by completing mission 1861 for the Forean, 1851 for the Brann and 1899 for the Thrax), startup server flags, the knowledge-base JSON path, and `NavMeshPath`. The default navigation directory is `navmesh`.
+- `GameDataConfig` owns the races offered at character creation (`EnabledRaces` and `AlwaysUnlockHybrids`, see [Races and hybrids](#races-and-hybrids)), startup server flags, the knowledge-base JSON path, and `NavMeshPath`. The default navigation directory is `navmesh`.
 
 Action and action-level behavior is loaded from the world data tables. Missions
 load enabled definitions and typed scene bindings installed in the World

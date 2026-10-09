@@ -68,6 +68,17 @@ namespace Rasa.Managers
     /// none. Neither is destroyed here either: the client takes either for undamageable
     /// (usabledata.lookup has no hit points for them), and the explosion and wreck their
     /// destroyed states carry are left for when something destroys them.
+    ///
+    /// The Brann monitors. UsableTwoStateBrannMonitorGenericV01 (23885) and V02 (23886) are
+    /// two-state switches like the fire pits, the other way about: USE_TS_STATE_1 (56) is the
+    /// one with an animation (usabledata.animation: Usable state 1 static, played looping,
+    /// arch_brann_gen_obj_monitor_v01_on.anm on both meshes), and USE_TS_STATE_0 (55) has
+    /// nothing, a dark screen. Neither has an effect, a transition animation or an alternate
+    /// mesh. They are sent 56, on. Their classes are not targetable (entityclass target flag 0),
+    /// so the client offers no Use and they are not used. Sixty-eight on the maps: thirty-one
+    /// V01 and thirty-three V02 in the Comm Tower, four V01 in Burning Steps. The Brann monitor
+    /// props the .maps also place (PropBrannMonitorV04 and the destroyed ones) are no usables
+    /// and have no states.
     /// </summary>
     public static class MapUsables
     {
@@ -116,11 +127,15 @@ namespace Rasa.Managers
         public const uint TestWeaponsCenter = 1465;     // adv_foreas_valverde_pools_test_weapons_center
         public const uint PenalResearch = 2034;         // adv_arieki_torden_plains_penalresearch
         public const uint StaalJunkyard = 2138;         // adv_arieki_ligo_staaljunkyard
+        public const uint BurningSteps = 1993;          // adv_arieki_ligo_burningsteps
+        public const uint CommTower = 2085;             // adv_arieki_torden_incline_commtower
 
         public const uint ForeanFirePitV01 = 6137;     // UsableTwoStateForeanFirePitV01
         public const uint ForeanFirePitV03 = 6212;     // UsableTwoStateForeanFirePitV03
         public const uint BaneStasisChamber = 7197;    // UsableInertDestBaneStasisChamber
         public const uint BrannDissectionTable = 25269; // UsableInertDestBrannTableDissectionAttaV01DELETEDUPE
+        public const uint BrannMonitorV01 = 23885;     // UsableTwoStateBrannMonitorGenericV01
+        public const uint BrannMonitorV02 = 23886;     // UsableTwoStateBrannMonitorGenericV02
 
         public static readonly IReadOnlyList<Usable> All = new[]
         {
@@ -160,6 +175,76 @@ namespace Rasa.Managers
             // The Bane stasis chambers: one each in Pravus Research and the Test Weapons Center.
             StasisChamber(PravusResearch, 133981504835290, 224.0f, 7.6172f, 40.0f, "Pravus Research stasis chamber"),
             StasisChamber(TestWeaponsCenter, 134131828656196, 280.0f, -24.5f, 24.0f, "Test Weapons Center stasis chamber"),
+
+            // The Brann monitors, on: thirty-one V01 and thirty-three V02 in the Comm Tower, four V01 in Burning Steps.
+            Monitor(CommTower, 134419591463952, BrannMonitorV01, 5.6896f, 226.5989f, -14.1714f, "Comm Tower monitor 1"),
+            Monitor(CommTower, 134419591464163, BrannMonitorV01, -40.1694f, 250.7855f, 100.8428f, "Comm Tower monitor 2"),
+            Monitor(CommTower, 134419591464292, BrannMonitorV01, -11.4553f, 250.5626f, 44.0937f, "Comm Tower monitor 3"),
+            Monitor(CommTower, 134419591464293, BrannMonitorV01, -11.4554f, 251.6273f, 44.0937f, "Comm Tower monitor 4"),
+            Monitor(CommTower, 134419591464342, BrannMonitorV01, -45.8915f, 234.5242f, 131.542f, "Comm Tower monitor 5"),
+            Monitor(CommTower, 134419591464429, BrannMonitorV01, -40.5197f, 249.7524f, 100.1137f, "Comm Tower monitor 6"),
+            Monitor(CommTower, 134419591464578, BrannMonitorV01, 79.6341f, 242.7855f, 23.4896f, "Comm Tower monitor 7"),
+            Monitor(CommTower, 134419591464587, BrannMonitorV01, 36.5315f, 242.4655f, -4.9972f, "Comm Tower monitor 8"),
+            Monitor(CommTower, 134419591464710, BrannMonitorV01, -75.9235f, 250.2799f, 11.8509f, "Comm Tower monitor 9"),
+            Monitor(CommTower, 134419591464740, BrannMonitorV01, -110.2525f, 251.5214f, -2.9568f, "Comm Tower monitor 10"),
+            Monitor(CommTower, 134419591464945, BrannMonitorV01, -73.872f, 274.774f, -68.0116f, "Comm Tower monitor 11"),
+            Monitor(CommTower, 134419591464947, BrannMonitorV01, -72.4938f, 275.2623f, -67.9698f, "Comm Tower monitor 12"),
+            Monitor(CommTower, 134419591464952, BrannMonitorV01, -103.9827f, 266.4601f, -48.7736f, "Comm Tower monitor 13"),
+            Monitor(CommTower, 134419591464953, BrannMonitorV01, -103.9827f, 267.5248f, -48.7736f, "Comm Tower monitor 14"),
+            Monitor(CommTower, 134419591465017, BrannMonitorV01, -29.4334f, 227.2181f, 33.789f, "Comm Tower monitor 15"),
+            Monitor(CommTower, 134419591465198, BrannMonitorV01, 107.6415f, 250.7032f, -15.3032f, "Comm Tower monitor 16"),
+            Monitor(CommTower, 134419591465210, BrannMonitorV01, 102.7083f, 250.7855f, -53.0515f, "Comm Tower monitor 17"),
+            Monitor(CommTower, 134419591465213, BrannMonitorV01, 103.0586f, 249.7524f, -52.3223f, "Comm Tower monitor 18"),
+            Monitor(CommTower, 134419591465229, BrannMonitorV01, 5.3097f, 226.7032f, 193.3934f, "Comm Tower monitor 19"),
+            Monitor(CommTower, 134419591465232, BrannMonitorV01, 6.0403f, 225.7524f, 192.7309f, "Comm Tower monitor 20"),
+            Monitor(CommTower, 134419591465244, BrannMonitorV01, -51.0347f, 266.7032f, 136.7289f, "Comm Tower monitor 21"),
+            Monitor(CommTower, 134419591465247, BrannMonitorV01, -50.2495f, 265.7524f, 136.1321f, "Comm Tower monitor 22"),
+            Monitor(CommTower, 134419591465250, BrannMonitorV01, -107.9876f, 250.7737f, 39.0919f, "Comm Tower monitor 23"),
+            Monitor(CommTower, 134419591465255, BrannMonitorV01, -107.3222f, 249.2524f, 38.3375f, "Comm Tower monitor 24"),
+            Monitor(CommTower, 134419591465257, BrannMonitorV01, -104.722f, 250.7311f, -15.9945f, "Comm Tower monitor 25"),
+            Monitor(CommTower, 134419591465259, BrannMonitorV01, -104.5862f, 250.1606f, -15.5536f, "Comm Tower monitor 26"),
+            Monitor(CommTower, 134419591465262, BrannMonitorV01, -109.7274f, 250.4767f, -3.9442f, "Comm Tower monitor 27"),
+            Monitor(CommTower, 134419591465347, BrannMonitorV01, -13.9901f, 227.2737f, 158.3583f, "Comm Tower monitor 28"),
+            Monitor(CommTower, 134419591465387, BrannMonitorV01, 79.2665f, 241.7524f, 24.2101f, "Comm Tower monitor 29"),
+            Monitor(CommTower, 134419591465396, BrannMonitorV01, -53.8683f, 267.4548f, 88.2033f, "Comm Tower monitor 30"),
+            Monitor(CommTower, 134419591465397, BrannMonitorV01, -54.9231f, 266.4102f, 87.8315f, "Comm Tower monitor 31"),
+            Monitor(CommTower, 134419591463954, BrannMonitorV02, 4.8277f, 226.6189f, -14.624f, "Comm Tower monitor 32"),
+            Monitor(CommTower, 134419591464298, BrannMonitorV02, -11.0027f, 250.5826f, 43.2318f, "Comm Tower monitor 33"),
+            Monitor(CommTower, 134419591464344, BrannMonitorV02, -45.7713f, 235.5889f, 131.623f, "Comm Tower monitor 34"),
+            Monitor(CommTower, 134419591464346, BrannMonitorV02, -46.3538f, 234.5442f, 130.6853f, "Comm Tower monitor 35"),
+            Monitor(CommTower, 134419591464427, BrannMonitorV02, -41.16f, 250.7032f, 100.7105f, "Comm Tower monitor 36"),
+            Monitor(CommTower, 134419591464428, BrannMonitorV02, -41.3756f, 251.2737f, 101.1183f, "Comm Tower monitor 37"),
+            Monitor(CommTower, 134419591464577, BrannMonitorV02, 80.1292f, 242.7032f, 24.3576f, "Comm Tower monitor 38"),
+            Monitor(CommTower, 134419591464579, BrannMonitorV02, 80.5843f, 243.2737f, 24.282f, "Comm Tower monitor 39"),
+            Monitor(CommTower, 134419591464585, BrannMonitorV02, 36.3865f, 243.5302f, -4.9972f, "Comm Tower monitor 40"),
+            Monitor(CommTower, 134419591464586, BrannMonitorV02, 37.3934f, 242.4855f, -4.5446f, "Comm Tower monitor 41"),
+            Monitor(CommTower, 134419591464711, BrannMonitorV02, -76.0559f, 250.1976f, 12.8415f, "Comm Tower monitor 42"),
+            Monitor(CommTower, 134419591464739, BrannMonitorV02, -110.2525f, 250.4567f, -2.8119f, "Comm Tower monitor 43"),
+            Monitor(CommTower, 134419591464946, BrannMonitorV02, -74.445f, 273.741f, -65.8285f, "Comm Tower monitor 44"),
+            Monitor(CommTower, 134419591464954, BrannMonitorV02, -103.8021f, 266.2155f, -46.1963f, "Comm Tower monitor 45"),
+            Monitor(CommTower, 134419591464992, BrannMonitorV02, -13.2554f, 226.7032f, -22.7853f, "Comm Tower monitor 46"),
+            Monitor(CommTower, 134419591465018, BrannMonitorV02, -30.8875f, 226.7298f, 34.2361f, "Comm Tower monitor 47"),
+            Monitor(CommTower, 134419591465196, BrannMonitorV02, 108.922f, 250.7855f, -15.1709f, "Comm Tower monitor 48"),
+            Monitor(CommTower, 134419591465197, BrannMonitorV02, 108.5716f, 249.7524f, -15.9f, "Comm Tower monitor 49"),
+            Monitor(CommTower, 134419591465211, BrannMonitorV02, 103.9145f, 251.2737f, -53.3269f, "Comm Tower monitor 50"),
+            Monitor(CommTower, 134419591465212, BrannMonitorV02, 103.6988f, 250.7032f, -52.9191f, "Comm Tower monitor 51"),
+            Monitor(CommTower, 134419591465214, BrannMonitorV02, 103.966f, 249.7524f, -52.3223f, "Comm Tower monitor 52"),
+            Monitor(CommTower, 134419591465228, BrannMonitorV02, 5.1363f, 225.7524f, 192.8094f, "Comm Tower monitor 53"),
+            Monitor(CommTower, 134419591465230, BrannMonitorV02, 6.5968f, 226.7855f, 193.4145f, "Comm Tower monitor 54"),
+            Monitor(CommTower, 134419591465231, BrannMonitorV02, 5.2745f, 227.2737f, 193.8058f, "Comm Tower monitor 55"),
+            Monitor(CommTower, 134419591465245, BrannMonitorV02, -49.7542f, 266.7854f, 136.8612f, "Comm Tower monitor 56"),
+            Monitor(CommTower, 134419591465246, BrannMonitorV02, -51.1054f, 267.2737f, 137.1367f, "Comm Tower monitor 57"),
+            Monitor(CommTower, 134419591465248, BrannMonitorV02, -51.157f, 265.7524f, 136.1321f, "Comm Tower monitor 58"),
+            Monitor(CommTower, 134419591465251, BrannMonitorV02, -106.7252f, 250.2855f, 39.9409f, "Comm Tower monitor 59"),
+            Monitor(CommTower, 134419591465254, BrannMonitorV02, -107.4447f, 250.2032f, 39.0524f, "Comm Tower monitor 60"),
+            Monitor(CommTower, 134419591465256, BrannMonitorV02, -76.6909f, 249.2434f, 12.0563f, "Comm Tower monitor 61"),
+            Monitor(CommTower, 134419591465258, BrannMonitorV02, -105.5852f, 250.2429f, -14.7417f, "Comm Tower monitor 62"),
+            Monitor(CommTower, 134419591465398, BrannMonitorV02, -53.725f, 266.3901f, 88.1817f, "Comm Tower monitor 63"),
+            Monitor(CommTower, 134419591465433, BrannMonitorV02, -29.7443f, 226.6476f, 34.2359f, "Comm Tower monitor 64"),
+            Monitor(BurningSteps, 134419591467501, BrannMonitorV01, -200.0808f, 199.7323f, 192.3138f, "Burning Steps monitor 1"),
+            Monitor(BurningSteps, 134419591467502, BrannMonitorV01, -189.4679f, 199.7323f, 192.284f, "Burning Steps monitor 2"),
+            Monitor(BurningSteps, 134419591467503, BrannMonitorV01, -210.58f, 199.7323f, 192.246f, "Burning Steps monitor 3"),
+            Monitor(BurningSteps, 134419591467504, BrannMonitorV01, -220.9307f, 199.7323f, 192.2075f, "Burning Steps monitor 4"),
         };
 
         /// <summary>A Brann dissection table, intact.</summary>
@@ -169,6 +254,10 @@ namespace Rasa.Managers
         /// <summary>A Bane stasis chamber, intact.</summary>
         private static Usable StasisChamber(uint mapContextId, ulong entityId, float x, float y, float z, string name) =>
             new Usable(mapContextId, entityId, BaneStasisChamber, new Vector3(x, y, z), UseObjectState.IdesStateIntact, null, name);
+
+        /// <summary>A Brann monitor, on.</summary>
+        private static Usable Monitor(uint mapContextId, ulong entityId, uint classId, float x, float y, float z, string name) =>
+            new Usable(mapContextId, entityId, classId, new Vector3(x, y, z), UseObjectState.TsState1, null, name);
 
         /// <summary>How long a use takes, as a footlocker's (DynamicObjectManager, Lockbox).</summary>
         public const int UseWindupMs = 100;

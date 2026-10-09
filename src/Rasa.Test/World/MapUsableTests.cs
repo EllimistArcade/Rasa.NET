@@ -147,6 +147,45 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
+        public void TheBrannMonitorsAreSentOnAndAreNotUsed()
+        {
+            var monitors = MapUsables.All.Where(usable => usable.ClassId == MapUsables.BrannMonitorV01 || usable.ClassId == MapUsables.BrannMonitorV02).ToList();
+
+            Assert.HasCount(68, monitors);
+            Assert.HasCount(31, monitors.Where(monitor => monitor.MapContextId == MapUsables.CommTower && monitor.ClassId == MapUsables.BrannMonitorV01).ToList());
+            Assert.HasCount(33, monitors.Where(monitor => monitor.MapContextId == MapUsables.CommTower && monitor.ClassId == MapUsables.BrannMonitorV02).ToList());
+            Assert.HasCount(4, monitors.Where(monitor => monitor.MapContextId == MapUsables.BurningSteps && monitor.ClassId == MapUsables.BrannMonitorV01).ToList());
+
+            foreach (var monitor in monitors)
+            {
+                Assert.AreEqual(UseObjectState.TsState1, monitor.State, $"{monitor}: USE_TS_STATE_1, whose animation is the screen");
+                Assert.IsNull(monitor.UsedState, monitor.ToString());
+            }
+
+            using var world = new WorldTestContext();
+
+            // Burning Steps: its four, on, and nothing else.
+            var steps = On(world, Channel(MapUsables.BurningSteps, "adv_arieki_ligo_burningsteps"));
+            Assert.AreEqual(4, MapUsables.PlayerEnteredMap(steps));
+            var sent = States(steps);
+            CollectionAssert.AreEquivalent(monitors.Where(monitor => monitor.MapContextId == MapUsables.BurningSteps).Select(monitor => monitor.EntityId).ToList(),
+                sent.Select(state => state.EntityId).ToList());
+            Assert.IsTrue(sent.All(state => state.Packet.State == UseObjectState.TsState1));
+
+            // The Comm Tower: all sixty-four.
+            var tower = On(world, Channel(MapUsables.CommTower, "adv_arieki_torden_incline_commtower"));
+            Assert.AreEqual(64, MapUsables.PlayerEnteredMap(tower));
+
+            // A use of one, from a client that made it up, is refused.
+            var first = monitors.First(monitor => monitor.MapContextId == MapUsables.CommTower);
+            tower.Player.Position = first.Position;
+            WorldTestContext.Drain(tower);
+            Assert.IsTrue(MapUsables.TryRequestUse(tower, Use(first.EntityId)));
+            Assert.AreEqual(PlayerMessage.PmUseObjectNotUsable, Refusal(tower));
+            Assert.IsEmpty(tower.Player.MapChannel.PerformRecovery);
+        }
+
+        [TestMethod]
         public void ArrivingOnTheMapSendsThem()
         {
             using var harness = BootcampRuntimeTestHarness.Create();

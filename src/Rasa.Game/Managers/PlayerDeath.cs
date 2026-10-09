@@ -184,12 +184,10 @@ namespace Rasa.Managers
                 // Nothing goes on fighting a dead player.
                 Threat.Forget(mapChannel, victim);
 
-                // Their effects end with them; Rez Trauma is what stays, and a Hominis Machina's
-                // morph while its Self Revive is unspent - the button is in the morph's drawer.
+                // Their effects end with them, but for what a death keeps (KeptInDeath).
                 var keepMorph = AbilityManager.CanSelfRevive(victim);
 
-                foreach (var effect in victim.ActiveEffects.Values.Where(e => !e.IsSkillPassive && e.TypeId != RezSicknessTypeId && e.Parent == null
-                             && !(keepMorph && e.TypeId == AbilityManager.PolymorphTypeId)).ToList())
+                foreach (var effect in victim.ActiveEffects.Values.Where(e => !KeptInDeath(e, keepMorph)).ToList())
                     GameEffectManager.Instance.DettachEffect(mapChannel, victim, effect);
 
                 if (health != null)
@@ -205,6 +203,17 @@ namespace Rasa.Managers
 
             Logger.WriteLog(LogType.Debug, $"{victim.FamilyName} ({victim.Id}) died{(source != null ? $", killed by {source.EntityId}" : "")}.");
         }
+
+        /// <summary>
+        /// Whether an effect stays on a player through their death: Rez Trauma, the skill
+        /// passives, an aura's effect (its owner's aura takes it off), and a Hominis Machina's
+        /// morph while its Self Revive is unspent - the button is in the morph's drawer
+        /// (<paramref name="keepMorph"/>, AbilityManager.CanSelfRevive). The map's effect worker
+        /// holds a dead player to the same (GameEffectManager.DoWork).
+        /// </summary>
+        internal static bool KeptInDeath(GameEffect effect, bool keepMorph) =>
+            effect.IsSkillPassive || effect.TypeId == RezSicknessTypeId || effect.Parent != null
+            || (keepMorph && effect.TypeId == AbilityManager.PolymorphTypeId);
 
         /// <summary>
         /// What the hospital window is given: the hospitals the player may go back to

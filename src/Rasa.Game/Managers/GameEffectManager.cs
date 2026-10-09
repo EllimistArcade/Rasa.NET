@@ -563,6 +563,14 @@ namespace Rasa.Managers
                     continue;
                 }
 
+                // A dead player keeps what their death kept, for as long as it lasts.
+                if (actor.State == CharacterState.Dead && actor is Manifestation fallen &&
+                    actor.MapContextId == mapChannel.MapInfo.MapContextId)
+                {
+                    HoldInDeath(mapChannel, fallen);
+                    continue;
+                }
+
                 // Dead, or not on this map any more: nothing to tick and nobody to tell.
                 if (actor.State == CharacterState.Dead || actor.MapContextId != mapChannel.MapInfo.MapContextId)
                 {
@@ -595,6 +603,42 @@ namespace Rasa.Managers
 
                     if (effect.TickDue)
                         Tick(mapChannel, actor, effect);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A dead player on the worker's pass. Their death took off everything but what it keeps
+        /// (PlayerDeath.KeptInDeath): Rez Trauma, the skill passives, an aura's effect and a
+        /// Hominis Machina's morph while its Self Revive is unspent. That stays, and runs out when
+        /// its time is up, with the client told; nothing ticks on the dead. Anything else on them
+        /// was put there after the death, and is taken off, with the client told.
+        ///
+        /// Every effect on anything dead used to be cleared here, on the pass after the death and
+        /// without a word to the client: Rez Trauma never stacked past one death's worth, a Self
+        /// Revive was refused for want of the morph while the client still showed it, and the
+        /// skill passives were gone server-side until something synced them again.
+        /// </summary>
+        private void HoldInDeath(MapChannel mapChannel, Manifestation fallen)
+        {
+            var keepMorph = AbilityManager.CanSelfRevive(fallen);
+
+            foreach (var effect in fallen.ActiveEffects.Values.ToList())
+            {
+                // Taken off by an earlier one on this pass (a child with its parent).
+                if (!fallen.ActiveEffects.ContainsKey(effect.EffectId))
+                    continue;
+
+                if (!PlayerDeath.KeptInDeath(effect, keepMorph))
+                {
+                    DettachEffect(mapChannel, fallen, effect);
+                    continue;
+                }
+
+                if (effect.IsExpired)
+                {
+                    DettachEffect(mapChannel, fallen, effect);
+                    effect.OnExpired?.Invoke(mapChannel, fallen, effect);
                 }
             }
         }

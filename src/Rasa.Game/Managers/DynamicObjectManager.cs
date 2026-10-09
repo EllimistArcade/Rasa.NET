@@ -211,6 +211,11 @@ namespace Rasa.Managers
             if (client.State != ClientState.Ingame)
                 return;
 
+            // A usable the client's own .map placed, such as a Forean fire pit: the server has
+            // no object for it.
+            if (MapUsables.TryRequestUse(client, packet))
+                return;
+
             // The id names an object, or it names nothing this can answer. GetObject is the
             // throwing indexer, so any item, creature or player id - or an object id that is no
             // longer registered - closed the connection of whoever sent it.

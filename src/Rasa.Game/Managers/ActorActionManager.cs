@@ -134,6 +134,14 @@ namespace Rasa.Managers
                     // does next (a control point changing hands) goes out.
                     DynamicObjectManager.Instance.ReleaseUseLock(action, false);
 
+                    // A usable of the client's .map (MapUsables), whatever its arg: no object of
+                    // the server's has its id.
+                    if (MapUsables.IsUseOf(action))
+                    {
+                        MapUsables.UseRecovery(mapChannel, action);
+                        break;
+                    }
+
                     switch (action.ActionArgId)
                     {
                         // A Hortimonculus plant is used with arg 1, as a footlocker is; the plant

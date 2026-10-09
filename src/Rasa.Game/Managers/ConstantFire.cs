@@ -242,13 +242,15 @@ namespace Rasa.Managers
             }
             else if (ResolveTarget(mapChannel, player) is Actor aimed && AbilityManager.IsAttackable(player, aimed))
                 targets.Add(aimed);
-            else if (PersonalWaypoints.TakeDamage(player, player.Target, damage) is int taken)
+            else if (PersonalWaypoints.TryGetPosition(player.Target, out var waypointAt) && InReach(player, waypointAt)
+                     && PersonalWaypoints.TakeDamage(player, player.Target, damage) is int taken)
             {
                 // An enemy's Personal Waypoint (PersonalWaypoints): the pulse lands on its own hit
                 // points as it is - no crit, falloff or resistance, as a missile at one.
                 pulse.Add(new TickEntry { EntityId = player.Target, Amount = taken, DamageType = damageType });
             }
-            else if (AbilityManager.PlantTakeDamage(player, player.Target, damage) is int plantTaken)
+            else if (AbilityManager.TryGetPlantPosition(player.Target, out var plantAt) && InReach(player, plantAt)
+                     && AbilityManager.PlantTakeDamage(player, player.Target, damage) is int plantTaken)
             {
                 // An enemy's Hortimonculus (AbilityManager): the same.
                 pulse.Add(new TickEntry { EntityId = player.Target, Amount = plantTaken, DamageType = damageType });
@@ -384,7 +386,8 @@ namespace Rasa.Managers
 
             // Still one the player may attack, as the pulses' target had to be: a creature that
             // changed sides, or an enemy player who no longer is one (Pvp), takes nothing.
-            if (!(EntityManager.Instance.GetActor(session.ChargeTargetId) is Actor target) || target.MapContextId != mapChannel.MapInfo.MapContextId
+            if (!(EntityManager.Instance.GetActor(session.ChargeTargetId) is Actor target) || !MapInstanceScope.Contains(mapChannel, target)
+                || !InReach(player, target.Position)
                 || target.State == CharacterState.Dead || target.State == CharacterState.Dying
                 || !AbilityManager.IsAttackable(player, target))
                 return;
@@ -465,7 +468,10 @@ namespace Rasa.Managers
             return session;
         }
 
-        /// <summary>What the shooter is aiming at, if it is still there to be hit.</summary>
+        /// <summary>
+        /// What the shooter is aiming at, if it is still there to be hit: on this map - this
+        /// channel of it, not another instance of the same map (MapInstanceScope) - and in reach.
+        /// </summary>
         private static Actor ResolveTarget(MapChannel mapChannel, Manifestation player)
         {
             if (player.Target == 0)
@@ -473,11 +479,25 @@ namespace Rasa.Managers
 
             var target = EntityManager.Instance.GetActor(player.Target);
 
-            if (target == null || target.MapContextId != mapChannel.MapInfo.MapContextId
+            if (target == null || !MapInstanceScope.Contains(mapChannel, target) || !InReach(player, target.Position)
                 || target.State == CharacterState.Dead || target.State == CharacterState.Dying)
                 return null;
 
             return target;
+        }
+
+        /// <summary>
+        /// Whether something there is in a weapon's reach of the shooter: as far as a missile may
+        /// be aimed (MissileManager.MaxTargetDistance). The selection is the client's, and it
+        /// keeps it for as long as it likes: a trigger held on a creature, a Personal Waypoint or
+        /// a Hortimonculus used to go on landing however far the shooter went from it, and on a
+        /// creature in another instance of the same map, as no missile does.
+        /// </summary>
+        private static bool InReach(Manifestation player, System.Numerics.Vector3 at)
+        {
+            var distance = System.Numerics.Vector3.Distance(player.Position, at);
+
+            return float.IsFinite(distance) && distance <= MissileManager.MaxTargetDistance;
         }
 
         /// <summary>

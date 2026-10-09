@@ -80,6 +80,27 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
+        public void AConstantFireWeaponReachesItAsFarAsAMissile()
+        {
+            using var f = new Fixture();
+            var enemy = f.Fighter(BlueClan, 20, 0);
+
+            f.WithFeud(() =>
+            {
+                var plant = f.Grow();
+                var max = AbilityManager.PlantHealthOf(plant.EntityId);
+
+                f.Move(enemy, new Vector3(300, 0, 0));
+                ConstantFireTargetTests.Fire(f.World, enemy, plant.EntityId, ActionId.WeaponMachinegun, () =>
+                    Assert.AreEqual(max, AbilityManager.PlantHealthOf(plant.EntityId), "300 m away"));
+
+                f.Move(enemy, new Vector3(20, 0, 0));
+                ConstantFireTargetTests.Fire(f.World, enemy, plant.EntityId, ActionId.WeaponMachinegun, () =>
+                    Assert.IsTrue(AbilityManager.PlantHealthOf(plant.EntityId) < max, "20 m away"));
+            });
+        }
+
+        [TestMethod]
         public void AnAttackOnItEndsTheAttackersSafety()
         {
             using var f = new Fixture();

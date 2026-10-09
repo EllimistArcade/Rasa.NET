@@ -134,11 +134,87 @@ namespace Rasa.Test.World
 
         #endregion
 
+        #region Where the target is
+
+        [TestMethod]
+        public void ACreatureInAnotherInstanceOfTheMapIsNotHit()
+        {
+            using var world = new WorldTestContext();
+            var shooter = Watch(world, 0);
+
+            // The same map in another channel: a squad's private instance of it.
+            var instance = new MapChannel { MapInfo = world.Map.MapInfo, ClientList = new List<Client>(), PlayerLimit = 128 };
+            var creature = Spawn(world, new Vector3(0, 0, -5), TargetCategory.Hostile, instance);
+
+            Fire(world, shooter, creature, ActionId.WeaponMachinegun, () =>
+                Assert.AreEqual(Full, creature.Attributes[Attributes.Health].Current));
+        }
+
+        [TestMethod]
+        [DataRow(120f, true, DisplayName = "120 m: in reach")]
+        [DataRow(500f, false, DisplayName = "500 m: out of reach")]
+        public void APulseReachesAsFarAsAMissile(float distance, bool hit)
+        {
+            using var world = new WorldTestContext();
+            var shooter = Watch(world, 0);
+            var creature = Spawn(world, new Vector3(0, 0, -distance), TargetCategory.Hostile);
+
+            Assert.AreEqual(128f, MissileManager.MaxTargetDistance);
+            Fire(world, shooter, creature, ActionId.WeaponMachinegun, () =>
+                Assert.AreEqual(hit, creature.Attributes[Attributes.Health].Current < Full));
+        }
+
+        [TestMethod]
+        public void APolarityChargeIsNotLetGoIntoATargetThatHasGoneOutOfReach()
+        {
+            using var world = new WorldTestContext();
+            var shooter = Watch(world, 0);
+            var creature = Spawn(world, new Vector3(0, 0, -5), TargetCategory.Hostile);
+
+            Fire(world, shooter, creature, ActionId.WeaponPolaritygun, () =>
+            {
+                creature.Position = new Vector3(0, 0, -500);
+                var before = creature.Attributes[Attributes.Health].Current;
+
+                ConstantFire.Stop(shooter);
+
+                Assert.AreEqual(before, creature.Attributes[Attributes.Health].Current);
+            }, pulses: 3);
+        }
+
+        [TestMethod]
+        public void APolarityChargeIsNotLetGoIntoATargetInAnotherInstance()
+        {
+            using var world = new WorldTestContext();
+            var shooter = Watch(world, 0);
+            var creature = Spawn(world, new Vector3(0, 0, -5), TargetCategory.Hostile);
+
+            Fire(world, shooter, creature, ActionId.WeaponPolaritygun, () =>
+            {
+                // Taken into a private instance of the map while the beam was on it.
+                foreach (var cell in world.Map.MapCellInfo.Cells.Values)
+                    cell.CreatureList.Remove(creature);
+                creature.RuntimeMapChannel = new MapChannel { MapInfo = world.Map.MapInfo, ClientList = new List<Client>(), PlayerLimit = 128 };
+                var before = creature.Attributes[Attributes.Health].Current;
+
+                ConstantFire.Stop(shooter);
+
+                Assert.AreEqual(before, creature.Attributes[Attributes.Health].Current);
+            }, pulses: 3);
+        }
+
+        #endregion
+
         #region Fixture
 
         /// <summary>Holds the trigger on <paramref name="target"/> for some pulses, then checks, then lets go without a release.</summary>
-        private static void Fire(WorldTestContext world, Client shooter, Actor target, ActionId actionId, Action check, int pulses = 1)
+        private static void Fire(WorldTestContext world, Client shooter, Actor target, ActionId actionId, Action check, int pulses = 1) =>
+            Fire(world, shooter, target.EntityId, actionId, check, pulses);
+
+        /// <summary>The same at whatever entity the shooter has selected: a Personal Waypoint, a Hortimonculus.</summary>
+        internal static void Fire(WorldTestContext world, Client shooter, ulong targetId, ActionId actionId, Action check, int pulses = 1)
         {
+            world.AddClass((EntityClasses)6048);
             var weapon = new Item
             {
                 ItemTemplate = new ItemTemplate(new ItemTemplateItemClassEntry { ItemTemplateId = 145, ItemClass = 6048 })
@@ -151,8 +227,8 @@ namespace Rasa.Test.World
                 },
                 ItemTemplateId = 145, StackSize = 1, Crafter = ""
             };
-            var action = new ActionData(shooter.Player, actionId, 1, 0) { TargetId = target.EntityId };
-            shooter.Player.Target = target.EntityId;
+            var action = new ActionData(shooter.Player, actionId, 1, 0) { TargetId = targetId };
+            shooter.Player.Target = targetId;
 
             try
             {

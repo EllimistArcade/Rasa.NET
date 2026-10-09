@@ -334,7 +334,7 @@ namespace Rasa.Managers
                 var amount = GameEffectManager.ApplyResist(victim, rolled, out var resisted, mine.DamageType);
                 var taken = ActorManager.Instance.Damage(mapChannel, victim, amount, owner, out var outcome, mine.DamageType);
 
-                blast.Hits.Add(new AbilityHit
+                var hit = new AbilityHit
                 {
                     EntityId = victim.EntityId,
                     Amount = outcome.Delivered,
@@ -344,12 +344,15 @@ namespace Rasa.Managers
                     DamageType = mine.DamageType,
                     IsCritical = crit,
                     DeathBlow = taken > 0 && victim.Attributes[Attributes.Health].Current <= 0
-                });
+                };
 
+                blast.Hits.Add(hit);
                 hitAny = true;
 
+                // A crit's side effect is announced by the blast (HitEffects).
                 if (crit && !outcome.Immune && victim.State != CharacterState.Dead && victim.State != CharacterState.Dying && victim.Attributes[Attributes.Health].Current > 0)
-                    CritEffects.OnCritical(mapChannel, victim, owner, mine.DamageType, amount);
+                    using (HitEffects.On(victim, owner, hit.TargetEffectIds))
+                        CritEffects.OnCritical(mapChannel, victim, owner, mine.DamageType, amount);
             }
 
             CellManager.Instance.CellCallMethod(creature, blast);

@@ -266,8 +266,21 @@ namespace Rasa.Managers
             // What the hit puts on the creature is announced by the hit, when the shot is seen
             // to land: attached quietly and named in this creature's entry of the recovery
             // (HitEffects). With no entry to name them in they announce themselves, as before.
-            using (HitEffects.On(creature, missile.Source, HitOf(missile, creature)?.TargetEffectIds))
+            using (HitEffects.On(creature, missile.Source, HitOf(missile, creature)?.TargetEffectIds, StrikeMsOf(missile, creature)))
                 return ApplyHitEffects(mapChannel, creature, missile);
+        }
+
+        /// <summary>
+        /// How long, at most, after the recovery arrives the client plays the hit on this actor:
+        /// the shot's flight to it from where the shooter stands (ShotFlight). 0 for a swing or
+        /// a creature's attack, which the server does not time.
+        /// </summary>
+        private static int StrikeMsOf(Missile missile, Actor struck)
+        {
+            if (missile?.FlightVelocity is not int velocity || missile.Source == null || struck == null)
+                return 0;
+
+            return ShotFlight.Ms(Vector3.Distance(missile.Source.Position, struck.Position), velocity);
         }
 
         /// <summary>The missile's entry for a hit on this actor in the recovery it will be sent in, or null.</summary>
@@ -521,8 +534,10 @@ namespace Rasa.Managers
             {
                 var damageType = missile.DamageType == 0 ? DamageType.Physical : missile.DamageType;
 
+                // Its side effect is announced by the hit, as on a creature (HitEffects).
                 if (missile.IsCritical)
-                    CritEffects.OnCritical(mapChannel, enemy, missile.Source, damageType, missile.DamageA);
+                    using (HitEffects.On(enemy, missile.Source, HitOf(missile, enemy)?.TargetEffectIds, StrikeMsOf(missile, enemy)))
+                        CritEffects.OnCritical(mapChannel, enemy, missile.Source, damageType, missile.DamageA);
 
                 WeaponBonus(mapChannel, enemy, missile);
 
@@ -891,6 +906,7 @@ namespace Rasa.Managers
             missile.TriggerTime = landsInMs ?? triggerTime;
             missile.AfterWindup = landsInMs.HasValue;
             missile.HeldForFlight = !landsInMs.HasValue && flightVelocity.HasValue && !melee && triggerTime > 0;
+            missile.FlightVelocity = melee ? null : flightVelocity;
 
             // Wound up where its target stands now: a cone points there, a ring around a target
             // lands there, whoever is there when it goes off (CreatureWindups).

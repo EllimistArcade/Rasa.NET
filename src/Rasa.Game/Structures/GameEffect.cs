@@ -81,10 +81,11 @@ namespace Rasa.Structures
         public bool AnnounceOnAttach { get; set; } = true;
 
         /// <summary>
-        /// Whether a weapon hit that puts this effect on a creature may announce it in place of
-        /// the attach (Managers.HitEffects): attached quietly, named in the hit's
+        /// Whether a hit that puts this effect on a creature or a player may announce it in place
+        /// of the attach (Managers.HitEffects): attached quietly, named in the hit's
         /// targetEffectIds, and seen when the hit is. No for an effect something is about to be
-        /// done with that needs its visuals there already - a tick that draws from its FX.
+        /// done with at once that needs its visuals there already - a tick that draws from its
+        /// FX and cannot wait for the hit.
         /// </summary>
         public bool AnnounceWithHit { get; set; } = true;
 

@@ -447,7 +447,7 @@ namespace Rasa.Managers
                 var amount = GameEffectManager.ApplyResist(victim, rolled, out var resisted, trap.StrikeType);
                 var taken = ActorManager.Instance.Damage(mapChannel, victim, amount, owner, out var outcome, trap.StrikeType);
 
-                strike.Hits.Add(new TickEntry
+                var entry = new TickEntry
                 {
                     EntityId = victim.EntityId,
                     Amount = outcome.Delivered,
@@ -457,10 +457,14 @@ namespace Rasa.Managers
                     DamageType = trap.StrikeType,
                     IsCritical = crit,
                     DeathBlow = taken > 0 && victim.Attributes[Attributes.Health].Current <= 0
-                });
+                };
 
+                strike.Hits.Add(entry);
+
+                // A crit's side effect is announced by the strike (HitEffects).
                 if (crit && !outcome.Immune && victim.State != CharacterState.Dead && victim.State != CharacterState.Dying && victim.Attributes[Attributes.Health].Current > 0)
-                    CritEffects.OnCritical(mapChannel, victim, owner, trap.StrikeType, amount);
+                    using (HitEffects.On(victim, owner, entry.TargetEffectIds))
+                        CritEffects.OnCritical(mapChannel, victim, owner, trap.StrikeType, amount);
             }
 
             if (strike.Hits.Count > 0)

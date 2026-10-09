@@ -1374,6 +1374,10 @@ namespace Rasa.Managers
                         client,
                         MissionProgressEvent.AbilityHit((uint)action.ActionId, counted.DbId));
 
+                // What the hit puts on its target is announced by the hit, as the client plays it
+                // where the bolt lands (HitEffects): attached quietly and named in its entry.
+                var strikeMs = ShotFlight.Ms(System.Numerics.Vector3.Distance(player.Position, target.Position), info.Get(AbilityProperty.VfxVelocity));
+
                 // An enemy player still standing: what the hit does to a creature, with the player's
                 // own stun, knockback and pull (PlayerCrowdControl), for PVP_EFFECT_DURATION_MODIFIER
                 // of the time (Pvp).
@@ -1381,6 +1385,8 @@ namespace Rasa.Managers
                 {
                     if (taken > 0 && enemy.Attributes[Attributes.Health].Current > 0 && !Pvp.IsSafe(enemy))
                     {
+                        using var announced = HitEffects.On(enemy, player, hit.TargetEffectIds, strikeMs);
+
                         if (crit && !outcome.Immune)
                             CritEffects.OnCritical(mapChannel, enemy, player, damageType, amount);
 
@@ -1407,6 +1413,8 @@ namespace Rasa.Managers
 
                 if (creature.State != CharacterState.Dead && creature.State != CharacterState.Dying && creature.Attributes[Attributes.Health].Current > 0)
                 {
+                    using var announced = HitEffects.On(creature, player, hit.TargetEffectIds, strikeMs);
+
                     if (crit && !outcome.Immune)
                         CritEffects.OnCritical(mapChannel, creature, player, damageType, amount);
 

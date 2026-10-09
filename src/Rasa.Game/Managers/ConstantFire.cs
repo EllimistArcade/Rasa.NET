@@ -285,7 +285,7 @@ namespace Rasa.Managers
 
                 pulse.Add(shot);
 
-                // The crit's effect on a creature is announced by this shot of the pulse (HitEffects).
+                // The crit's effect on a creature or an enemy player is announced by this shot of the pulse (HitEffects).
                 if (crit && !outcome.Immune && target.State != CharacterState.Dead && target.State != CharacterState.Dying && target.Attributes[Attributes.Health].Current > 0)
                     using (HitEffects.On(target, player, shot.TargetEffectIds))
                         CritEffects.OnCritical(mapChannel, target, player, damageType, amount);
@@ -412,7 +412,7 @@ namespace Rasa.Managers
             args.HitEntities.Add(target.EntityId);
             args.HitData.Add(hit);
 
-            // The crit's effect on a creature is announced by the release's hit, in the recovery that ends the fire (HitEffects).
+            // The crit's effect on a creature or an enemy player is announced by the release's hit, in the recovery that ends the fire (HitEffects).
             if (crit && !outcome.Immune && target.State != CharacterState.Dead && target.State != CharacterState.Dying && target.Attributes[Attributes.Health].Current > 0)
                 using (HitEffects.On(target, player, hit.TargetEffectIds))
                     CritEffects.OnCritical(mapChannel, target, player, session.DamageType, dealt);

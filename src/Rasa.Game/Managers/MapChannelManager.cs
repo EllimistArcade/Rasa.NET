@@ -298,7 +298,7 @@ namespace Rasa.Managers
             // Clan feuds whose time is up.
             Guard("ClanFeuds.Worker", null, () => ClanFeuds.Instance.Worker());
 
-            // Duel challenges that lapsed and duels whose time is up.
+            // Duel challenges that lapsed, duels whose time is up and duelists too far apart.
             Guard("Duels.Worker", null, () => Duels.Instance.Worker());
 
             // Squad wargame challenges that lapsed and squad wargames whose time is up.

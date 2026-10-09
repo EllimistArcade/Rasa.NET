@@ -261,6 +261,10 @@ namespace Rasa.Managers
             return _jobs.TryGetValue((station.EntityId, client.Player.Id), out var jobs) ? jobs : new List<CraftingJob>();
         }
 
+        /// <summary>Whether a job at any station is making an item of this template for the character.</summary>
+        private bool Makes(uint characterId, uint itemTemplateId) =>
+            _jobs.Any(entry => entry.Key.character == characterId && entry.Value.Any(job => job.ResultItemTemplateId == itemTemplateId && job.Count > 0));
+
         private List<CraftingJob> JobsForWriting(Client client, DynamicObject station)
         {
             var key = (station.EntityId, client.Player.Id);
@@ -427,6 +431,15 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Character Unique: not while one is held, or on a station waiting to be taken -
+            // decided before the ingredients go.
+            if (InventoryManager.IsCharacterUnique(result) &&
+                (!InventoryManager.Instance.MayReceive(player, result) || Makes(player.Id, result.ItemTemplateId)))
+            {
+                Fail(client, station, PlayerMessage.PmItemCharacterUnique);
+                return;
+            }
+
             if (recipe.EnergyCost > 0 &&
                 !_currencyManager.LossCredits(client, (int)recipe.EnergyCost))
             {
@@ -479,6 +492,13 @@ namespace Rasa.Managers
         /// </summary>
         private bool HandOver(Client client, CraftingJob job)
         {
+            // Character Unique: the job stays on the station while one is held.
+            if (!InventoryManager.Instance.MayReceive(client.Player, ItemManager.Instance.GetItemTemplateById(job.ResultItemTemplateId)))
+            {
+                InventoryManager.TellCharacterUnique(client);
+                return false;
+            }
+
             var classInfo = EntityClassManager.Instance.GetClassInfo((EntityClasses)job.ResultClassId);
             var stackSize = Math.Max(1u, classInfo?.ItemClassInfo?.StackSize ?? 1u);
 

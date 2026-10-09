@@ -956,6 +956,13 @@ namespace Rasa.Managers
                         return;
                     }
 
+                    // Character Unique: one of it already held stays on the corpse.
+                    if (!InventoryManager.Instance.MayReceive(client.Player, lootItem.Item?.ItemTemplate))
+                    {
+                        InventoryManager.TellCharacterUnique(client);
+                        return;
+                    }
+
                     Claim(client, loot, new[] { lootItem }, packet.DestSlot, false);
                 }
             }
@@ -1002,6 +1009,14 @@ namespace Rasa.Managers
                         .Where(item => item.MayTake(client.Player.EntityId))
                         .Where(item => !packet.AutoLootOnly || WithinThreshold(item, threshold))
                         .ToArray();
+
+                    // Character Unique: one of a template held, or a second of one, stays on the
+                    // corpse. Walking past it says nothing; it is sent every frame in reach.
+                    selected = InventoryManager.Instance.Receivable(client.Player, selected, item => item.Item?.ItemTemplate, out var refused).ToArray();
+
+                    if (refused && !packet.AutoLootOnly)
+                        InventoryManager.TellCharacterUnique(client);
+
                     Claim(client, loot, selected, null, true);
                 }
             }

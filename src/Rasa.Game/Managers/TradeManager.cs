@@ -262,6 +262,17 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Character Unique: the partner holds one that is not on offer from them, or one is on
+            // offer already. Complete asks again, as either side may change since.
+            var partner = session.PartnerOf(client);
+            if (InventoryManager.IsCharacterUnique(item.ItemTemplate) &&
+                (offered.Any(other => EntityManager.Instance.GetItem(other.EntityId)?.ItemTemplate?.ItemTemplateId == item.ItemTemplate.ItemTemplateId) ||
+                 !InventoryManager.Instance.MayReceive(partner.Player, item.ItemTemplate, OfferedIds(session.ItemsOf(partner)))))
+            {
+                Decline(client, PlayerMessage.PmItemCharacterUnique);
+                return;
+            }
+
             // Taken as it stands: the stack size and condition here are what the partner is shown
             // and what Complete holds the offer to.
             offered.Add(new TradeSession.OfferedItem(item));
@@ -371,6 +382,16 @@ namespace Rasa.Managers
                 || !StillHolds(a, session.InitiatorItems)
                 || !StillHolds(b, session.TargetItems))
             {
+                End(session, notifyPartnerOf: null, message: PlayerMessage.PmTradeCancelled);
+                return;
+            }
+
+            // Character Unique: neither side may end up with two of one, counting what each gives away.
+            if (!InventoryManager.Instance.MayReceive(b.Player, Templates(session.InitiatorItems), OfferedIds(session.TargetItems))
+                || !InventoryManager.Instance.MayReceive(a.Player, Templates(session.TargetItems), OfferedIds(session.InitiatorItems)))
+            {
+                Decline(a, PlayerMessage.PmItemCharacterUnique);
+                Decline(b, PlayerMessage.PmItemCharacterUnique);
                 End(session, notifyPartnerOf: null, message: PlayerMessage.PmTradeCancelled);
                 return;
             }
@@ -718,6 +739,12 @@ namespace Rasa.Managers
         /// Says why, and nothing else. Refusing one item out of an offer must not take the trade
         /// window down with it - the players are still trading, they just cannot trade that.
         /// </summary>
+        private static HashSet<ulong> OfferedIds(IEnumerable<TradeSession.OfferedItem> offered) =>
+            offered.Select(item => item.EntityId).ToHashSet();
+
+        private static IEnumerable<ItemTemplate> Templates(IEnumerable<TradeSession.OfferedItem> offered) =>
+            offered.Select(item => EntityManager.Instance.GetItem(item.EntityId)?.ItemTemplate);
+
         private static void Decline(Client client, PlayerMessage message)
         {
             client.CallMethod(SysEntity.CommunicatorId,

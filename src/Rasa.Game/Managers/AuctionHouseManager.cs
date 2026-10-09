@@ -183,6 +183,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Character Unique: not for a buyer who holds one, listed ones included.
+            if (!InventoryManager.Instance.MayReceive(client.Player, item.ItemTemplate))
+            {
+                BuyoutFailed(client, packet.ItemId, PlayerMessage.PmItemCharacterUnique);
+                return;
+            }
+
             BuyoutResult result;
             lock (AuctionSyncRoot)
                 result = ConsumeBuyoutLocked(client, packet, item);

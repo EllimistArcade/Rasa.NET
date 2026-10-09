@@ -695,6 +695,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Character Unique: sold, it was no longer held, and one may have come since.
+            if (!InventoryManager.Instance.MayReceive(client.Player, item.ItemTemplate))
+            {
+                InventoryManager.TellCharacterUnique(client);
+                return;
+            }
+
             var unitPrice = Math.Max(item.ItemTemplate.SellPrice, 0);
             var price = (long) unitPrice * item.StackSize;
 
@@ -771,10 +778,9 @@ namespace Rasa.Managers
 
             // Character Unique ("Item is unique per character"): one per character. A stack is
             // still one item, so a unique stackable can be bought as one stack of any size.
-            if (vendorItem.ItemTemplate.HasCharacterUniqueFlag &&
-                InventoryManager.Instance.HoldsTemplate(client.Player, vendorItem.ItemTemplate.ItemTemplateId))
+            if (!InventoryManager.Instance.MayReceive(client.Player, vendorItem.ItemTemplate))
             {
-                client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmItemCharacterUnique, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+                InventoryManager.TellCharacterUnique(client);
                 return;
             }
 

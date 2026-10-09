@@ -1208,6 +1208,15 @@ namespace Rasa.Managers
                     return Reject($"Rejected mission {missionId} turn-in: no approved reward definition is loaded.");
                 if (rating.HasValue)
                     return Reject($"Rejected mission {missionId} turn-in: ratings are not supported.");
+                // Character Unique: a chosen reward of a template held is refused, so another can
+                // be chosen. A fixed one is left out of the grant (MissionRewardGrant.PlanAndSave).
+                if (selectionIndex is int chosen && chosen >= 0 && chosen < rewardDefinition.SelectableItems.Count &&
+                    !InventoryManager.Instance.MayReceive(client.Player,
+                        ItemManager.Instance.GetItemTemplateById(rewardDefinition.SelectableItems[chosen].ItemTemplateId)))
+                {
+                    InventoryManager.TellCharacterUnique(client);
+                    return Reject($"Rejected mission {missionId} turn-in: the chosen reward is Character Unique and already held.");
+                }
                 if (conversation?.Target.Creature is { } npc &&
                     (npc.Npc == null || npc.DbId != definition.MissionReciver))
                     return Reject($"Rejected mission {missionId} turn-in: NPC {npc.DbId} is not its authoritative receiver.");

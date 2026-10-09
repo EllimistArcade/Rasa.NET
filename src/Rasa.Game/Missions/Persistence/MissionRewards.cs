@@ -150,6 +150,7 @@ namespace Rasa.Managers
         private int _previousPrestige;
         private int _credits;
         private int _prestige;
+        private bool _withheldUnique;
 
         internal byte? PlannedLevel => _progression is { HasChanges: true } ? _progression.FinalLevel : null;
 
@@ -210,8 +211,12 @@ namespace Rasa.Managers
                     error);
             }
 
-            if (_items.Count > 0)
-                _inventory.PlanAndSave(client, _items, unitOfWork);
+            // Character Unique: a reward item of a template held, or a second of one, is left out
+            // and the player told; the rest of the reward stands.
+            var items = InventoryManager.Instance.Receivable(player, _items,
+                item => ItemManager.Instance.GetItemTemplateById(item.ItemTemplateId), out _withheldUnique);
+            if (items.Count > 0)
+                _inventory.PlanAndSave(client, items, unitOfWork);
             if (_experience > 0)
                 _progression = manifestationManager.PlanExperience(
                     client, _experience, durableCharacter, unitOfWork);
@@ -236,6 +241,8 @@ namespace Rasa.Managers
         internal void Publish(Client client, ManifestationManager manifestationManager)
         {
             _inventory.Publish(client);
+            if (_withheldUnique)
+                MissionApplication.TryPublish(() => InventoryManager.TellCharacterUnique(client), "mission reward Character Unique");
             MissionApplication.TryPublish(
                 () => manifestationManager.PublishExperience(client, _progression),
                 "mission experience");

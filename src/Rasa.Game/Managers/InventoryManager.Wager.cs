@@ -736,6 +736,23 @@ namespace Rasa.Managers
                         var moved = false;
                         uint inboxSlot = 0;
 
+                        // Character Unique: not to a recipient who holds one, logged in or not;
+                        // it stays with its owner, as one that does not fit does.
+                        if (recipientEntry != null && IsCharacterUnique(template))
+                        {
+                            var online = clients.FirstOrDefault(c => c.Player.Id == recipient)?.Player;
+                            var holds = online != null
+                                ? HoldsTemplate(online, template.ItemTemplateId)
+                                : HoldsTemplateStored(unitOfWork, recipientEntry.AccountId, recipient, template.ItemTemplateId);
+
+                            if (holds)
+                            {
+                                Logger.WriteLog(LogType.Debug, $"Wager: item {row.ItemId} is Character Unique and character {recipient} holds one; left with its owner.");
+                                result.Kept++;
+                                continue;
+                            }
+                        }
+
                         if (recipientEntry != null)
                             unitOfWork.ExecuteTransaction(() =>
                             {

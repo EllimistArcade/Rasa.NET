@@ -655,6 +655,14 @@ namespace Rasa.Managers
             if (swappedOut != 0 && !MayTakeFromHome(client, swappedOut))
                 return;
 
+            // Character Unique: the footlocker is the account's, so the item coming out may be a
+            // second of one held - another character put it there. Itself and the deposit aside.
+            if (swappedOut != 0 && !MayReceive(client.Player, EntityManager.Instance.GetItem(swappedOut)?.ItemTemplate, new[] { swappedOut, entityId }))
+            {
+                TellCharacterUnique(client);
+                return;
+            }
+
             // Where it goes is settled before anything moves: a refusal leaves both items alone.
             var returnSlot = swappedOut != 0 ? OwnTabSlot(client, swappedOut, packet.SrcSlot) : (int)packet.SrcSlot;
 
@@ -749,6 +757,14 @@ namespace Rasa.Managers
             // that the EntityManager does not have left the pack and arrived nowhere.
             if (depositedItem == null)
                 return;
+
+            // Character Unique: the lockbox's item may not be a second of one held, the deposit aside.
+            if (wasSwap && !MayReceive(client.Player,
+                    EntityManager.Instance.GetItem(client.Player.Inventory.ClanInventory[(int)packet.DestSlot])?.ItemTemplate, new[] { entityId }))
+            {
+                TellCharacterUnique(client);
+                return;
+            }
 
             // The lockbox's item comes out to a slot of its own tab (OwnTabSlot), settled
             // before anything moves.
@@ -1001,6 +1017,15 @@ namespace Rasa.Managers
             if (wasSwap && !packet.ManagePersonalSlot && !MayStore(client, client.Player.Inventory.PersonalInventory[(int)destSlot], true))
                 return;
 
+            // Character Unique: not a second of one held, the pack's item going the other way aside.
+            var leaving = wasSwap && !packet.ManagePersonalSlot ? new[] { client.Player.Inventory.PersonalInventory[(int)destSlot] } : null;
+
+            if (!MayReceive(client.Player, tempItem?.ItemTemplate, leaving))
+            {
+                TellCharacterUnique(client);
+                return;
+            }
+
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
 
             if (packet.ManagePersonalSlot)
@@ -1131,6 +1156,14 @@ namespace Rasa.Managers
             // A swap puts the pack's item in the footlocker.
             var swappedIn = client.Player.Inventory.PersonalInventory[(int)destSlot];
 
+            // Character Unique: the footlocker is the account's, so this may be a second of one
+            // held - another character put it there. Itself, and the pack's item going in, aside.
+            if (!MayReceive(client.Player, EntityManager.Instance.GetItem(entityId)?.ItemTemplate, new[] { entityId, swappedIn }))
+            {
+                TellCharacterUnique(client);
+                return;
+            }
+
             if (swappedIn != 0 && !MayStore(client, swappedIn, false))
                 return;
 
@@ -1215,11 +1248,14 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Whether the character already has an item of this template: carried, equipped, in a
-        /// weapon drawer, waiting in the inbox, or in the footlocker. The footlocker is the
-        /// account's, shared by all its characters, so there only an item bound to this
-        /// character - or to no one - is theirs. What Character Unique is tested against.
+        /// weapon drawer, waiting in the inbox, wagered, listed at an auction house (theirs
+        /// until it sells, and back to them if it does not), or in the footlocker. The
+        /// footlocker is the account's, shared by all its characters, so there only an item
+        /// bound to this character - or to no one - is theirs. The items in
+        /// <paramref name="except"/> are not counted: ones on their way out as the new one
+        /// comes in. What Character Unique is tested against (InventoryManager.Unique).
         /// </summary>
-        public bool HoldsTemplate(Manifestation player, uint itemTemplateId)
+        public bool HoldsTemplate(Manifestation player, uint itemTemplateId, ICollection<ulong> except = null)
         {
             var inventory = player?.Inventory;
 
@@ -1228,7 +1264,7 @@ namespace Rasa.Managers
 
             bool Is(ulong entityId, bool sharedLockbox)
             {
-                if (entityId == 0)
+                if (entityId == 0 || except != null && except.Contains(entityId))
                     return false;
 
                 var item = EntityManager.Instance.GetItem(entityId);
@@ -1239,7 +1275,7 @@ namespace Rasa.Managers
                 return !sharedLockbox || item.BoundCharacterId == 0 || item.BoundCharacterId == player.Id;
             }
 
-            foreach (var list in new[] { inventory.PersonalInventory, inventory.EquippedInventory, inventory.WeaponDrawer, inventory.InboxItems })
+            foreach (var list in new[] { inventory.PersonalInventory, inventory.EquippedInventory, inventory.WeaponDrawer, inventory.InboxItems, inventory.AuctionItems })
                 foreach (var entityId in list)
                     if (Is(entityId, false))
                         return true;

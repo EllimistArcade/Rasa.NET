@@ -2060,6 +2060,14 @@ namespace Rasa.Managers
                 SendCommandUsage(".giveitem");
                 return;
             }
+            // Character Unique: not a second of one held.
+            if ((parts.Length is 2 or 3) && uint.TryParse(parts[1], out var asked) &&
+                !InventoryManager.Instance.MayReceive(_client.Player, ItemManager.Instance.GetItemTemplateById(asked)))
+            {
+                CommunicatorManager.Instance.SystemMessage(_client, $"Item template {asked} is Character Unique, and you already have one.");
+                return;
+            }
+
             // if only item template, give max stack size
             if (parts.Length == 2)
                 if (uint.TryParse(parts[1], out uint itemTemplateId))

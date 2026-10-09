@@ -496,6 +496,39 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
+        public void ACharacterUniqueItemIsNotMailedToARecipientWhoHoldsOne()
+        {
+            using var context = Context(out var loser, out var inventory);
+            var winner = context.CreateAdditionalClient(2);
+            context.SeedCharacter(3, 0, 3);
+            context.SeedCharacter(4, 0, 4);
+
+            var losers = Clan(context, "Losers", (1, ClanRank.Leader), (3, ClanRank.Member));
+            var winners = Clan(context, "Winners", (2, ClanRank.Leader), (4, ClanRank.Member));
+
+            Join(loser, losers);
+            Join(winner, winners);
+            FillLockbox(context, winners.Id);
+
+            // Character 4, not in the world, has one in their pack already.
+            using (var unit = context.CreateChar())
+                unit.CharacterInventories.AddInvItem(4, 4, (uint)InventoryType.Personal, 0, Stored(context, unit, 9070));
+
+            var wagered = Gear(context, loser, 9070, 0, shape: template => template.HasCharacterUniqueFlag = true);
+            inventory.WagerItem(loser, new WagerItemPacket { Slot = 0 });
+            context.Drain();
+
+            var result = inventory.ForfeitWagers(losers.Id, winners.Id, 4, "Losers", "Winners");
+
+            Assert.AreEqual(0, result.Mailed);
+            Assert.AreEqual(1, result.Kept, "left with its owner, as one with nowhere to go is");
+
+            using var check = context.CreateChar();
+            Assert.AreEqual((uint)InventoryType.WagerInventory, check.CharacterInventories.FindByItemId(wagered.Id).InventoryType);
+            Assert.AreEqual(wagered.EntityId, loser.Player.Inventory.WagerItem);
+        }
+
+        [TestMethod]
         public void WithTheLockboxFullTheyAreMailedToTheWinnersCharacterOfTheChallenge()
         {
             using var context = Context(out var loser, out var inventory);

@@ -335,6 +335,18 @@ namespace Rasa.Managers
             if (!target.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
                 return 0;
 
+            // A player's damage, or their creature's, lands on another player only across a
+            // wargame they are on opposite sides of (Pvp.AreEnemies). What a duel, a feud or a
+            // battleground left behind used to go on landing after it ended - a damage-over-time
+            // effect ticking on, a turret on its old aim, a shot in flight - and could kill, with
+            // Rez Trauma and equipment wear as any death. It lands as Immune, as a hit PvP Safety
+            // stops.
+            if (Pvp.IsPvp(source, target) && !Pvp.AreEnemies(Pvp.Controller(source), (Manifestation)target))
+            {
+                outcome = new DamageOutcome { Immune = true };
+                return 0;
+            }
+
             // Immune: nothing taken, nothing started - a creature running home after a leash
             // (BehaviorManager.Leash) does not turn round for it. Nor a player's hit on a player
             // who holds PvP Safety. A fresh hit on an enemy player ends the attacker's own Safety

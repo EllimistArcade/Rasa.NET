@@ -769,6 +769,15 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A player's on a player who is no longer their enemy - the duel, feud or battleground
+            // it was put on in has ended (Pvp.AreEnemies): it would land on nobody it may hurt, and
+            // comes off. It used to tick on, and could kill.
+            if (effect.TickRadius <= 0 && Pvp.IsPvp(source, actor) && !Pvp.AreEnemies(Pvp.Controller(source), (Manifestation)actor))
+            {
+                DettachEffect(mapChannel, actor, effect);
+                return;
+            }
+
             var targets = new List<Actor>();
 
             if (effect.TickRadius > 0)

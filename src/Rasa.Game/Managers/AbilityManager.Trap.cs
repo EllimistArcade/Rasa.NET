@@ -311,7 +311,7 @@ namespace Rasa.Managers
             var turret = trap.Creature;
 
             if (trap.Aim == null || trap.Aim.State == CharacterState.Dead || trap.Aim.State == CharacterState.Dying
-                || Vector3.Distance(trap.Aim.Position, turret.Position) > trap.Range)
+                || Vector3.Distance(trap.Aim.Position, turret.Position) > trap.Range || !StillAFoe(trap.Owner, trap.Aim))
                 trap.Aim = FoesWithin(mapChannel, trap.Owner, turret.Position, trap.Range)
                     .Where(c => c.State != CharacterState.Dead && c.State != CharacterState.Dying)
                     .OrderBy(c => Vector3.DistanceSquared(c.Position, turret.Position))
@@ -373,6 +373,19 @@ namespace Rasa.Managers
 
             CellManager.Instance.CellCallMethod(turret, tick);
         }
+
+        /// <summary>
+        /// Whether what a turret is aiming at is still one it would pick (FoesWithin): an enemy
+        /// player without PvP Safety, or a creature its owner's summons go after. The aim is kept
+        /// from shot to shot, and used to be kept after the duel, feud or battleground that made a
+        /// player an enemy had ended, for as long as the turret lasted.
+        /// </summary>
+        private static bool StillAFoe(Manifestation owner, Actor aim) => aim switch
+        {
+            Manifestation player => Pvp.AreEnemies(owner, player) && !Pvp.IsSafe(player),
+            Creature creature => TargetCategories.AlliesSeek(creature.TargetCategory) || Pvp.IsEnemySummon(owner, creature),
+            _ => false
+        };
 
         /// <summary>No one to shoot: the fire effect comes off and the attack is ended on the clients.</summary>
         private static void StopTrapFire(Trap trap)

@@ -2122,10 +2122,21 @@ namespace Rasa.Managers
                 client.State = ClientState.Ingame;
                 Maps.ResumeMissionScenes(client);
                 ManifestationManager.Instance.FinishArrival(client);
-                client.CallMethod(client.Player.EntityId, new TeleportArrivalPacket());
 
-                // Through a passage: everyone already at the far end sees them arrive as well
-                // (actor.py _PlayTeleportArrivalFX), as at a dropship's pad.
+                // No TeleportArrival to the player's own client: it plays its own arrival when
+                // the Teleport's delay is up (actor.py _TelportMovementCompleted), and that is also
+                // where it resets its movement controller to where the MoveObject put the body
+                // and loads the area round it. Their client sends this acknowledgement from
+                // Recv_Teleport itself, so an arrival sent back for it could reach the client
+                // before that delay was up, and _PlayTeleportArrivalFX takes away the
+                // tmp_teleportType _TelportMovementCompleted needs: the arrival played, but the
+                // controller kept the player where they had stood and nothing round the far end
+                // was loaded. Seen at the Alia Caverns alcove, where the player stands still in
+                // the effect: they came back where they had gone in, the alcove (an entity, out
+                // of sight of the far end) faded, and the next step put them in the shrine.
+                //
+                // Through a passage: everyone already at the far end sees them arrive (actor.py
+                // _PlayTeleportArrivalFX), as at a dropship's pad.
                 if (transfer.IsPassage)
                     client.CellIgnoreSelfCallMethod(client, new TeleportArrivalPacket());
 

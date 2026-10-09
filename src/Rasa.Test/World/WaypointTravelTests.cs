@@ -12,6 +12,7 @@ namespace Rasa.Test.World
     using Rasa.Data;
     using Rasa.Game;
     using Rasa.Managers;
+    using Rasa.Packets.ClientMethod.Server;
     using Rasa.Packets.MapChannel.Client;
     using Rasa.Packets.MapChannel.Server;
     using Rasa.Packets.Protocol;
@@ -70,6 +71,13 @@ namespace Rasa.Test.World
             Assert.AreEqual(ClientState.Ingame, client.State);
             Assert.IsNull(client.PendingTransfer);
             Assert.AreEqual(1, saved);
+
+            // Their client plays its own arrival when the Teleport's delay is up, and resets its
+            // movement controller there; one sent back for the answer could beat it to it.
+            var answered = WorldTestContext.Drain(client).Select(p => p.Message).OfType<CallMethodMessage>().Select(p => p.Packet).ToList();
+            Assert.IsFalse(answered.OfType<TeleportArrivalPacket>().Any());
+            Assert.AreEqual(1, answered.OfType<UnrequestMovementBlockPacket>().Count());
+
             manager.TeleportAcknowledge(client);
             Assert.AreEqual(1, saved);
         }

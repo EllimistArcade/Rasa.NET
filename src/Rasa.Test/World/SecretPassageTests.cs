@@ -268,7 +268,8 @@ namespace Rasa.Test.World
             Assert.AreEqual(ClientState.Ingame, client.State);
             Assert.IsNull(client.PendingTransfer);
             Assert.AreEqual(1, saved);
-            Assert.IsTrue(Methods(client).Any(packet => packet is TeleportArrivalPacket), "no teleport effect where they arrived");
+            Assert.IsFalse(Methods(client).Any(packet => packet is TeleportArrivalPacket),
+                "their own client plays the arrival when the Teleport's delay is up; one sent back can beat it and stop it resetting");
 
             // To the logos and back down the corridor, as ordinary steps.
             player.MoveBudget = 60;
@@ -353,7 +354,7 @@ namespace Rasa.Test.World
             manager.TeleportAcknowledge(client);
 
             Assert.IsTrue(Methods(atTheShrine).Any(packet => packet is TeleportArrivalPacket), "the shrine does not see them arrive");
-            Assert.IsTrue(Methods(client).Any(packet => packet is TeleportArrivalPacket));
+            Assert.IsFalse(Methods(client).Any(packet => packet is TeleportArrivalPacket));
             Assert.AreEqual(ClientState.Ingame, client.State);
         }
 

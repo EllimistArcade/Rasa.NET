@@ -218,7 +218,10 @@ namespace Rasa.Managers
             tick.Pulses.Add(pulse);
 
             // A propellant gun sprays the cone in front of the shooter; the others hit what they aim
-            // at. An enemy player across a wargame is a target like a creature (Pvp).
+            // at, if it is something the player may attack (AbilityManager.IsAttackable): a HOSTILE
+            // or NEUTRAL creature, an enemy's creature, or an enemy player across a wargame. Any
+            // creature at all used to do: a vendor, a mission NPC or a friend's turret could be
+            // shot dead with a machine gun, a leech gun or a polarity gun, as no missile can.
             var targets = new List<Actor>();
             List<Actor> pool = null;
             var poolReach = 0f;
@@ -237,7 +240,7 @@ namespace Rasa.Managers
                 pool = targets.Where(target => target.State != CharacterState.Dead && target.State != CharacterState.Dying).ToList();
                 poolReach = range - ConeWeapons.RangeSlack;
             }
-            else if (ResolveTarget(mapChannel, player) is Actor aimed && (aimed is Creature || Pvp.IsEnemyTarget(player, aimed)))
+            else if (ResolveTarget(mapChannel, player) is Actor aimed && AbilityManager.IsAttackable(player, aimed))
                 targets.Add(aimed);
             else if (PersonalWaypoints.TakeDamage(player, player.Target, damage) is int taken)
             {
@@ -379,10 +382,11 @@ namespace Rasa.Managers
             if (amount <= 0 || session.ChargeTargetId == 0)
                 return;
 
-            // A creature, or an enemy player who is still one (Pvp).
+            // Still one the player may attack, as the pulses' target had to be: a creature that
+            // changed sides, or an enemy player who no longer is one (Pvp), takes nothing.
             if (!(EntityManager.Instance.GetActor(session.ChargeTargetId) is Actor target) || target.MapContextId != mapChannel.MapInfo.MapContextId
                 || target.State == CharacterState.Dead || target.State == CharacterState.Dying
-                || !(target is Creature || Pvp.IsEnemyTarget(player, target)))
+                || !AbilityManager.IsAttackable(player, target))
                 return;
 
             var crit = CriticalHits.Resolve(player, target, false, CriticalHits.AttackerChance(player, false, session.CritBonus), ref amount);

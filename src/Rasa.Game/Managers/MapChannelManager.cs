@@ -394,6 +394,9 @@ namespace Rasa.Managers
                     // Fithik egg clusters someone has walked onto hatch, and grow back.
                     Guard("FithikEggClusters.Worker", mapChannel, () => FithikEggClusters.Worker(mapChannel));
 
+                    // Bane tunnel doors open as a player comes up to one, and close behind them.
+                    Guard("TunnelDoors.Worker", mapChannel, () => TunnelDoors.Worker(mapChannel));
+
                     // Crab Mines: seeking, running, going off.
                     Guard("AbilityManager.CrabMineWorker", mapChannel, () => AbilityManager.Instance.CrabMineWorker(mapChannel));
 
@@ -1545,6 +1548,9 @@ namespace Rasa.Managers
 
             // Nor are the ambient figures: rows by map (ambient_npc).
             AmbientNpcs.Place(map);
+
+            // Nor the doors of the Bane tunnel mouths (TunnelDoors).
+            TunnelDoors.Place(map);
         }
     }
 }

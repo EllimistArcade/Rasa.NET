@@ -476,6 +476,8 @@ namespace Rasa.Managers
                 SetCredits(b, targetCredits);
             }
 
+            RecordTrade(a, b, toB, toA, session.InitiatorCredits, session.TargetCredits, initiatorCredits, targetCredits);
+
             Logger.WriteLog(LogType.Security,
                 $"Trade completed: {a.Player.FamilyName} gave {session.InitiatorCredits} credits and "
                 + $"{session.InitiatorItems.Count} item(s), {b.Player.FamilyName} gave {session.TargetCredits} credits and "
@@ -489,6 +491,34 @@ namespace Rasa.Managers
                 participant.CallMethod(SysEntity.CommunicatorId,
                     new DisplayClientMessagePacket(PlayerMessage.PmTradeCompleted, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
             }
+        }
+
+        /// <summary>
+        /// Puts a completed trade on the economy log: each item a row for the giver and one for
+        /// the receiver, and each side's credits the same, with the purses as they now are.
+        /// </summary>
+        private static void RecordTrade(Client a, Client b, List<ItemMove> toB, List<ItemMove> toA,
+            int fromA, int fromB, int balanceA, int balanceB)
+        {
+            var idA = a.Player.Id;
+            var idB = b.Player.Id;
+            var lines = new List<Structures.Char.EconomyLogEntry>();
+
+            foreach (var move in toB.Concat(toA))
+            {
+                var stack = (int)move.Item.StackSize;
+                var giverIsA = move.From == a;
+
+                lines.Add(EconomyAudit.ItemLine(move.From, move.Item, -stack, giverIsA ? idB : idA));
+                lines.Add(EconomyAudit.ItemLine(move.To, move.Item, stack, giverIsA ? idA : idB));
+            }
+
+            lines.Add(EconomyAudit.MoneyLine(a, CurencyType.Credits, -fromA, balanceA, idB));
+            lines.Add(EconomyAudit.MoneyLine(b, CurencyType.Credits, fromA, balanceB, idA));
+            lines.Add(EconomyAudit.MoneyLine(b, CurencyType.Credits, -fromB, balanceB, idA));
+            lines.Add(EconomyAudit.MoneyLine(a, CurencyType.Credits, fromB, balanceA, idB));
+
+            EconomyAudit.Instance.Record(Structures.Char.EconomyLogKind.Trade, 0, lines);
         }
 
         /// <summary>One offered item and where it is going.</summary>

@@ -1223,6 +1223,19 @@ namespace Rasa.Managers
                     other.Recipient.Player.Credits[CurencyType.Credits] = other.After;
             }
 
+            // The looter's share and prestige; each squad member's share, the looter on its other side.
+            var looted = new List<EconomyLogEntry>
+            {
+                creditsGranted ? EconomyAudit.MoneyLine(client, CurencyType.Credits, ownShare, creditsAfter) : null,
+                prestigeGranted ? EconomyAudit.MoneyLine(client, CurencyType.Prestige, prestigeAfter - currentPrestige, prestigeAfter) : null
+            };
+
+            if (includeCredits)
+                looted.AddRange(others.Select(other =>
+                    EconomyAudit.MoneyLine(other.Recipient, CurencyType.Credits, other.Share, other.After, client.Player.Id)));
+
+            EconomyAudit.Instance.Record(EconomyLogKind.Loot, (uint)loot.EntityClassId, looted);
+
             if (!loot.HasLoot)
             {
                 loot.FullyLooted = true;

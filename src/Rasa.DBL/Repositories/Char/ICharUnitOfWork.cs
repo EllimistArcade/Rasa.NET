@@ -66,6 +66,8 @@
             throw new System.NotSupportedException("This character unit of work has no REST API log.");
         ChatLog.IChatLogRepository ChatLogs =>
             throw new System.NotSupportedException("This character unit of work has no chat log.");
+        EconomyLog.IEconomyLogRepository EconomyLogs =>
+            throw new System.NotSupportedException("This character unit of work has no economy log.");
         CharacterBossKill.ICharacterBossKillRepository CharacterBossKills =>
             throw new System.NotSupportedException("This character unit of work has no boss kill store.");
         CharacterGreetingRead.ICharacterGreetingReadRepository CharacterGreetingReads =>

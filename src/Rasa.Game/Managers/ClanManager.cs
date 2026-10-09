@@ -446,6 +446,9 @@ namespace Rasa.Managers
 
             // Cache the newly created clan
             RegisterClan(clan);
+
+            EconomyAudit.Instance.Record(EconomyLogKind.ClanCreation, clan.Id,
+                EconomyAudit.MoneyLine(client, CurencyType.Credits, -_requiredCreditsForClanCreation));
         }
 
         internal void KickPlayerFromClan(Client client, KickPlayerFromClanPacket packet)

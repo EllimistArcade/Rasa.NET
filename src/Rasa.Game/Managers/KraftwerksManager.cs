@@ -447,6 +447,10 @@ namespace Rasa.Managers
                 return;
             }
 
+            if (recipe.EnergyCost > 0)
+                EconomyAudit.Instance.Record(Structures.Char.EconomyLogKind.Crafting, recipe.TemplateId,
+                    EconomyAudit.MoneyLine(client, CurencyType.Credits, -(long)recipe.EnergyCost));
+
             // Everything checked; now take the ingredients. The schematic stays.
             foreach (var input in recipe.Inputs)
             {

@@ -152,6 +152,9 @@ namespace Rasa.Managers
         private int _prestige;
         private bool _withheldUnique;
 
+        /// <summary>The mission it rewards, for the economy log.</summary>
+        internal uint MissionId { get; set; }
+
         internal byte? PlannedLevel => _progression is { HasChanges: true } ? _progression.FinalLevel : null;
 
         internal MissionRewardGrant(
@@ -236,6 +239,10 @@ namespace Rasa.Managers
             }
             client.Player.Credits[CurencyType.Credits] = _credits;
             client.Player.Credits[CurencyType.Prestige] = _prestige;
+
+            EconomyAudit.Instance.Record(EconomyLogKind.MissionReward, MissionId,
+                EconomyAudit.MoneyLine(client, CurencyType.Credits, (long)_credits - _previousCredits, _credits),
+                EconomyAudit.MoneyLine(client, CurencyType.Prestige, (long)_prestige - _previousPrestige, _prestige));
         }
 
         internal void Publish(Client client, ManifestationManager manifestationManager)

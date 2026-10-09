@@ -674,7 +674,9 @@ namespace Rasa.Managers
             // its sell price. Adding an item that was already there merged it with itself and
             // wrote the doubled stack to the row, then inserted a second inventory row for the
             // same item id; on the next login the player had two of it, both doubled.
-            if (NpcInReach(client, packet.VendorEntityId, IsVendorNpc, "a vendor") == null)
+            var vendorNpc = NpcInReach(client, packet.VendorEntityId, IsVendorNpc, "a vendor");
+
+            if (vendorNpc == null)
                 return;
 
             var buyback = client.Player.Inventory.BuybackItems;
@@ -739,6 +741,7 @@ namespace Rasa.Managers
                     Logger.WriteLog(LogType.Error,
                         $"Could not refund partial buyback purchase for character {client.Player.Id}.");
                 price = (long) unitPrice * placed;
+                quantity = placed;
             }
             else
             {
@@ -746,6 +749,9 @@ namespace Rasa.Managers
                 client.CallMethod(SysEntity.ClientInventoryManagerId, new RemoveBuybackItemPacket(packet.ItemEntityId));
             }
 
+            EconomyAudit.Instance.Record(Structures.Char.EconomyLogKind.VendorBuyback, vendorNpc.Npc?.Vendor?.VendorPackageId ?? 0,
+                EconomyAudit.ItemLine(client, placedItem ?? item, (int)quantity),
+                EconomyAudit.MoneyLine(client, CurencyType.Credits, -price));
         }
 
         public void RequestVendorPurchase(Client client, RequestVendorPurchasePacket packet)
@@ -882,6 +888,11 @@ namespace Rasa.Managers
             // name where the class has one, the number where it has not.
             client.CallMethod(SysEntity.ClientMethodId, new GotLootPacket(packet.VendorEntityId,
                 (uint)vendorItem.ItemTemplate.Class, quantity, placedItem?.EntityId ?? 0));
+
+            // The stack it went into when it was merged whole; the bought row otherwise.
+            EconomyAudit.Instance.Record(Structures.Char.EconomyLogKind.VendorBuy, vendor.VendorPackageId,
+                EconomyAudit.ItemLine(client, placedItem ?? boughtItem, (int)quantity),
+                EconomyAudit.MoneyLine(client, currency, -total));
         }
 
         /// <summary>
@@ -1014,6 +1025,17 @@ namespace Rasa.Managers
             // Mended, a broken item's modules count again (ItemModuleBonuses).
             client.Player.ModulesChanged = true;
 
+            // The sum's row names the item it mended.
+            var paid = EconomyAudit.MoneyLine(client, CurencyType.Credits, -cost);
+
+            if (paid != null)
+            {
+                paid.ItemId = item.Id;
+                paid.ItemTemplateId = item.ItemTemplate.ItemTemplateId;
+            }
+
+            EconomyAudit.Instance.Record(Structures.Char.EconomyLogKind.VendorRepair, 0, paid);
+
             // Worn armour that is being worn gave less to the armour bar than it will now.
             if (client.Player.Inventory.EquippedInventory.Contains(itemEntityId)
                 && EntityClassManager.Instance.GetClassInfo(item.ItemTemplate.Class)?.ArmorClassInfo != null)
@@ -1029,7 +1051,9 @@ namespace Rasa.Managers
             if (packet.Quantity <= 0)
                 return;
 
-            if (NpcInReach(client, packet.VendorEntityId, IsVendorNpc, "a vendor") == null)
+            var vendorNpc = NpcInReach(client, packet.VendorEntityId, IsVendorNpc, "a vendor");
+
+            if (vendorNpc == null)
                 return;
 
             // Sold already, or also held somewhere a sale does not clear. An item is in one list
@@ -1092,6 +1116,9 @@ namespace Rasa.Managers
                 !_currencyManager.GainCredits(client, (int)sellPrice))
                 return;
 
+            // What left the pack: the item it was in, even when part of a stack is split off below.
+            var soldFrom = soldItem;
+
             if (quantity < soldItem.StackSize)
             {
                 // Selling part of a stack. The whole stack used to go, for the price of the part:
@@ -1131,6 +1158,10 @@ namespace Rasa.Managers
 
             buyback.Add(soldItem.EntityId);
             client.CallMethod(SysEntity.ClientInventoryManagerId, new AddBuybackItemPacket(soldItem.EntityId, (int) sellPrice, buyback.Count));
+
+            EconomyAudit.Instance.Record(Structures.Char.EconomyLogKind.VendorSell, vendorNpc.Npc?.Vendor?.VendorPackageId ?? 0,
+                EconomyAudit.ItemLine(client, soldFrom, -(int)quantity),
+                EconomyAudit.MoneyLine(client, CurencyType.Credits, sellPrice));
         }
 
         /// <summary>What an item on the buyback list costs to buy back: what it sold for, its unit sell price times the stack.</summary>

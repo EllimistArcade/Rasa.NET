@@ -1554,7 +1554,11 @@ namespace Rasa.Managers
             // count, and the item being in the named inventory - are all established above, so
             // once it is reached it consumes.
             InventoryManager.Instance.ReduceStackCount(client, InventoryType.Personal, item, redeemed);
-            GainCredits(client, (int)redeemed);
+            var paid = GainCredits(client, (int)redeemed);
+
+            EconomyAudit.Instance.Record(Structures.Char.EconomyLogKind.TransferCredit, item.Id,
+                EconomyAudit.ItemLine(client, item, -(int)redeemed),
+                paid ? EconomyAudit.MoneyLine(client, CurencyType.Credits, redeemed) : null);
 
             Logger.WriteLog(LogType.Security,
                 $"Transfer credit used: {client.Player.FamilyName} redeemed {redeemed} slip(s) from item {item.Id} for {redeemed} credits"

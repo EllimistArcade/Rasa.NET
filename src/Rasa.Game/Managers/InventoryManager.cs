@@ -307,6 +307,9 @@ namespace Rasa.Managers
                 return;
             }
 
+            EconomyAudit.Instance.Record(EconomyLogKind.LockboxTab, (uint)packet.TabId,
+                EconomyAudit.MoneyLine(client, CurencyType.Credits, -(long)price));
+
             // update Player
             client.Player.LockboxTabs = packet.TabId;
             // send data to client
@@ -1442,6 +1445,10 @@ namespace Rasa.Managers
 
             client.CallMethod(client.Player.EntityId, new UpdateCreditsPacket(CurencyType.Credits, (int)purseAfter, (int)(purseAfter - purse)));
             client.CallMethod(client.Player.EntityId, new LockboxFundsPacket((int)lockboxAfter));
+
+            // Into the lockbox is out of the purse: the row is the purse's.
+            EconomyAudit.Instance.Record(EconomyLogKind.LockboxCredits, 0,
+                EconomyAudit.MoneyLine(client, CurencyType.Credits, -amount, purseAfter));
         }
 
         /// <summary>
@@ -1761,6 +1768,9 @@ namespace Rasa.Managers
 
             client.Player.Credits[currency] = (int)playerAfter;
             client.CallMethod(client.Player.EntityId, new UpdateCreditsPacket(currency, (int)playerAfter, (int)-amount));
+
+            EconomyAudit.Instance.Record(EconomyLogKind.ClanBank, client.Player.ClanId,
+                EconomyAudit.MoneyLine(client, currency, -amount, playerAfter));
 
             var lockboxCredits = creditType == 1 ? (uint)lockboxAfter : clanInfo.Credits;
             var lockboxPrestige = creditType == 2 ? (uint)lockboxAfter : clanInfo.Prestige;

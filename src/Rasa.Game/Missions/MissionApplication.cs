@@ -1268,6 +1268,7 @@ namespace Rasa.Managers
                             grant = rewardDefinition.CreateGrant(
                                 selectionIndex,
                                 _beforeRewardItemPublication);
+                            grant.MissionId = missionId;
                             grant.PlanAndSave(client, character, unitOfWork, _manifestationManager);
                             var progressEvents = grant.CreateItemAcquisitionEvents();
                             if (publishCompleted)

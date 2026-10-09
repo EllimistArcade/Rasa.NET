@@ -98,6 +98,9 @@ namespace Rasa.Game
             // And the chat log: every line of chat a player sends.
             ChatAudit.Instance.Load(new ChatAudit.ServerStore(gameUnitOfWorkFactory));
 
+            // And the economy log: items, credits and prestige that change hands.
+            EconomyAudit.Instance.Load(new EconomyAudit.ServerStore(gameUnitOfWorkFactory));
+
             Configuration.OnLoad += ConfigLoaded;
             Configuration.OnReLoad += ConfigReLoaded;
             Configuration.Load();

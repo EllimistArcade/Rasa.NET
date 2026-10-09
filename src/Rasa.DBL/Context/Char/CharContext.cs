@@ -66,6 +66,7 @@ namespace Rasa.Context.Char
         public DbSet<PvpMatchWagerEntry> PvpMatchWagerEntries { get; set; }
         public DbSet<GmCommandLogEntry> GmCommandLogEntries { get; set; }
         public DbSet<ChatLogEntry> ChatLogEntries { get; set; }
+        public DbSet<EconomyLogEntry> EconomyLogEntries { get; set; }
         public DbSet<ApiLogEntry> ApiLogEntries { get; set; }
         public DbSet<SquadInstanceEntry> SquadInstanceEntries { get; set; }
         public DbSet<SquadInstancePoolEntry> SquadInstancePoolEntries { get; set; }

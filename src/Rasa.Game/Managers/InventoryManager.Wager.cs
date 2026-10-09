@@ -795,6 +795,16 @@ namespace Rasa.Managers
                         result.Mailed++;
                     }
 
+                    // Off the loser; to the recipient when it was mailed, and to the clan - no
+                    // character - when it went to the lockbox (which has its own log as well).
+                    var stack = (int)Math.Max(1u, itemData.StackSize);
+                    var mailedTo = wager.Result == (byte)PvpWagerResult.PickUpBox ? recipient : 0;
+                    EconomyAudit.Instance.Record(EconomyLogKind.Wager, winnerClanId,
+                        EconomyAudit.ItemLine(row.CharacterId, ownerClient?.AccountEntry?.Id ?? 0, row.ItemId, template.ItemTemplateId,
+                            -stack, mailedTo, owner?.MapContextId ?? 0),
+                        mailedTo == 0 ? null : EconomyAudit.ItemLine(recipient, recipientEntry.AccountId, row.ItemId, template.ItemTemplateId,
+                            stack, row.CharacterId));
+
                     if (ownerClient != null && ownerClient.State == ClientState.Ingame)
                         CommunicatorManager.Instance.SystemMessage(ownerClient, members.Contains(row.CharacterId)
                             ? $"Your clan lost its feud with {winnerClanName}: your wagered item is forfeit to them."

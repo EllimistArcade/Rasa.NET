@@ -1454,6 +1454,84 @@ namespace Rasa.Migrations.MySqlChar
                     b.ToTable("control_point_state");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.Char.EconomyLogEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<uint>("Id"));
+
+                    b.Property<uint>("AccountId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("account_id");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount");
+
+                    b.Property<long>("Balance")
+                        .HasColumnType("bigint")
+                        .HasColumnName("balance");
+
+                    b.Property<uint>("CharacterId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("character_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<byte>("Currency")
+                        .HasColumnType("tinyint unsigned")
+                        .HasColumnName("currency");
+
+                    b.Property<uint>("ItemId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("item_id");
+
+                    b.Property<uint>("ItemTemplateId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("item_template_id");
+
+                    b.Property<byte>("Kind")
+                        .HasColumnType("tinyint unsigned")
+                        .HasColumnName("kind");
+
+                    b.Property<uint>("MapContextId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("map_context_id");
+
+                    b.Property<uint>("OtherCharacterId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("other_character_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int")
+                        .HasColumnName("quantity");
+
+                    b.Property<uint>("ReferenceId")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("reference_id");
+
+                    b.Property<string>("TransferId")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("transfer_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "CharacterId" }, "economy_log_index_character_id");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "economy_log_index_created_at");
+
+                    b.HasIndex(new[] { "ItemId" }, "economy_log_index_item_id");
+
+                    b.HasIndex(new[] { "TransferId" }, "economy_log_index_transfer_id");
+
+                    b.ToTable("economy_log");
+                });
             modelBuilder.Entity("Rasa.Structures.Char.FriendEntry", b =>
                 {
                     b.Property<uint>("AccountId")

@@ -93,6 +93,7 @@ namespace Rasa.Managers
         {
             internal Item Item { get; init; }
             internal uint SellerId { get; init; }
+            internal uint SellerAccountId { get; init; }
             internal uint InboxSlot { get; init; }
         }
 
@@ -265,6 +266,17 @@ namespace Rasa.Managers
                 new AuctionBuyoutSuccessPacket(item.EntityId),
                 $"auction item {item.Id} buyout result");
             result.ProgressPlan.Publish(client);
+
+            // The item left its seller when it was listed (AuctionListed): the buyer has it from
+            // the auction house, and the seller the price.
+            var sellerId = result.Auction.SellerId;
+            var buyerId = client.Player.Id;
+            var price = (long)result.Auction.Price;
+            EconomyAudit.Instance.Record(EconomyLogKind.AuctionSold, item.Id,
+                EconomyAudit.ItemLine(client, item, (int)item.StackSize, sellerId),
+                EconomyAudit.MoneyLine(client, CurencyType.Credits, -price, result.BuyerCredits, sellerId),
+                EconomyAudit.MoneyLine(sellerId, seller?.AccountEntry?.Id ?? 0, CurencyType.Credits, price, result.SellerCredits,
+                    buyerId, seller?.Player?.MapContextId ?? 0));
 
             // The buyer is the one asking, so they are logged in and it is in their inbox now.
             Unlist(item, true);
@@ -495,6 +507,9 @@ namespace Rasa.Managers
             client.CallMethod(SysEntity.ClientAuctionHouseManagerId,
                 new CancelAuctionSuccessPacket(packet.ItemEntityId));
 
+            EconomyAudit.Instance.Record(EconomyLogKind.AuctionCancelled, result.Item.Id,
+                EconomyAudit.ItemLine(client, result.Item, (int)result.Item.StackSize));
+
             Unlist(result.Item, true);
         }
 
@@ -682,6 +697,10 @@ namespace Rasa.Managers
 
             client.CallMethod(SysEntity.ClientInventoryManagerId, new AddAuctionItemPacket(item.EntityId));
             client.CallMethod(SysEntity.ClientAuctionHouseManagerId, new AuctionCreationSuccessPacket(item.EntityId));
+
+            EconomyAudit.Instance.Record(EconomyLogKind.AuctionListed, item.Id,
+                EconomyAudit.ItemLine(client, item, -(int)item.StackSize),
+                EconomyAudit.MoneyLine(client, CurencyType.Credits, -(long)deposit));
         }
 
         /// <summary>
@@ -912,6 +931,10 @@ namespace Rasa.Managers
                         RemoveFromSellersAuctionList(
                             result.SellerId, result.Item.EntityId, null);
                         Unlist(result.Item, InSomeonesInbox(result.Item.EntityId));
+
+                        EconomyAudit.Instance.Record(EconomyLogKind.AuctionExpired, result.Item.Id,
+                            EconomyAudit.ItemLine(result.SellerId, result.SellerAccountId, result.Item,
+                                (int)result.Item.StackSize, 0, SellerInWorld(result.SellerId)?.Player?.MapContextId ?? 0));
                     }
 
                     consecutiveFailures = 0;
@@ -1009,6 +1032,7 @@ namespace Rasa.Managers
                     {
                         Item = item,
                         SellerId = auction.SellerId,
+                        SellerAccountId = accountId.Value,
                         InboxSlot = inboxSlot
                     };
                 });

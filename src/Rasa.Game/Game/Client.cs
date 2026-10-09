@@ -568,11 +568,8 @@ namespace Rasa.Game
                         {
                             Logger.WriteLog(LogType.Error, "Client with ip: {0} tried to log in while the account is banned! User Id: {1}", Socket.RemoteAddress, loginMsg.AccountId);
 
-                            SendMessage(new LoginResponseMessage
-                            {
-                                ErrorCode = LoginErrorCodes.AccountLocked,
-                                Subtype = LoginResponseMessageSubtype.Failed
-                            }, delay: false);
+                            foreach (var refusal in BannedLoginRefusal())
+                                SendMessage(refusal, delay: false);
 
                             LoginFailed();
                             return;
@@ -1038,6 +1035,38 @@ namespace Rasa.Game
         /// </summary>
         private const int MaxFailedLogins = 3;
         private int _failedLogins;
+
+        /// <summary>What a banned account's world login is answered with (<see cref="BannedLoginRefusal"/>).</summary>
+        internal const string BannedReason = "Your account has been banned.";
+
+        /// <summary>
+        /// The answer to a world login from an account that is banned: Auth refuses one at its own
+        /// login screen (BlockedAccount), so this is an account banned after it picked a server.
+        ///
+        /// First FatalError, PM_LOGIN_FAILED ("Login failed: %(reason)s") with
+        /// <see cref="BannedReason"/>: the client's modal error box, whose OK quits the client
+        /// (clientmethod.py Recv_FatalError, OnRequestExit). Then the LoginResponse refusal as
+        /// before, AccountLocked, which the client answers with its own dialog
+        /// (login.py _GameLoginFailed, ID_LOGINERR_ACCOUNT_LOCKED: "Your account is currently
+        /// locked for maintenance.") - kept so the player is told something even if the
+        /// FatalError is not run on the login screen. The client queues a CallMethod for its
+        /// clientmethod entity (sysentity ClientMethodId, registered at start) whatever screen it
+        /// is on, and runs the queue every frame; nothing seen in a client yet.
+        ///
+        /// Both are sent at once, in this order, and the connection is left open as for any
+        /// refused login: OK on the FatalError quits the client, and that closes it.
+        /// </summary>
+        internal static IClientMessage[] BannedLoginRefusal() => new IClientMessage[]
+        {
+            new CallMethodMessage((ulong)SysEntity.ClientMethodId,
+                new Packets.ClientMethod.Server.FatalErrorPacket(PlayerMessage.PmLoginFailed,
+                    new Dictionary<string, string> { ["reason"] = BannedReason })),
+            new LoginResponseMessage
+            {
+                ErrorCode = LoginErrorCodes.AccountLocked,
+                Subtype = LoginResponseMessageSubtype.Failed
+            }
+        };
 
         private void LoginFailed()
         {

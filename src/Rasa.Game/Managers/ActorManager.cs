@@ -446,6 +446,10 @@ namespace Rasa.Managers
                 // Self Destruct goes off on the next damage its holder takes, and Conversion
                 // turns what landed into healing for the squad.
                 AbilityManager.OnPlayerDamaged(mapChannel, victim, armorTaken + healthTaken);
+
+                // A hit, not a tick, is cried at (PlayerVoices); one that brings them down is not.
+                if (!isPeriodic && health.Current > 0)
+                    PlayerVoices.Hurt(victim, armorTaken + healthTaken);
             }
 
             // A player at zero dies - or is defeated, or stands back up (PlayerDeath).

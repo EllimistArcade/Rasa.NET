@@ -263,6 +263,9 @@ namespace Rasa.Structures
         /// <summary>Environment.TickCount64 at which combat lapses, refreshed by every hit.</summary>
         public long CombatExpiresAt { get; set; }
 
+        /// <summary>The pain and critical-hit lines pending and when the next may be said (Managers.PlayerVoices).</summary>
+        public Managers.PlayerVoiceState Voice { get; } = new Managers.PlayerVoiceState();
+
         /// <summary>
         /// What the character left the world with last time - health, armour, power, Rez Trauma -
         /// read from its row at load and put back as it arrives (Managers.RelogVitals); null once

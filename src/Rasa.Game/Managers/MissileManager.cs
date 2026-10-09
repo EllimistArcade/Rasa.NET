@@ -506,6 +506,10 @@ namespace Rasa.Managers
             // Reflective Armor and the Guardian's Reflection send some of it back (Reflection).
             Reflection.Reflect(mapChannel, actor, missile.Source, missile.DamageA, missile.DamageType);
 
+            // What the player says of it, at the end of the tick (PlayerVoices).
+            if (!defeated && actor is Manifestation pained)
+                PlayerVoices.Hurt(pained, armorDecrease + healthDecrease, missile.IsCritical);
+
             // Self Destruct goes off on the next damage its holder takes, and Conversion turns
             // what landed into healing for the squad.
             if (actor is Manifestation victim && armorDecrease + healthDecrease > 0)

@@ -516,6 +516,9 @@ namespace Rasa.Managers
 
                     _missionScenarioService?.TickMap(mapChannel);
 
+                    // what the players hurt this tick say of it (PlayerVoices)
+                    Guard("PlayerVoices.Worker", mapChannel, () => PlayerVoices.Worker(mapChannel));
+
                     // the players due a save (AutoSave)
                     if (Timer.IsTriggered("AutoSave"))
                         Guard("AutoSave.Worker", mapChannel, () => AutoSave.Worker(mapChannel, Environment.TickCount64));

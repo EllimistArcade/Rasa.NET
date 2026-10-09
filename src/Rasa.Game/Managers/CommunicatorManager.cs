@@ -1050,6 +1050,9 @@ namespace Rasa.Managers
         public void PlayTutorialAudio(Client client, uint? audioSetId)
         {
             client.CallMethod(SysEntity.ClientMethodId, new PlayTutorialAudioPacket(audioSetId));
+
+            // The player's own pain lines go out the same way and would cut it short (PlayerVoices).
+            PlayerVoices.VoiceOverSent(client.Player, audioSetId == null);
         }
 
         /// <summary>Stops the tutorial voice-over this player is hearing, if any.</summary>

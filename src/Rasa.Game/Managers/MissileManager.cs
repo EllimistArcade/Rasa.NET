@@ -795,6 +795,21 @@ namespace Rasa.Managers
                     missile.TargetEntityId = action.TargetId;
                     triggerTime = LandsIn(waypointDistance);
                 }
+                else if (targetType == EntityType.Object && AbilityManager.TryGetPlantPosition(action.TargetId, out var plantPosition))
+                {
+                    // A Hortimonculus (AbilityManager): only for an enemy of its owner's or a
+                    // creature fighting it, and the missile lands on its own hit points.
+                    if (!AbilityManager.PlantMayBeAttackedBy(action.Actor, action.TargetId))
+                        return;
+
+                    var plantDistance = Vector3.Distance(plantPosition, action.Actor.Position);
+
+                    if (!float.IsFinite(plantDistance) || plantDistance > MaxTargetDistance)
+                        return;
+
+                    missile.TargetEntityId = action.TargetId;
+                    triggerTime = LandsIn(plantDistance);
+                }
                 else if (targetType == EntityType.Object)
                 {
                     // A Bootcamp practice target (PracticeTargetManager).
@@ -1302,8 +1317,8 @@ namespace Rasa.Managers
                     EnterCombat(missile.Source);
                     break;
                 case EntityType.Object:
-                    // A Personal Waypoint, or else a force field.
-                    if (!PersonalWaypoints.TakeHit(missile))
+                    // A Personal Waypoint, a Hortimonculus, or else a force field.
+                    if (!PersonalWaypoints.TakeHit(missile) && !AbilityManager.PlantTakeHit(missile))
                         ForceFields.TakeHit(missile);
 
                     break;

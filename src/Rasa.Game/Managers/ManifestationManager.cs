@@ -557,9 +557,14 @@ namespace Rasa.Managers
                     Vector3.Distance(player.Position, targetPosition.Value) > level.MaxRange + MeleeRangeSlack)
                     return;
 
-                // A Personal Waypoint (PersonalWaypoints) is struck from as near.
+                // A Personal Waypoint (PersonalWaypoints) is struck from as near, and so is a
+                // Hortimonculus (AbilityManager).
                 if (target == null && PersonalWaypoints.TryGetPosition(targetId, out var waypoint)
                     && Vector3.Distance(player.Position, waypoint) > level.MaxRange + MeleeRangeSlack)
+                    return;
+
+                if (target == null && AbilityManager.TryGetPlantPosition(targetId, out var plantSpot)
+                    && Vector3.Distance(player.Position, plantSpot) > level.MaxRange + MeleeRangeSlack)
                     return;
             }
 

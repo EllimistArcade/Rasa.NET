@@ -245,6 +245,11 @@ namespace Rasa.Managers
                 // points as it is - no crit, falloff or resistance, as a missile at one.
                 pulse.Add(new TickEntry { EntityId = player.Target, Amount = taken, DamageType = damageType });
             }
+            else if (AbilityManager.PlantTakeDamage(player, player.Target, damage) is int plantTaken)
+            {
+                // An enemy's Hortimonculus (AbilityManager): the same.
+                pulse.Add(new TickEntry { EntityId = player.Target, Amount = plantTaken, DamageType = damageType });
+            }
 
             // The modules in what the shooter wears and holds: their armor piercing, and what the
             // weapon's do on a hit (ItemModuleBonuses).

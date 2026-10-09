@@ -875,6 +875,11 @@ namespace Rasa.Managers
                     // with no actor to it.
                     targetPosition = waypointPosition;
                 }
+                else if (target == EntityType.Object && AbilityManager.TryGetPlantPosition(creature.Controller.ActionFighting.TargetEntityId, out var plantPosition))
+                {
+                    // A Hortimonculus (AbilityManager): the same, for as long as it stands.
+                    targetPosition = plantPosition;
+                }
                 else
                     Logger.WriteLog(LogType.Error, $"CreatureThink: unsuported Traget type {target}"); // todo
 
@@ -2430,9 +2435,10 @@ namespace Rasa.Managers
             if (EntityManager.Instance.Players.TryGetValue(entityId, out var player))
                 return pump != AbilityManager.MindControlSubversion && TargetCategories.MayFightPlayer(creature.TargetCategory, player.CombatCategory);
 
-            // A Personal Waypoint (PersonalWaypoints) is fought by what fights its owner. A
-            // Confused or Subverted creature has turned on creatures, and leaves it.
-            return pump == 0 && PersonalWaypoints.MayBeFoughtBy(creature, entityId);
+            // A Personal Waypoint (PersonalWaypoints) is fought by what fights its owner, and so is
+            // a Hortimonculus (AbilityManager). A Confused or Subverted creature has turned on
+            // creatures, and leaves them.
+            return pump == 0 && (PersonalWaypoints.MayBeFoughtBy(creature, entityId) || AbilityManager.PlantMayBeFoughtBy(creature, entityId));
         }
 
         /// <summary>

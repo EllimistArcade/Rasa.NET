@@ -208,7 +208,7 @@ namespace Rasa.Managers
         /// healer's entity id when a visible actor's ability did it, and leave it 0 for
         /// regeneration, a command, or anything else with no actor behind it.
         /// </param>
-        public int Heal(Actor target, int amount, ulong sourceEntityId = 0)
+        public int Heal(Actor target, int amount, ulong sourceEntityId = 0, ulong hateEntityId = 0)
         {
             if (target == null || amount <= 0)
                 return 0;
@@ -257,8 +257,11 @@ namespace Rasa.Managers
                 _ => target.RuntimeMapChannel
             };
 
-            // Healing someone creatures hate draws their hate to the healer.
-            if (sourceEntityId != 0 && sourceEntityId != target.EntityId && target is Manifestation)
+            // Healing someone creatures hate draws their hate to the healer - or to what did the
+            // healing for them, when that is no actor (a Hortimonculus: hateEntityId).
+            if (hateEntityId != 0 && target is Manifestation)
+                Threat.FromHealing(mapChannel, hateEntityId, EntityManager.Instance.GetActor(sourceEntityId), target, applied);
+            else if (sourceEntityId != 0 && sourceEntityId != target.EntityId && target is Manifestation)
                 Threat.FromHealing(mapChannel, EntityManager.Instance.GetActor(sourceEntityId), target, applied);
 
             // No map means nobody can see them, which is not a reason to refuse the heal - the

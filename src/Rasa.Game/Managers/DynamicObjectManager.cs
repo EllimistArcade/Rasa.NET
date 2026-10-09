@@ -38,6 +38,9 @@ namespace Rasa.Managers
         public readonly Dictionary<ulong, Dropship> Dropships = new Dictionary<ulong, Dropship>();
         public readonly Dictionary<ulong, DynamicObject> Teleporters = new Dictionary<ulong, DynamicObject>();
 
+        /// <summary>The wormhole network's locks (wormhole_lock), read by <see cref="InitWormholes"/>.</summary>
+        public Wormholes Wormholes { get; } = new Wormholes();
+
         /// <summary>
         /// The UseObject arg id each kind of object is used with, which is what picks the recovery
         /// in ActorActionManager. The client reads it off the object's own usabledata row
@@ -122,6 +125,7 @@ namespace Rasa.Managers
         {
             InitFootlockers();
             InitTeleporters();
+            InitWormholes();
 
             // After the teleporters: a control point's hospital and waypoint are among them.
             ControlPoints.Instance.Init(_gameUnitOfWorkFactory);
@@ -1494,6 +1498,24 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// Reads wormhole_lock. A row that names a teleporter that is not a world wormhole is
+        /// logged: it matches no trip.
+        /// </summary>
+        internal void InitWormholes()
+        {
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateWorld();
+            var locks = unitOfWork.Teleporters.GetWormholeLocks();
+
+            foreach (var row in locks)
+                foreach (var id in new[] { row.FromTeleporterId, row.ToTeleporterId })
+                    if (id != 0 && !(Teleporters.TryGetValue(id, out var teleporter) &&
+                                     teleporter.ObjectData is WaypointInfo { WaypointType: WaypointType.Wormhole }))
+                        Logger.WriteLog(LogType.Error, $"wormhole_lock {row.Id} names teleporter {id}, which is not a wormhole.");
+
+            Wormholes.Load(locks);
+        }
+
         internal void CheckPlayerWaypoint(Client client, WaypointInfo objectData)
         {
             if (Characters.StartingExperience.IsExitWaypoint(objectData.WaypointId))
@@ -1639,6 +1661,12 @@ namespace Rasa.Managers
                     info = copiedInfo;
                 }
 
+                if (info.WaypointType == WaypointType.Wormhole)
+                {
+                    SelectWormhole(client, teleporter, info);
+                    return;
+                }
+
                 // The travel window names the map by the id its row was listed under, and every
                 // row is listed under its map's context id (MapInstanceInfo: ordinal, mapId,
                 // status - the client keys its rows by mapId, and a dropship list has one row per
@@ -1727,6 +1755,54 @@ namespace Rasa.Managers
 
                 BeginLocalTravel(client, origin, destination, teleporter.Rotation);
             }
+        }
+
+        /// <summary>
+        /// A wormhole picked from a wormhole's window (<see cref="Wormholes"/>): the player must
+        /// be standing in a world wormhole, and the trip from it be open to them. They are put
+        /// down a metre above the wormhole they picked, as at a waypoint: on their own map by a
+        /// local teleport, on another as a door to it takes them (MapChannelManager.EnterMap),
+        /// into the copy of it with room or their squad's instance. Called with the client's
+        /// lock held, by SelectWaypoint.
+        /// </summary>
+        private void SelectWormhole(Client client, DynamicObject destination, WaypointInfo info)
+        {
+            var origin = client.Player.MapChannel;
+            var source = origin.Teleporters.Values.FirstOrDefault(teleporter =>
+                teleporter.ObjectData is WaypointInfo { WaypointType: WaypointType.Wormhole, Contested: false } &&
+                MapInstanceScope.Contains(origin, teleporter) &&
+                client.Player.IsNear2m(teleporter));
+
+            if (source == null)
+            {
+                RejectTravel(client, "No nearby wormhole.");
+                return;
+            }
+
+            var fromId = ((WaypointInfo)source.ObjectData).WaypointId;
+
+            if (info.Contested || info.WaypointId == fromId || !Wormholes.IsOpen(client.Player, fromId, info.WaypointId))
+            {
+                RejectTravel(client, $"Wormhole {info.WaypointId} is not open from {fromId}.");
+                return;
+            }
+
+            var position = destination.Position + new Vector3(0, 1, 0);
+
+            if (!CellManager.TryGetCellCoordinates(position, out _, out _) || !double.IsFinite(destination.Rotation))
+            {
+                RejectTravel(client, "Invalid destination position.");
+                return;
+            }
+
+            if (destination.MapContextId == origin.MapInfo.MapContextId)
+            {
+                BeginLocalTravel(client, origin, position, destination.Rotation);
+                return;
+            }
+
+            if (!Maps.EnterMap(client, destination.MapContextId, position, (float)destination.Rotation))
+                RejectTravel(client, $"Map {destination.MapContextId} could not be entered.");
         }
 
         /// <summary>
@@ -2324,7 +2400,9 @@ namespace Rasa.Managers
 
                 CheckPlayerWaypoint(client, objectData);
 
-                var waypointInfoList = CreateListOfWaypoints(client, objectData.WaypointType);
+                var waypointInfoList = objectData.WaypointType == WaypointType.Wormhole
+                    ? CreateListOfWormholes(client, objectData.WaypointId)
+                    : CreateListOfWaypoints(client, objectData.WaypointType);
 
                 // A waypoint's window lists the Personal Waypoints the player may return to.
                 var returnPoints = objectData.WaypointType == WaypointType.Waypoint
@@ -2357,6 +2435,53 @@ namespace Rasa.Managers
                         client.CallMethod(SysEntity.ClientMethodId, new ExitedWaypointPacket());
                 }
             }
+        }
+
+        /// <summary>
+        /// The wormhole travel window for a player standing in the wormhole
+        /// <paramref name="fromId"/>: every other world wormhole the player may go to from it
+        /// (<see cref="Wormholes"/>), grouped by map and placed where it is, on whichever map and
+        /// planet. Whether the player has gained it does not matter. One whose map is not loaded
+        /// is left out, as one the Bane hold would be.
+        /// </summary>
+        internal Dictionary<uint, MapWaypointInfoList> CreateListOfWormholes(Client client, uint fromId)
+        {
+            var wormholes = new Dictionary<uint, MapWaypointInfoList>();
+            var player = client?.Player;
+
+            if (player?.MapChannel == null)
+                return wormholes;
+
+            foreach (var teleporter in Teleporters.Values.OrderBy(teleporter => teleporter.MapContextId))
+            {
+                if (teleporter.ObjectData is not WaypointInfo info ||
+                    info.WaypointType != WaypointType.Wormhole ||
+                    info.Contested || info.WaypointId == fromId ||
+                    !Wormholes.IsOpen(player, fromId, info.WaypointId))
+                    continue;
+
+                var map = Maps.FindByContextId(teleporter.MapContextId);
+
+                if (map == null)
+                    continue;
+
+                if (!wormholes.TryGetValue(teleporter.MapContextId, out var list))
+                {
+                    list = new MapWaypointInfoList(
+                        teleporter.MapContextId,
+                        new List<MapInstanceInfo>
+                        {
+                            new MapInstanceInfo(map.InstanceId, teleporter.MapContextId, MapInstanceStatus.Low)
+                        },
+                        new List<WaypointInfo>());
+
+                    wormholes.Add(teleporter.MapContextId, list);
+                }
+
+                list.Waypoints.Add(new WaypointInfo(info.WaypointId, info.Contested, teleporter.Position, info.WaypointType));
+            }
+
+            return wormholes;
         }
 
         /// <summary>

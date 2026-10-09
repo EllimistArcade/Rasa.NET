@@ -3210,6 +3210,38 @@ namespace Rasa.Migrations.SqliteWorld
                     b.ToTable("weaponclass");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.World.WormholeLockEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("comment");
+
+                    b.Property<uint>("FromTeleporterId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("from_teleporter_id");
+
+                    b.Property<uint>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<uint>("ToTeleporterId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("to_teleporter_id");
+
+                    b.Property<uint>("Value")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("wormhole_lock");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.MissionActionEntry", b =>
                 {
                     b.HasOne("Rasa.Structures.World.MissionRewardDefinitionEntry", null)

@@ -391,6 +391,9 @@ namespace Rasa.Managers
                     // Miasmas whose time as a cloud is up coalesce.
                     Guard("CreatureMiasma.Worker", mapChannel, () => CreatureMiasma.Worker(mapChannel));
 
+                    // Fithik egg clusters someone has walked onto hatch, and grow back.
+                    Guard("FithikEggClusters.Worker", mapChannel, () => FithikEggClusters.Worker(mapChannel));
+
                     // Crab Mines: seeking, running, going off.
                     Guard("AbilityManager.CrabMineWorker", mapChannel, () => AbilityManager.Instance.CrabMineWorker(mapChannel));
 

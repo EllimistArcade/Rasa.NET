@@ -29,6 +29,7 @@ namespace Rasa.Test.TestSupport
             [35306] = 14008, [36116] = 13941, [42212] = 14028, [42213] = 14027, [42214] = 14026, [42215] = 14025,
             [44700] = 14034, [46151] = 14036, [46913] = 13970, [47904] = 14041, [48954] = 1, [49222] = 1,
             [49675] = 13999,
+            [30281] = 14000,
         };
 
         /// <summary>Action animation families with no animation on any skeleton: the client's own gap, played by nothing.</summary>
@@ -116,6 +117,7 @@ namespace Rasa.Test.TestSupport
             [14034] = "622 650 651 1495 1496 1497 1498",
             [14036] = "622 650 651 863 864 930 931 1272",
             [14041] = "622 650 651 1450 1451 1453 1454 1461 1463",
+            [14000] = "622 650 651 734 924 1137 1138 1139 1140 1211 1272",
         });
 
         private static IReadOnlyDictionary<uint, IReadOnlySet<uint>> Parse(Dictionary<uint, string> rows) =>

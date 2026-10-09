@@ -400,11 +400,12 @@ namespace Rasa.Managers
                 NpcPoses.Drop(mapChannel, creature);
 
             // Mid-charge (Kael rushing blow), winding up to blow itself up (a Fithik), to drop an
-            // egg (a Stalker) or any ability (CreatureWindups), in a cocoon (an Atta grub), or a
-            // cloud (a Miasma, CreatureMiasma), it does nothing else until that is done.
+            // egg (a Stalker) or any ability (CreatureWindups), in a cocoon (an Atta grub), a
+            // cloud (a Miasma, CreatureMiasma), or climbing out of its egg cluster (a Fithik,
+            // FithikEggClusters), it does nothing else until that is done.
             if (knockedBack || Stuns.IsStunned(creature) || KaelRushingBlow.IsCharging(creature) || CreatureBombs.IsSelfDestructing(creature)
                 || CreatureSupport.IsCasting(creature) || CreatureHabits.IsBusy(creature) || CreatureSummons.IsBusy(creature)
-                || CreatureWindups.IsWindingUp(creature) || CreatureMiasma.IsDissipated(creature))
+                || CreatureWindups.IsWindingUp(creature) || CreatureMiasma.IsDissipated(creature) || FithikEggClusters.IsHatching(creature))
             {
                 needCellUpdate = CellChanged(creature, delta);
                 return;

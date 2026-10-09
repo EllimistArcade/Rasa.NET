@@ -943,11 +943,13 @@ namespace Rasa.Managers
 
             if (parts.Length == 1)
             {
-                var own = Battlecries.PackageOf(creature);
+                // What it cries with now: given in creature_battlecry, or a human voice rolled for it.
+                var own = Battlecries.VoiceOf(creature);
+                var given = Battlecries.PackageOf(creature) == own ? "" : ", a human voice rolled for this spawn";
 
                 CommunicatorManager.Instance.SystemMessage(_client, own == 0
                     ? $"Class {(uint)creature.EntityClass}, creature {creature.DbId}: no battle cry package."
-                    : $"Class {(uint)creature.EntityClass}, creature {creature.DbId}: battle cry package {own}, types {string.Join(", ", Battlecries.Packages[own])}.");
+                    : $"Class {(uint)creature.EntityClass}, creature {creature.DbId}: battle cry package {own}{given}, types {string.Join(", ", Battlecries.Packages[own])}.");
                 return;
             }
 
@@ -2994,8 +2996,8 @@ namespace Rasa.Managers
                     if (creature.Patrol != null)
                         msg += $"Patrol = {Patrols.Describe(creature)}\n";
 
-                    if (Battlecries.PackageOf(creature) != 0)
-                        msg += $"Battlecry = package {Battlecries.PackageOf(creature)}\n";
+                    if (Battlecries.VoiceOf(creature) is var voice && voice != 0)
+                        msg += $"Battlecry = package {voice}\n";
 
                     msg += $"PosX = {creature.Position.X}\n";
                     msg += $"PosY = {creature.Position.Y}\n";

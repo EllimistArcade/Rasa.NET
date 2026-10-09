@@ -1534,7 +1534,8 @@ namespace Rasa.Managers
 
         #endregion
 
-        private static bool IsMissionEscort(Creature creature) =>
+        /// <summary>A creature following the player whose mission it is in (SpawnPool.FollowOwnerCharacterId).</summary>
+        internal static bool IsMissionEscort(Creature creature) =>
             creature.MasterEntityId == 0 && creature.SpawnPool?.FollowOwnerCharacterId > 0;
 
         private bool AdvanceBaseDefender(MapChannel map, Creature creature, long delta)

@@ -787,6 +787,22 @@ namespace Rasa.Managers
             var battlecries = Battlecries.Load(unitOfWork.Creatures.GetBattlecries());
             Logger.WriteLog(LogType.Initialize, $"Loaded {battlecries} creature battle cry packages");
 
+            // An escort's human voice, once rolled, is kept for its creature row - written off
+            // the map's thread, as the map goes on with it at once.
+            var factory = _gameUnitOfWorkFactory;
+            Battlecries.Keep = (creatureId, packageId) => System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    using var keeping = factory.CreateWorld();
+                    keeping.Creatures.SaveCreatureBattlecry(creatureId, (uint)packageId);
+                }
+                catch (Exception e)
+                {
+                    Logger.WriteLog(LogType.Error, $"The battle cry voice {packageId} of creature {creatureId} was not kept: {e.Message}");
+                }
+            });
+
             foreach (var data in creatureList)
             {
                 var appearanceData = unitOfWork.Creatures.GetCreatureAppearances(data.Id);

@@ -1372,6 +1372,10 @@ namespace Rasa.Managers
             if (takeOff)
                 TakeOffLiving(mapChannel, idle);
 
+            // A destroyed turret of the side that has lost the point is not left on its mount for
+            // the other side's to be set down in.
+            TakeOffWrecks(mapChannel, idle);
+
             foreach (var pool in PoolsOn(mapChannel, point.PoolsOf(point.Owner)))
             {
                 pool.IsGarrison = true;
@@ -1430,6 +1434,30 @@ namespace Rasa.Managers
             // Nothing of a pool that spawns nothing is alive, whatever its count had drifted to.
             foreach (var pool in pools)
                 pool.AliveCreatures = 0;
+        }
+
+        /// <summary>
+        /// Takes the destroyed emplacements of these pools off the map: an AFS turret's wreck its
+        /// pool was keeping to put back in service (AlternateMesh), and a Bane turret's corpse.
+        /// The two sides' turrets of a point stand on the same spots (ControlPointTurrets), so
+        /// the side that now holds it would be set down in the other's wreckage. One with loot
+        /// on it is left for its killer.
+        /// </summary>
+        internal static void TakeOffWrecks(MapChannel mapChannel, List<SpawnPool> pools)
+        {
+            if (pools.Count == 0 || mapChannel?.MapCellInfo?.Cells == null)
+                return;
+
+            var wrecks = mapChannel.MapCellInfo.Cells.Values.SelectMany(cell => cell.CreatureList)
+                .Where(c => c != null && c.State == CharacterState.Dead && c.SpawnPool != null && pools.Contains(c.SpawnPool)
+                    && Emplacements.Is(c) && c.LootDispenserObjectEntityId == 0)
+                .Distinct().ToList();
+
+            foreach (var wreck in wrecks)
+            {
+                AlternateMesh.Forget(wreck);
+                MapReset.Remove(mapChannel, wreck);
+            }
         }
 
         /// <summary>The point's hospital and waypoint are the AFS's to use, or not.</summary>

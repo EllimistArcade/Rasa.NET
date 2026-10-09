@@ -52,6 +52,22 @@ namespace Rasa.Managers
     ///
     /// A pit stays as it was left for as long as its channel runs; whoever arrives is sent it as
     /// it is. A new channel, and so a restart, starts it lit.
+    ///
+    /// The Brann dissection tables and the Bane stasis chambers. Both are inert destroyables
+    /// (augmentation 41) that the .maps place, and both have their idle animation and effect in
+    /// USE_IDES_STATE_INTACT (110), so both have stood still. The tables
+    /// (UsableInertDestBrannTableDissectionAttaV01DELETEDUPE, 25269 - the maps use the
+    /// DELETEDUPE class; 24607, the same table, is on none): "Usable Inactive", animation family
+    /// 277 as recurring one-shots (type 3), the Atta on the table between
+    /// prop_brann_table_dissection_atta_v01.anm and _v02.anm, with
+    /// prop_brann_table_dissection_atta.pkg, the table's lasers (vfx_prop_brann_table_atta_laser)
+    /// under its grate lights. The chambers (UsableInertDestBaneStasisChamber, 7197): the same
+    /// spec, looping, arch_bane_industrial_room_stasis_chamber.anm, with
+    /// arch_bane_Industrial_stasis_chamber_idle.pkg (arch_bane_industrial_room_stasis_chamber_fx).
+    /// Neither is used: an inert destroyable offers only a loot use (Lootable), and these have
+    /// none. Neither is destroyed here either: the client takes either for undamageable
+    /// (usabledata.lookup has no hit points for them), and the explosion and wreck their
+    /// destroyed states carry are left for when something destroys them.
     /// </summary>
     public static class MapUsables
     {
@@ -96,9 +112,15 @@ namespace Rasa.Managers
         public const uint ConcordiaDivide = 1148;
         public const uint ConcordiaPalisades = 1244;
         public const uint ValverdePlateau = 1497;
+        public const uint PravusResearch = 1430;        // adv_foreas_concordia_wilderness_pravusresearch
+        public const uint TestWeaponsCenter = 1465;     // adv_foreas_valverde_pools_test_weapons_center
+        public const uint PenalResearch = 2034;         // adv_arieki_torden_plains_penalresearch
+        public const uint StaalJunkyard = 2138;         // adv_arieki_ligo_staaljunkyard
 
         public const uint ForeanFirePitV01 = 6137;     // UsableTwoStateForeanFirePitV01
         public const uint ForeanFirePitV03 = 6212;     // UsableTwoStateForeanFirePitV03
+        public const uint BaneStasisChamber = 7197;    // UsableInertDestBaneStasisChamber
+        public const uint BrannDissectionTable = 25269; // UsableInertDestBrannTableDissectionAttaV01DELETEDUPE
 
         public static readonly IReadOnlyList<Usable> All = new[]
         {
@@ -113,7 +135,40 @@ namespace Rasa.Managers
             // Below the Temple of the Raging Patriarch (-575.0, 187.6, -110.0).
             new Usable(ConcordiaPalisades, 133182640922310, ForeanFirePitV01, new Vector3(-575.0f, 187.6259f, -110.0f),
                 UseObjectState.TsState0, UseObjectState.TsState1, "Raging Patriarch fire pit"),
+
+            // The Brann dissection tables: one in Staal Junkyard, eighteen in Penal Research.
+            DissectionTable(StaalJunkyard, 134419591465348, -96.6515f, 253.7253f, -102.9956f, "Staal Junkyard dissection table"),
+            DissectionTable(PenalResearch, 134419591466928, -8.5f, -31.44f, -44.75f, "Penal Research dissection table 1"),
+            DissectionTable(PenalResearch, 134419591466950, -103.2895f, -47.4f, -61.5658f, "Penal Research dissection table 2"),
+            DissectionTable(PenalResearch, 134419591466953, -104.04f, -47.4f, -82.2f, "Penal Research dissection table 3"),
+            DissectionTable(PenalResearch, 134419591467561, -2.25f, -31.44f, -45.0f, "Penal Research dissection table 4"),
+            DissectionTable(PenalResearch, 134419591467562, -2.0f, -31.44f, -40.0f, "Penal Research dissection table 5"),
+            DissectionTable(PenalResearch, 134419591467563, -8.25f, -31.44f, -39.75f, "Penal Research dissection table 6"),
+            DissectionTable(PenalResearch, 134419591467566, -2.0f, -31.44f, -66.25f, "Penal Research dissection table 7"),
+            DissectionTable(PenalResearch, 134419591467567, -8.25f, -31.44f, -66.0f, "Penal Research dissection table 8"),
+            DissectionTable(PenalResearch, 134419591467568, -2.25f, -31.44f, -71.25f, "Penal Research dissection table 9"),
+            DissectionTable(PenalResearch, 134419591467569, -8.5f, -31.44f, -71.0f, "Penal Research dissection table 10"),
+            DissectionTable(PenalResearch, 134419591467570, -23.5f, -31.44f, -66.25f, "Penal Research dissection table 11"),
+            DissectionTable(PenalResearch, 134419591467571, -29.75f, -31.44f, -66.0f, "Penal Research dissection table 12"),
+            DissectionTable(PenalResearch, 134419591467572, -23.75f, -31.44f, -71.25f, "Penal Research dissection table 13"),
+            DissectionTable(PenalResearch, 134419591467573, -30.0f, -31.44f, -71.0f, "Penal Research dissection table 14"),
+            DissectionTable(PenalResearch, 134419591467574, -24.0f, -31.44f, -40.25f, "Penal Research dissection table 15"),
+            DissectionTable(PenalResearch, 134419591467575, -30.25f, -31.44f, -40.0f, "Penal Research dissection table 16"),
+            DissectionTable(PenalResearch, 134419591467576, -24.25f, -31.44f, -45.25f, "Penal Research dissection table 17"),
+            DissectionTable(PenalResearch, 134419591467577, -30.5f, -31.44f, -45.0f, "Penal Research dissection table 18"),
+
+            // The Bane stasis chambers: one each in Pravus Research and the Test Weapons Center.
+            StasisChamber(PravusResearch, 133981504835290, 224.0f, 7.6172f, 40.0f, "Pravus Research stasis chamber"),
+            StasisChamber(TestWeaponsCenter, 134131828656196, 280.0f, -24.5f, 24.0f, "Test Weapons Center stasis chamber"),
         };
+
+        /// <summary>A Brann dissection table, intact.</summary>
+        private static Usable DissectionTable(uint mapContextId, ulong entityId, float x, float y, float z, string name) =>
+            new Usable(mapContextId, entityId, BrannDissectionTable, new Vector3(x, y, z), UseObjectState.IdesStateIntact, null, name);
+
+        /// <summary>A Bane stasis chamber, intact.</summary>
+        private static Usable StasisChamber(uint mapContextId, ulong entityId, float x, float y, float z, string name) =>
+            new Usable(mapContextId, entityId, BaneStasisChamber, new Vector3(x, y, z), UseObjectState.IdesStateIntact, null, name);
 
         /// <summary>How long a use takes, as a footlocker's (DynamicObjectManager, Lockbox).</summary>
         public const int UseWindupMs = 100;

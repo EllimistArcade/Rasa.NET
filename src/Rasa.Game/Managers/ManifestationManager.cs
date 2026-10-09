@@ -2150,7 +2150,7 @@ namespace Rasa.Managers
             MapMarkerManager.Instance.PlayerEnteredMap(client);
 
             // The states of the usables the map's own file places, which the client leaves
-            // without one: its Forean fire pits unlit.
+            // without one: its Forean fire pits unlit, its dissection tables and stasis chambers still.
             MapUsables.PlayerEnteredMap(client);
 
             client.CallMethod(player.EntityId, new AdvancementStatsPacket(

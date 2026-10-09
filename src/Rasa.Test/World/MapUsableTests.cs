@@ -90,17 +90,60 @@ namespace Rasa.Test.World
         [TestMethod]
         public void TheFirePitsAreTheTwoStateClassesWhoseFirstStateIsLit()
         {
-            Assert.HasCount(3, MapUsables.All);
-            Assert.AreEqual(3, MapUsables.All.Select(usable => usable.EntityId).Distinct().Count());
+            var pits = MapUsables.All.Where(usable => usable.ClassId == MapUsables.ForeanFirePitV01 || usable.ClassId == MapUsables.ForeanFirePitV03).ToList();
+            Assert.HasCount(3, pits);
 
+            foreach (var usable in pits)
+                Assert.AreEqual((UseObjectState.TsState0, (UseObjectState?)UseObjectState.TsState1), (usable.State, usable.UsedState), usable.ToString());
+        }
+
+        [TestMethod]
+        public void EveryOneHasItsOwnClientIdOnItsMap()
+        {
+            Assert.AreEqual(MapUsables.All.Count, MapUsables.All.Select(usable => usable.EntityId).Distinct().Count());
+
+            // The client makes a .map entity only above 32 bits (gamemap.py _LoadEntities3).
             foreach (var usable in MapUsables.All)
-            {
-                CollectionAssert.Contains(new[] { MapUsables.ForeanFirePitV01, MapUsables.ForeanFirePitV03 }, usable.ClassId, usable.ToString());
-                Assert.AreEqual(UseObjectState.TsState0, usable.State, usable.ToString());
-
-                // The client makes a .map entity only above 32 bits (gamemap.py _LoadEntities3).
                 Assert.IsGreaterThan(uint.MaxValue, usable.EntityId, usable.ToString());
+        }
+
+        [TestMethod]
+        public void TheDissectionTablesAndStasisChambersAreSentIntactAndAreNotUsed()
+        {
+            var tables = MapUsables.All.Where(usable => usable.ClassId == MapUsables.BrannDissectionTable).ToList();
+            var chambers = MapUsables.All.Where(usable => usable.ClassId == MapUsables.BaneStasisChamber).ToList();
+
+            Assert.HasCount(19, tables);
+            Assert.HasCount(2, chambers);
+            Assert.HasCount(18, tables.Where(table => table.MapContextId == MapUsables.PenalResearch).ToList());
+            Assert.HasCount(1, tables.Where(table => table.MapContextId == MapUsables.StaalJunkyard).ToList());
+            CollectionAssert.AreEquivalent(new[] { MapUsables.PravusResearch, MapUsables.TestWeaponsCenter }, chambers.Select(chamber => chamber.MapContextId).ToArray());
+
+            foreach (var usable in tables.Concat(chambers))
+            {
+                Assert.AreEqual(UseObjectState.IdesStateIntact, usable.State, usable.ToString());
+                Assert.IsNull(usable.UsedState, usable.ToString());
             }
+
+            using var world = new WorldTestContext();
+
+            // Penal Research: all eighteen of its tables, intact, by their .map ids.
+            var lab = On(world, Channel(MapUsables.PenalResearch, "adv_arieki_torden_plains_penalresearch"));
+            Assert.AreEqual(18, MapUsables.PlayerEnteredMap(lab));
+            var sent = States(lab);
+            CollectionAssert.AreEquivalent(tables.Where(table => table.MapContextId == MapUsables.PenalResearch).Select(table => table.EntityId).ToList(),
+                sent.Select(state => state.EntityId).ToList());
+            Assert.IsTrue(sent.All(state => state.Packet.State == UseObjectState.IdesStateIntact));
+
+            // The Pravus Research chamber, and a use of it refused as the client would put it.
+            var pravus = On(world, Channel(MapUsables.PravusResearch, "adv_foreas_concordia_wilderness_pravusresearch"));
+            Assert.AreEqual(1, MapUsables.PlayerEnteredMap(pravus));
+            Assert.AreEqual((133981504835290UL, UseObjectState.IdesStateIntact), (States(pravus).Single().EntityId, MapUsables.StateOf(pravus.Player.MapChannel, chambers[0])));
+
+            pravus.Player.Position = new Vector3(224, 7.6f, 42);
+            Assert.IsTrue(MapUsables.TryRequestUse(pravus, Use(133981504835290UL)));
+            Assert.AreEqual(PlayerMessage.PmUseObjectNotUsable, Refusal(pravus));
+            Assert.IsEmpty(pravus.Player.MapChannel.PerformRecovery);
         }
 
         [TestMethod]

@@ -46,7 +46,9 @@ namespace Rasa.Managers
         /// in ActorActionManager. The client reads it off the object's own usabledata row
         /// (client/augmentations/usable.py, defaulting to 1 for a class with no row), and it
         /// matches the object here: all 35 footlocker classes carry 1, all 39 station classes 5,
-        /// 163 of the 166 logos classes 6, and the control point 7.
+        /// and the control point 7. Of the 170 logos classes placed in the world 168 carry 6, but
+        /// 21214 (FEW) and 21414 (VICTORY) carry 1: a logos shrine's recovery is picked by the
+        /// object, whatever the arg (ActorActionManager.IsLogosShrine).
         /// </summary>
         public const uint FootlockerUseArgId = 1;
         public const uint SurveyUseArgId = 3;

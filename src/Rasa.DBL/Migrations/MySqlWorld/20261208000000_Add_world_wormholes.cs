@@ -1,5 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 using JetBrains.Annotations;
 
@@ -20,33 +19,38 @@ namespace Rasa.Migrations.MySqlWorld
     /// (425, 28478 to 28474); and the locks from the Concordia Divide wormhole to the three on
     /// Arieki, which open with mission 1038.
     ///
+    /// Numbered 20261207000000 at first, which Add_control_point_turrets has too. A world that
+    /// ran it under that id is brought to the same place by running it again: the table is
+    /// made only if it is missing, the rows are set rather than added, and the first id is
+    /// taken off the history (WorldWormholesSeed.FirstMigrationId).
+    ///
     /// Down puts 358 and the class back and drops the table.
     /// </summary>
     // ReSharper disable once InconsistentNaming
     [UsedImplicitly]
     public partial class Add_world_wormholes : Migration
     {
+        /// <summary>wormhole_lock as EF's CreateTable writes it for this provider, if it is not there.</summary>
+        internal const string TableIfMissing = @"CREATE TABLE IF NOT EXISTS `wormhole_lock` (
+    `id` int unsigned NOT NULL AUTO_INCREMENT,
+    `from_teleporter_id` int unsigned NOT NULL,
+    `to_teleporter_id` int unsigned NOT NULL,
+    `kind` int unsigned NOT NULL,
+    `value` int unsigned NOT NULL,
+    `comment` varchar(128) NULL,
+    CONSTRAINT `PK_wormhole_lock` PRIMARY KEY (`id`)
+);";
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: WormholeLockEntry.TableName,
-                columns: table => new
-                {
-                    id = table.Column<uint>(type: "int unsigned", nullable: false)
-                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
-                    from_teleporter_id = table.Column<uint>(type: "int unsigned", nullable: false),
-                    to_teleporter_id = table.Column<uint>(type: "int unsigned", nullable: false),
-                    kind = table.Column<uint>(type: "int unsigned", nullable: false),
-                    value = table.Column<uint>(type: "int unsigned", nullable: false),
-                    comment = table.Column<string>(type: "varchar(128)", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_wormhole_lock", x => x.id);
-                });
+            // The table as CreateTable makes it, unless a world that ran this migration under its
+            // first id has it already (WorldWormholesSeed.FirstMigrationId).
+            migrationBuilder.Sql(TableIfMissing);
 
             foreach (var statement in WorldWormholesSeed.InsertStatements)
                 migrationBuilder.Sql(statement);
+
+            migrationBuilder.Sql(WorldWormholesSeed.ForgetFirstIdStatement);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

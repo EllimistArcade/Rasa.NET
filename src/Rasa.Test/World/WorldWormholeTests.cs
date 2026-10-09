@@ -8,6 +8,7 @@ using System.Numerics;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Rasa.Navigation;
@@ -216,7 +217,9 @@ namespace Rasa.Test.World
                 Assert.HasCount(3, locks);
                 Assert.IsTrue(locks.All(row => row.Kind == WormholeLockEntry.KindMissionAccepted && row.Value == Arieki));
 
-                migrator.Migrate("20261206000000_Add_edmund_range_upper_floor");
+                CollectionAssert.Contains(Rows("select MigrationId from __EFMigrationsHistory"), "20261208000000_Add_world_wormholes");
+
+                migrator.Migrate(BeforeWormholes);
 
                 Assert.AreEqual("0|0|0|Wormhole: Ligo Crucible Dupe see 86", Rows("select class_id, type, map_context_id, description from teleporter where id = 358").Single());
                 Assert.AreEqual("28478", Rows("select class_id from teleporter where id = 425").Single());
@@ -235,13 +238,143 @@ namespace Rasa.Test.World
         {
             using var context = PersistenceIntegrationTests.CreateContext(typeof(MySqlWorldContext), "unused");
             var script = context.GetService<IMigrator>()
-                .GenerateScript("20261206000000_Add_edmund_range_upper_floor", "20261207000000_Add_world_wormholes");
+                .GenerateScript(BeforeWormholes, "20261208000000_Add_world_wormholes");
 
-            StringAssert.Contains(script, "CREATE TABLE `wormhole_lock`");
+            StringAssert.Contains(script, Rasa.Migrations.MySqlWorld.Add_world_wormholes.TableIfMissing);
+            StringAssert.Contains(script, "CREATE TABLE IF NOT EXISTS `wormhole_lock`");
+            StringAssert.Contains(script, WorldWormholesSeed.ForgetFirstIdStatement);
 
             foreach (var statement in WorldWormholesSeed.InsertStatements)
                 StringAssert.Contains(script, statement);
         }
+
+        // The migration was numbered 20261207000000 at first, as Add_control_point_turrets is. A
+        // world that ran it under that id sees 20261208000000_Add_world_wormholes as pending: it
+        // runs without an error, leaves the rows as they were, and takes the first id off the
+        // history.
+        [TestMethod]
+        public void AWorldThatRanItUnderItsFirstIdRunsItAgainUnchanged()
+        {
+            var directory = Path.Combine(AppContext.BaseDirectory, "TestDatabases", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+
+            try
+            {
+                using var context = PersistenceIntegrationTests.CreateContext(typeof(SqliteWorldContext), Path.Combine(directory, "database"));
+                var migrator = context.GetService<IMigrator>();
+
+                List<string> Rows(string sql)
+                {
+                    var rows = new List<string>();
+                    var connection = context.Database.GetDbConnection();
+
+                    if (connection.State != System.Data.ConnectionState.Open)
+                        connection.Open();
+
+                    using var command = connection.CreateCommand();
+                    command.CommandText = sql;
+
+                    using var reader = command.ExecuteReader();
+
+                    while (reader.Read())
+                        rows.Add(string.Join("|", Enumerable.Range(0, reader.FieldCount).Select(i => reader.GetValue(i).ToString())));
+
+                    return rows;
+                }
+
+                migrator.Migrate();
+
+                // As such a world stands: everything the migration does, under the first id.
+                Rows($"update __EFMigrationsHistory set MigrationId = '{WorldWormholesSeed.FirstMigrationId}' where MigrationId = '20261208000000_Add_world_wormholes'");
+                CollectionAssert.AreEqual(new[] { "20261208000000_Add_world_wormholes" }, context.Database.GetPendingMigrations().ToArray());
+
+                var before = new[]
+                {
+                    "select id, class_id, type, description, pos_x, pos_y, pos_z, rotation, map_context_id from teleporter where id in (358, 425) order by id",
+                    "select id, from_teleporter_id, to_teleporter_id, kind, value, comment from wormhole_lock order by id",
+                    "select sql from sqlite_master where name = 'wormhole_lock'"
+                }.Select(Rows).ToList();
+
+                migrator.Migrate();
+
+                Assert.IsEmpty(context.Database.GetPendingMigrations().ToArray());
+                var history = Rows("select MigrationId from __EFMigrationsHistory");
+                CollectionAssert.Contains(history, "20261208000000_Add_world_wormholes");
+                CollectionAssert.DoesNotContain(history, WorldWormholesSeed.FirstMigrationId);
+                CollectionAssert.Contains(history, "20261207000000_Add_control_point_turrets");
+
+                var after = new[]
+                {
+                    "select id, class_id, type, description, pos_x, pos_y, pos_z, rotation, map_context_id from teleporter where id in (358, 425) order by id",
+                    "select id, from_teleporter_id, to_teleporter_id, kind, value, comment from wormhole_lock order by id",
+                    "select sql from sqlite_master where name = 'wormhole_lock'"
+                }.Select(Rows).ToList();
+
+                for (var i = 0; i < before.Count; i++)
+                    CollectionAssert.AreEqual(before[i], after[i]);
+
+                Assert.HasCount(3, after[1]);
+            }
+            finally
+            {
+                SqliteConnection.ClearAllPools();
+                Directory.Delete(directory, true);
+            }
+        }
+
+        // The table the migration makes, when it is missing, is the one it made under its first
+        // id, with CreateTable - which is what a world that ran it then has - on either provider.
+        [TestMethod]
+        [DataRow(typeof(SqliteWorldContext))]
+        [DataRow(typeof(MySqlWorldContext))]
+        public void TheTableIsTheOneCreateTableWouldMake(Type contextType)
+        {
+            var directory = Path.Combine(AppContext.BaseDirectory, "TestDatabases", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+
+            try
+            {
+                using var context = PersistenceIntegrationTests.CreateContext(contextType, Path.Combine(directory, "database"));
+                var sqlite = contextType == typeof(SqliteWorldContext);
+                var integer = sqlite ? "INTEGER" : "int unsigned";
+                var first = new MigrationBuilder(context.Database.ProviderName);
+
+                // The first version's Up, as it was.
+                first.CreateTable(
+                    name: WormholeLockEntry.TableName,
+                    columns: table => new
+                    {
+                        id = sqlite
+                            ? table.Column<uint>(type: integer, nullable: false).Annotation("Sqlite:Autoincrement", true)
+                            : table.Column<uint>(type: integer, nullable: false).Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
+                        from_teleporter_id = table.Column<uint>(type: integer, nullable: false),
+                        to_teleporter_id = table.Column<uint>(type: integer, nullable: false),
+                        kind = table.Column<uint>(type: integer, nullable: false),
+                        value = table.Column<uint>(type: integer, nullable: false),
+                        comment = table.Column<string>(type: "varchar(128)", nullable: true)
+                    },
+                    constraints: table => table.PrimaryKey("PK_wormhole_lock", x => x.id));
+
+                var made = context.GetService<IMigrationsSqlGenerator>()
+                    .Generate(first.Operations, context.GetService<IDesignTimeModel>().Model).Single().CommandText;
+
+                var ours = contextType == typeof(SqliteWorldContext)
+                    ? Rasa.Migrations.SqliteWorld.Add_world_wormholes.TableIfMissing
+                    : Rasa.Migrations.MySqlWorld.Add_world_wormholes.TableIfMissing;
+
+                Assert.AreEqual(Flat(made).Replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS "), Flat(ours));
+            }
+            finally
+            {
+                SqliteConnection.ClearAllPools();
+                Directory.Delete(directory, true);
+            }
+
+            static string Flat(string sql) => string.Join(" ", sql.Split(new[] { ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        /// <summary>The migration before this one, now that it is numbered after Add_control_point_turrets.</summary>
+        private const string BeforeWormholes = "20261207000000_Add_control_point_turrets";
 
         [TestMethod]
         public void TheCrucibleWormholeStandsOnTheFloorOfOutpostIntrepid()

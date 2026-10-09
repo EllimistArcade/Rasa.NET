@@ -60,13 +60,32 @@ namespace Rasa.Services.Preloader
             new object[] { 3u, DivideWormholeId, TordenAbyssWormholeId, WormholeLockEntry.KindMissionAccepted, AriekiMissionId, "Divide -> Torden Abyss: mission 1038 Arieki taken" }
         };
 
-        /// <summary>The rows Up adds and the class it puts right, in order; plain SQL either provider takes.</summary>
+        /// <summary>
+        /// The id the migration had first. Two migrations were numbered 20261207000000 - this
+        /// one and Add_control_point_turrets - so it was given 20261208000000. A world that ran
+        /// it under the first id has its table and rows; Add_world_wormholes is written so that
+        /// running it again changes nothing, and takes the first id off the history
+        /// (<see cref="ForgetFirstIdStatement"/>).
+        /// </summary>
+        public const string FirstMigrationId = "20261207000000_Add_world_wormholes";
+
+        /// <summary>The history row of a world that ran the migration under <see cref="FirstMigrationId"/>.</summary>
+        public static string ForgetFirstIdStatement =>
+            $"delete from __EFMigrationsHistory where MigrationId = '{FirstMigrationId}';";
+
+        /// <summary>
+        /// The rows Up adds and the class it puts right, in order; plain SQL either provider
+        /// takes, and the same whether or not they have been run before: 358 is set to the
+        /// wormhole, 425's class only changes from the wrong one, and the locks are put in
+        /// anew.
+        /// </summary>
         public static IEnumerable<string> InsertStatements
         {
             get
             {
                 yield return Update(CrucibleWormhole);
                 yield return $"update {TeleporterEntry.TableName} set class_id = {PersonalWormholeClassId} where id = {GuardianProminenceWormholeId} and class_id = {GuardianProminenceWrongClassId};";
+                yield return $"delete from {WormholeLockEntry.TableName} where id between {Locks.Min(row => (uint)row[0])} and {Locks.Max(row => (uint)row[0])};";
                 yield return Insert(WormholeLockEntry.TableName, LockColumns, Locks);
             }
         }

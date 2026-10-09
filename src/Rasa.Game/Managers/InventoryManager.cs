@@ -601,6 +601,34 @@ namespace Rasa.Managers
             return false;
         }
 
+        /// <summary>
+        /// An item bound by its template - Bound on Character from the start, a mission item, GM
+        /// or event gear, an account reward - names no character until something binds it, and
+        /// MayTakeFromHome had nobody to hold it to: put in the footlocker by one character, it
+        /// came out to any other of the account's. It is bound now to the character it passes
+        /// through the footlocker with: the one who puts it in, or, for one put in before this,
+        /// the first to take it out. False, and nothing to move, when the binding could not be
+        /// written.
+        /// </summary>
+        private bool BindPassingThroughFootlocker(Client client, ulong entityId)
+        {
+            var item = EntityManager.Instance.GetItem(entityId);
+
+            if (item?.ItemTemplate == null || !item.ItemTemplate.BoundToCharacter || item.BoundCharacterId != 0)
+                return true;
+
+            try
+            {
+                ItemManager.Bind(client, item, _gameUnitOfWorkFactory);
+                return true;
+            }
+            catch (Exception error) when (error is System.Data.Common.DbException || error is Microsoft.EntityFrameworkCore.DbUpdateException)
+            {
+                Logger.WriteLog(LogType.Error, $"Item {item.Id} could not be bound to character {client.Player.Id} on its way through the footlocker; not moved: {error.Message}");
+                return false;
+            }
+        }
+
         public void RequestMoveItemToHomeInventory(Client client, RequestMoveItemToHomeInventoryPacket packet)
         {
             // remove item
@@ -635,6 +663,9 @@ namespace Rasa.Managers
                 client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmInventoryFull, new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
                 return;
             }
+
+            if (!BindPassingThroughFootlocker(client, entityId) || swappedOut != 0 && !BindPassingThroughFootlocker(client, swappedOut))
+                return;
 
             RemoveItemBySlot(client, InventoryType.Personal, packet.SrcSlot);
             // if toSlot is not empty, move current item to the pack (item swap)
@@ -1098,7 +1129,12 @@ namespace Rasa.Managers
                 return;
 
             // A swap puts the pack's item in the footlocker.
-            if (client.Player.Inventory.PersonalInventory[(int)destSlot] != 0 && !MayStore(client, client.Player.Inventory.PersonalInventory[(int)destSlot], false))
+            var swappedIn = client.Player.Inventory.PersonalInventory[(int)destSlot];
+
+            if (swappedIn != 0 && !MayStore(client, swappedIn, false))
+                return;
+
+            if (!BindPassingThroughFootlocker(client, entityId) || swappedIn != 0 && !BindPassingThroughFootlocker(client, swappedIn))
                 return;
 
             RemoveItemBySlot(client, InventoryType.HomeInventory, packet.SrcSlot);

@@ -81,6 +81,43 @@ namespace Rasa.Test.Gameplay
         }
 
         [TestMethod]
+        public void AHybridIsMadeOnlyForAnAccountThatHasUnlockedItWhenTheSettingIsOff()
+        {
+            using var context = new CharacterCreationContext();
+            context.SeedAccount(31);
+            var characters = new CharacterManager(context);
+
+            try
+            {
+                HybridUnlocks.Load(false);
+                characters.RequestCreateCharacterInSlot(context.CreateClient(31),
+                    CreatePacket(slot: 1, familyName: "Fixture", characterName: "Splice", race: Race.Thrax));
+
+                using (var verify = context.Open())
+                    Assert.IsNull(new GameAccountRepository(verify).Get(31).GetCharacterBySlot(1), "locked");
+
+                using (var unlock = context.Open())
+                    Assert.AreEqual(HybridUnlocks.Bit(Race.Thrax), new GameAccountRepository(unlock).AddHybridUnlocks(31, HybridUnlocks.Bit(Race.Thrax)));
+
+                characters.RequestCreateCharacterInSlot(context.CreateClient(31),
+                    CreatePacket(slot: 1, familyName: "Fixture", characterName: "Splice", race: Race.Thrax));
+
+                HybridUnlocks.Load(true);
+                characters.RequestCreateCharacterInSlot(context.CreateClient(31),
+                    CreatePacket(slot: 2, familyName: "Fixture", characterName: "Coral", race: Race.Brann));
+
+                using var made = context.Open();
+                var account = new GameAccountRepository(made).Get(31);
+                Assert.AreEqual((byte)Race.Thrax, account.GetCharacterBySlot(1)?.Race, "unlocked");
+                Assert.AreEqual((byte)Race.Brann, account.GetCharacterBySlot(2)?.Race, "every race offered");
+            }
+            finally
+            {
+                HybridUnlocks.Load(null);
+            }
+        }
+
+        [TestMethod]
         public void CreatingCharacterAddsOnlyOneStartingExperienceRow()
         {
             using var context = new CharacterCreationContext();
@@ -878,7 +915,8 @@ namespace Rasa.Test.Gameplay
         private static RequestCreateCharacterInSlotPacket CreatePacket(
             byte slot,
             string familyName,
-            string characterName) =>
+            string characterName,
+            Race race = Race.Human) =>
             new()
             {
                 SlotNum = slot,
@@ -886,7 +924,7 @@ namespace Rasa.Test.Gameplay
                 CharacterName = characterName,
                 Gender = 0,
                 Scale = 1,
-                RaceId = Race.Human
+                RaceId = race
             };
 
         private static RequestCloneCharacterToSlotPacket CreateClonePacket(

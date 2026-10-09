@@ -182,6 +182,11 @@ namespace Rasa.Context.Char
                 .HasDefaultValue(false);
 
             modelBuilder.Entity<GameAccountEntry>()
+                .Property(e => e.HybridUnlocks)
+                .AsUnsignedTinyInt(_dbContextPropertyModifier, 3)
+                .HasDefaultValue(0);
+
+            modelBuilder.Entity<GameAccountEntry>()
                 .Property(e => e.LastIp)
                 .HasDefaultValue("0.0.0.0");
 

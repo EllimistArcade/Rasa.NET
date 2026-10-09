@@ -197,6 +197,7 @@ namespace Rasa.Game
 
             ServerFlagManager.Instance.LoadConfiguredFlags(Config.GameDataConfig?.ServerFlags);
             CharacterManager.LoadEnabledRaces(Config.GameDataConfig?.EnabledRaces);
+            HybridUnlocks.Load(Config.GameDataConfig?.AlwaysUnlockHybrids);
 
             if (!KnowledgeBaseManager.Instance.Load(Config.GameDataConfig?.KnowledgeBaseFile, out var kbProblem))
                 Logger.WriteLog(LogType.Initialize, $"Knowledge base: {kbProblem}. SearchKB will answer with nothing.");

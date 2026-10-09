@@ -77,7 +77,8 @@ namespace Rasa.Managers
         /// The races a character can be created or cloned as - GameDataConfig.EnabledRaces, which was
         /// read by nothing: BeginCharacterSelection offered all four whatever it said. Human is
         /// always among them (the client has nothing to lock it behind); unknown ids are dropped. No
-        /// setting at all means all four, as before.
+        /// setting at all means all four, as before. Which of them an account is offered is
+        /// HybridUnlocks.OfferedTo.
         /// </summary>
         public static IReadOnlyList<Race> EnabledRaces { get; private set; } = AllRaces;
 
@@ -118,7 +119,7 @@ namespace Rasa.Managers
             if (client.State != ClientState.LoggedIn)
                 return;
 
-            client.CallMethod(SysEntity.ClientMethodId, new BeginCharacterSelectionPacket(client.AccountEntry.FamilyName, client.AccountEntry.Characters.Any(), client.AccountEntry.Id, EnabledRaces, StartingExperience.CanSkip(client.AccountEntry)));
+            client.CallMethod(SysEntity.ClientMethodId, new BeginCharacterSelectionPacket(client.AccountEntry.FamilyName, client.AccountEntry.Characters.Any(), client.AccountEntry.Id, HybridUnlocks.OfferedTo(client.AccountEntry), StartingExperience.CanSkip(client.AccountEntry)));
 
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             var charactersBySlot = unitOfWork.Characters.GetByAccountId(client.AccountEntry.Id);
@@ -201,11 +202,11 @@ namespace Rasa.Managers
 
             var result = packet.Validate();
 
-            // The window only offers the enabled races, so another one is a client that was not
-            // shown this list.
-            if (result == CreateCharacterResult.Success && !IsRaceEnabled(packet.RaceId))
+            // The window only offers the races this account may pick (HybridUnlocks), so another
+            // one is a client that was not shown this list.
+            if (result == CreateCharacterResult.Success && !HybridUnlocks.IsOfferedTo(client.AccountEntry, packet.RaceId))
             {
-                Logger.WriteLog(LogType.Security, $"Account {client.AccountEntry.Id} asked for a {packet.RaceId} character, a race this server does not offer.");
+                Logger.WriteLog(LogType.Security, $"Account {client.AccountEntry.Id} asked for a {packet.RaceId} character, a race this server does not offer it.");
                 result = CreateCharacterResult.CharacterCreationInvalidRace;
             }
 
@@ -429,11 +430,11 @@ namespace Rasa.Managers
 
             var result = packet.Validate();
 
-            // The window only offers the enabled races, so another one is a client that was not
-            // shown this list.
-            if (result == CreateCharacterResult.Success && !IsRaceEnabled(packet.RaceId))
+            // The window only offers the races this account may pick (HybridUnlocks), so another
+            // one is a client that was not shown this list.
+            if (result == CreateCharacterResult.Success && !HybridUnlocks.IsOfferedTo(client.AccountEntry, packet.RaceId))
             {
-                Logger.WriteLog(LogType.Security, $"Account {client.AccountEntry.Id} asked for a {packet.RaceId} character, a race this server does not offer.");
+                Logger.WriteLog(LogType.Security, $"Account {client.AccountEntry.Id} asked for a {packet.RaceId} character, a race this server does not offer it.");
                 result = CreateCharacterResult.CharacterCreationInvalidRace;
             }
 

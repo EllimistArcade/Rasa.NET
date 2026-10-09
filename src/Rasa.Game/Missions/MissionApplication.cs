@@ -1224,6 +1224,7 @@ namespace Rasa.Managers
                 var progressPlan = MissionProgressPublicationPlan.Empty;
                 var rejectedConversation = false;
                 DateTime rewardedAt = default;
+                Race? hybridUnlocked = null;
                 try
                 {
                     try
@@ -1289,6 +1290,7 @@ namespace Rasa.Managers
                                 OwnerId = mission.AssignmentId, Generation = mission.Generation,
                                 OperationKey = "mission-reward", Kind = "Grant", CreatedAtUtc = rewardedAt
                             });
+                            hybridUnlocked = HybridUnlocks.Record(unitOfWork, client.AccountEntry, missionId);
                             _deadlineService.SynchronizeMission(
                                 unitOfWork,
                                 client.Player.Id,
@@ -1389,6 +1391,8 @@ namespace Rasa.Managers
                             client.Player.EntityId,
                             new MissionRewardedPacket(missionId)),
                         $"mission {missionId} rewarded");
+                    TryPublish(() => HybridUnlocks.Granted(client, hybridUnlocked),
+                        $"mission {missionId} hybrid unlock");
                     _protocol.PublishAudio(client, missionId, Rasa.Missions.Content.MissionAudioEvent.Completed);
                     RefreshNpcConversationStatuses(client);
                     return true;

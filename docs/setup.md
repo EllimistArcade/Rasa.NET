@@ -483,7 +483,7 @@ The Auth server logs what is in force at startup and whenever it changes (`Passw
 
 - `GameConfig` owns the public game endpoint, listener backlog, the 60-second transfer acknowledgement timeout, the 6-metre corpse-looting distance, and the optional GM performance-metrics interval. The metrics interval is `0` by default, which disables those packets.
 - `QueueConfig`, `CommunicatorConfig`, `ServerInfoConfig`, and `SocketAsyncConfig` own their existing queue, auth-communicator, server-list, and socket settings.
-- `GameDataConfig` owns enabled races, startup server flags, the knowledge-base JSON path, and `NavMeshPath`. The default navigation directory is `navmesh`.
+- `GameDataConfig` owns enabled races (`EnabledRaces`, the races the server offers at all), `AlwaysUnlockHybrids` (default `true`: every enabled race is offered to every account; `false`: an account is offered a human plus the hybrids it has unlocked by completing mission 1861 for the Forean, 1851 for the Brann and 1899 for the Thrax), startup server flags, the knowledge-base JSON path, and `NavMeshPath`. The default navigation directory is `navmesh`.
 
 Action and action-level behavior is loaded from the world data tables. Missions
 load enabled definitions and typed scene bindings installed in the World

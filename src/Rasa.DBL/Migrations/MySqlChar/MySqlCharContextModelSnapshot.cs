@@ -1501,6 +1501,12 @@ namespace Rasa.Migrations.MySqlChar
                         .HasDefaultValue("")
                         .HasColumnName("family_name");
 
+                    b.Property<byte>("HybridUnlocks")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(3) unsigned")
+                        .HasDefaultValue((byte)0)
+                        .HasColumnName("hybrid_unlocks");
+
                     b.Property<string>("LastIp")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

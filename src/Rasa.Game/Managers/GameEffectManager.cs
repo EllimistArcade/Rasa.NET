@@ -574,6 +574,14 @@ namespace Rasa.Managers
                     continue;
                 }
 
+                // A Howler's or a Predator's death bomb goes off from its body (CreatureBombs).
+                if (actor.State == CharacterState.Dead && actor is Creature corpse &&
+                    actor.MapContextId == mapChannel.MapInfo.MapContextId && corpse.ActiveEffects.Values.Any(CreatureBombs.IsDeathBomb))
+                {
+                    HoldDeathBomb(mapChannel, corpse);
+                    continue;
+                }
+
                 // Dead, or not on this map any more: nothing to tick and nobody to tell.
                 if (actor.State == CharacterState.Dead || actor.MapContextId != mapChannel.MapInfo.MapContextId)
                 {
@@ -643,6 +651,28 @@ namespace Rasa.Managers
                     DettachEffect(mapChannel, fallen, effect);
                     effect.OnExpired?.Invoke(mapChannel, fallen, effect);
                 }
+            }
+        }
+
+        /// <summary>
+        /// A dead creature carrying its death bomb (CreatureBombs.OnDeath). The bomb stays, ticking
+        /// nothing, until CreatureBombs sets it off and takes it away; its expiry is the backstop.
+        /// Anything else on the body was put there after the death, and is taken off.
+        ///
+        /// The pass used to clear every effect on anything dead, the bomb with them, and the
+        /// explosion then found no bomb to go off: the Predator's, 3 s after the death, never went
+        /// off, and the Howler's, due at once, only when the bombs ran before this pass.
+        /// </summary>
+        private void HoldDeathBomb(MapChannel mapChannel, Creature corpse)
+        {
+            foreach (var effect in corpse.ActiveEffects.Values.ToList())
+            {
+                // Taken off by an earlier one on this pass (a child with its parent).
+                if (!corpse.ActiveEffects.ContainsKey(effect.EffectId))
+                    continue;
+
+                if (!CreatureBombs.IsDeathBomb(effect) || effect.IsExpired)
+                    DettachEffect(mapChannel, corpse, effect);
             }
         }
 

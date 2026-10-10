@@ -1001,6 +1001,13 @@ namespace Rasa.Managers
                         if (!used)
                             continue;
 
+                        // Standing, facing its target, as for an attack below. The loop used to
+                        // break here with needToMove still set, so the think went on to take a
+                        // chase step - a movement at run speed - as the special began, and the
+                        // clients ran the creature on through its windup.
+                        needToMove = false;
+                        UpdateEntityMovement(targetDistX, targetDistY, targetDistZ, creature, mapChannel, 0.0f, false, delta);
+
                         action.CooldownTimer = NextCooldown(creature, action);
                         break;
                     }
@@ -1076,7 +1083,13 @@ namespace Rasa.Managers
                 }
 
                 if (needToMove == false)
+                {
+                    // Holding here - an attack cooling down with nothing closer to use, the
+                    // opening roll - after a think that stepped: the clients carry the last
+                    // movement on at its speed until they are told otherwise.
+                    StopIfMoving(creature);
                     return;
+                }
 
                 // A Shield Drone does not go to its target; the target comes to it. The guide
                 // gives it "Offense: None" and tells the player to "sprint directly toward them",
@@ -1097,7 +1110,11 @@ namespace Rasa.Managers
                 }
 
                 if (targetDistSqr <= 3.0f * 3.0f && !sightBlocked)
-                    return;// near enough, dont move
+                {
+                    // near enough, dont move - and say so, after the step that brought it here
+                    StopIfMoving(creature);
+                    return;
+                }
 
                 // After checking for melee and ranged attacks without success, chase.
                 //
@@ -1299,7 +1316,7 @@ namespace Rasa.Managers
         /// </summary>
         private static void StopWalking(Creature creature)
         {
-            CellManager.Instance.CellMoveObject(creature, new Movement(creature.Position, 0f, 0x08, new Vector2(creature.LastYaw, 0f)));
+            PublishMovement(creature, new Movement(creature.Position, 0f, 0x08, new Vector2(creature.LastYaw, 0f)));
         }
 
         /// <summary>
@@ -2079,7 +2096,26 @@ namespace Rasa.Managers
         {
             var movement = new Movement(new Vector3(creature.Position.X, creature.Position.Y, creature.Position.Z), 0.0f, 0x08, new Vector2(creature.LastYaw, 0f));
 
+            if (creature.Controller != null)
+                creature.Controller.LastMovement = movement;
+
             CellManager.Instance.CellMoveObject(creature, movement);
+        }
+
+        /// <summary>
+        /// <see cref="StopMoving"/>, if the last movement the clients were sent was a moving one
+        /// (Controller.LastMovement, which every published step records). They extrapolate a
+        /// movement at its speed until the next, so a creature whose last step was a chase's and
+        /// which then stands - a special begun, an attack waited on, a fight given up - ran on
+        /// across their screens until something else was sent for it. A creature that is already
+        /// standing as far as they know is not sent another stop.
+        /// </summary>
+        private static void StopIfMoving(Creature creature)
+        {
+            if (creature?.Controller?.LastMovement is not { Velocity: > 0 })
+                return;
+
+            PublishMovement(creature, new Movement(creature.Position, 0f, 0x08, new Vector2(creature.LastYaw, 0f)));
         }
 
         private double GetDistanceSqr(Vector3 p1, Vector3 p2)
@@ -2667,6 +2703,11 @@ namespace Rasa.Managers
 
             // The fight is over: the weapon goes away (CreatureWeaponDraw).
             CreatureWeaponDraw.Stow(mapChannel, creature);
+
+            // And a chase that was under way stops where it is. Nothing said so: the creature
+            // went to wandering idle, which sends nothing until its first stroll, and the
+            // clients ran it on at its last chase step's speed meanwhile.
+            StopIfMoving(creature);
 
             // A creature that was following someone, or holding a spot - a minion, a mission
             // escort - goes back to that rather than wandering off where the fight left it.

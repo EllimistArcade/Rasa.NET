@@ -491,6 +491,49 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
+        public void ACreatureThatGivesUpAChaseIsToldToStand()
+        {
+            using var world = new WorldTestContext();
+            var watcher = Watch(world, x: 10);
+            var creature = Spawn(world, "Chaser", 0);
+
+            // Its last think stepped after its target: what the clients were last sent moves.
+            creature.Controller.CurrentAction = BehaviorManager.BehaviorActionFighting;
+            creature.Controller.LastMovement = new Movement(creature.Position, 6f, 0x08, new Vector2(creature.LastYaw, 0f));
+            Drain(watcher);
+
+            BehaviorManager.Instance.StopFighting(creature);
+
+            var sent = MovesOf(watcher, creature.EntityId);
+
+            Assert.AreEqual(1, sent.Count, "a stop, where it is");
+            Assert.AreEqual(MovementType.Normal, sent[0].Type);
+            Assert.AreEqual(0f, sent[0].Velocity, 0.001f);
+            Assert.AreEqual(creature.Position, sent[0].Position);
+
+            // Already standing as far as they know: nothing more is sent for standing again.
+            BehaviorManager.Instance.StopFighting(creature);
+
+            Assert.AreEqual(1, MovesOf(watcher, creature.EntityId).Count);
+        }
+
+        [TestMethod]
+        public void ACreatureAlreadyStandingIsNotToldAgain()
+        {
+            using var world = new WorldTestContext();
+            var watcher = Watch(world, x: 10);
+            var creature = Spawn(world, "Stander", 0);
+
+            creature.Controller.CurrentAction = BehaviorManager.BehaviorActionFighting;
+            creature.Controller.LastMovement = new Movement(creature.Position, 0f, 0x08, new Vector2(creature.LastYaw, 0f));
+            Drain(watcher);
+
+            BehaviorManager.Instance.StopFighting(creature);
+
+            Assert.AreEqual(0, MovesOf(watcher, creature.EntityId).Count);
+        }
+
+        [TestMethod]
         public void AChargeFromArmsLengthSendsNobodyAnywhere()
         {
             using var world = new WorldTestContext();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Data.Common;
@@ -3417,12 +3417,17 @@ namespace Rasa.Managers
             };
 
         internal bool TryOpenNpcConversation(Client client, ulong entityId,
-            out Creature creature, out MissionConversationState state)
+            out Creature creature, out MissionConversationState state) =>
+            TryOpenNpcConversation(client, entityId, out creature, out state, out _);
+
+        /// <param name="outOfReach">True when the NPC is this player's to talk to in every respect but distance (MissionInteractionPolicy.TryResolveTarget).</param>
+        internal bool TryOpenNpcConversation(Client client, ulong entityId,
+            out Creature creature, out MissionConversationState state, out bool outOfReach)
         {
             creature = null;
             state = null;
             client.MissionConversation = null;
-            if (!Interactions.TryResolveOpeningTarget(client, entityId, out var target) ||
+            if (!Interactions.TryResolveOpeningTarget(client, entityId, out var target, out outOfReach) ||
                 target.Creature == null)
                 return false;
             try

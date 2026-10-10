@@ -167,8 +167,17 @@ namespace Rasa.Managers
                 Missions.ObjectConversations.Open(client, entityId);
                 return;
             }
-            if (!Missions.TryOpenNpcConversation(client, entityId, out var creature, out var conversation))
+            if (!Missions.TryOpenNpcConversation(client, entityId, out var creature, out var conversation, out var outOfReach))
+            {
+                // The client's own check is 5 m body to body and tells the player when it fails;
+                // a request it let through that the server's wider gate still refuses used to
+                // fall silent. The same message the client would have given.
+                if (outOfReach)
+                    client.CallMethod(SysEntity.CommunicatorId, new DisplayClientMessagePacket(PlayerMessage.PmTargetOutOfRange,
+                        new Dictionary<string, string>(), MsgFilterId.GeneralSystemMessages));
+
                 return;
+            }
 
             var convoDataDict = conversation.CreateConversationData();
 

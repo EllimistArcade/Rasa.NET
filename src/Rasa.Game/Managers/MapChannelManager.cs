@@ -740,8 +740,9 @@ namespace Rasa.Managers
                 client.CallMethod(SysEntity.ClientMethodId, new RequestMovementBlockPacket());
                 _assignPlayer(client);
 
-                // The buffs brought from the map left, now there is somebody to show them to.
-                EffectCarry.Restore(client);
+                // The buffs brought from the map left go on when the ship sets the player down
+                // (DynamicObjectManager, phase 4): until then the player is Teleporting, and an
+                // attach sent around them leaves out their own client.
 
                 // And the padlock on a locked wagered item.
                 InventoryManager.SyncWagerLock(client.Player);
@@ -892,9 +893,8 @@ namespace Rasa.Managers
             MapLinkManager.Instance.PlayerEnteredMap(client);
             _assignPlayer(client);
 
-            // As on any arrival: the buffs carried over, the padlock of a locked wagered item, the
-            // buyback list, the clan's feuds.
-            EffectCarry.Restore(client);
+            // As on any arrival: the padlock of a locked wagered item, the buyback list, the
+            // clan's feuds.
             InventoryManager.SyncWagerLock(client.Player);
             NpcManager.Instance.ResendBuyback(client);
             ClanFeuds.Instance.PlayerEnteredWorld(client);
@@ -902,6 +902,11 @@ namespace Rasa.Managers
 
             client.PendingTransfer = null;
             client.State = ClientState.Ingame;
+
+            // And the buffs carried over, now the player is in the world: an attach sent around a
+            // player who is still Teleporting leaves out their own client, which then never
+            // showed them, nor let a buff be right-clicked off.
+            EffectCarry.Restore(client);
             ResumeMissionScenes(client);
             ManifestationManager.Instance.FinishArrival(client);
             ManifestationManager.Instance.ResetInactivity(client);

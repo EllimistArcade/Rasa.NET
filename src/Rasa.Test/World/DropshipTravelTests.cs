@@ -131,6 +131,117 @@ namespace Rasa.Test.World
             Assert.AreEqual(ClientState.Ingame, client.State);
         }
 
+        // BR-166: a buff carried across a map change goes on again where the player's own client
+        // is told of it - once they are in the world, not while they are still Teleporting.
+        [TestMethod]
+        public void ABuffCarriedByDropshipIsShownToItsOwnClientWhenTheShipSetsThemDown()
+        {
+            using var world = new WorldTestContext();
+            world.AddClass(EntityClasses.UsableCrSpawnerHumDropshipV01);
+            var client = world.CreateClient();
+            CellManager.Instance.AddToWorld(client);
+            var destination = CreateDestination();
+            var maps = CreateMaps(world, destination);
+            var manager = CreateDropshipManager(maps);
+            using var managers = new ManagerInstances(maps, manager);
+            var buff = CarriedBuff(world.Map, client.Player);
+            StartDropshipTransfer(world, destination, client, manager);
+
+            Depart(world.Map, manager, client);
+            Assert.AreEqual(1, client.Player.CarriedEffects.Count, "kept aside for the ride");
+
+            RouteMapLoaded(client);
+            WorldTestContext.Drain(client);
+            Assert.AreEqual(ClientState.Teleporting, client.State);
+            Assert.AreEqual(1, client.Player.CarriedEffects.Count, "not yet: their own client would not be told");
+
+            LandArrival(destination, manager);
+
+            Assert.AreEqual(ClientState.Ingame, client.State);
+            Assert.IsEmpty(client.Player.CarriedEffects);
+            Assert.IsTrue(client.Player.ActiveEffects.ContainsKey(buff.EffectId), "on again, under the new map's id");
+            Assert.IsTrue(AttachesTo(client).Any(packet => packet.EffectTypeId == BuffTypeId && packet.Announced),
+                "and their own client has it, announced");
+        }
+
+        [TestMethod]
+        public void ABuffCarriedThroughAMapLinkIsShownToItsOwnClient()
+        {
+            using var world = new WorldTestContext();
+            var client = world.CreateClient();
+            var destination = CreateDestination();
+            CellManager.Instance.AddToWorld(client);
+            var maps = CreateMaps(world, destination);
+            var buff = CarriedBuff(world.Map, client.Player);
+
+            Assert.IsTrue(maps.ChangeMap(client, destination.MapInfo.MapContextId, new Vector3(400, 5, 0), 0));
+            Assert.AreEqual(1, client.Player.CarriedEffects.Count);
+            WorldTestContext.Drain(client);
+
+            try
+            {
+                maps.MapLoaded(client);
+
+                Assert.AreEqual(ClientState.Ingame, client.State);
+                Assert.IsTrue(client.Player.ActiveEffects.ContainsKey(buff.EffectId));
+                Assert.IsTrue(AttachesTo(client).Any(packet => packet.EffectTypeId == BuffTypeId && packet.Announced),
+                    "their own client was left out while they were still Teleporting");
+            }
+            finally
+            {
+                CellManager.Instance.RemoveFromWorld(client);
+                destination.ClientList.Clear();
+            }
+        }
+
+        [TestMethod]
+        public void BuffsStillAsideWhenThePlayerLeavesAgainGoWithThem()
+        {
+            using var world = new WorldTestContext();
+            var player = world.CreateClient().Player;
+            var first = CarriedBuff(world.Map, player);
+
+            EffectCarry.Stash(player);
+            GameEffectManager.Instance.ClearEffects(world.Map, player);
+
+            // Off again before the ride set them down: what was aside stays aside, with what is on now.
+            var second = CarriedBuff(world.Map, player, typeId: BuffTypeId + 1);
+            EffectCarry.Stash(player);
+
+            CollectionAssert.AreEquivalent(new[] { first, second }, player.CarriedEffects.Select(c => c.Effect).ToArray());
+
+            // The dead keep nothing.
+            player.State = CharacterState.Dead;
+            EffectCarry.Stash(player);
+            Assert.IsEmpty(player.CarriedEffects);
+        }
+
+        /// <summary>RAGE: a buff of a minute, which a map change carries.</summary>
+        private const int BuffTypeId = 74;
+
+        private static GameEffect CarriedBuff(MapChannel map, Manifestation player, int typeId = BuffTypeId)
+        {
+            var buff = new GameEffect
+            {
+                TypeId = typeId,
+                EffectId = GameEffectManager.Instance.NextEffectId(map),
+                EffectLevel = 1,
+                SourceId = player.EntityId,
+                Source = player,
+                IsBuff = true,
+                ExpiresTick = Environment.TickCount64 + 60_000
+            };
+
+            GameEffectManager.Instance.Attach(map, player, buff);
+            Assert.IsTrue(EffectCarry.Carries(player, buff));
+
+            return buff;
+        }
+
+        private static List<GameEffectAttachedPacket> AttachesTo(Rasa.Game.Client client) =>
+            WorldTestContext.Drain(client).Select(packet => packet.Message).OfType<CallMethodMessage>()
+                .Select(message => message.Packet).OfType<GameEffectAttachedPacket>().ToList();
+
         [TestMethod]
         public void ASquadMateWhoArrivesByDropshipIsAnnouncedToTheSquadThere()
         {

@@ -15,9 +15,11 @@ namespace Rasa.Managers
     ///
     /// On leaving, the buffs that can go (<see cref="Carries"/>) have their clocks stopped
     /// (GameEffect.Freeze) and are kept on the Manifestation while the effects are cleared as
-    /// before. On arrival, once the player has been introduced to the new map, each goes on
-    /// again under a new effect id from the new map, its clock started with the time it had
-    /// left: the loading screen costs nothing. The client's actor is new on every map, so the
+    /// before. On arrival, once the player is in the world on the new map - Ingame, so that the
+    /// attach sent around them reaches their own client as well as everyone else's: through a
+    /// map link as the transfer completes, by dropship as the ship sets them down (phase 4) -
+    /// each goes on again under a new effect id from the new map, its clock started with the
+    /// time it had left: the loading screen and the ride cost nothing. The client's actor is new on every map, so the
     /// attach is a fresh one with that time as its duration, and it is announced as a newcomer
     /// would see it (AnnounceToNewcomers), which starts its visuals. One that was paused before
     /// the change is paused again. An aura goes without its copies - they were taken off the
@@ -56,17 +58,20 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Before the player's effects are cleared on leaving a map: the ones that go have their
-        /// clocks stopped and are kept for <see cref="Restore"/>. Anything kept from before is dropped.
+        /// clocks stopped and are kept for <see cref="Restore"/>. Any still kept from the change
+        /// before - a ride left again before it set the player down - stay kept, clocks still
+        /// stopped. The dead keep nothing.
         /// </summary>
         public static void Stash(Manifestation player)
         {
             if (player == null)
                 return;
 
-            player.CarriedEffects.Clear();
-
             if (player.State == CharacterState.Dead || player.State == CharacterState.Dying)
+            {
+                player.CarriedEffects.Clear();
                 return;
+            }
 
             var now = Environment.TickCount64;
 
@@ -86,8 +91,8 @@ namespace Rasa.Managers
         public static void Drop(Manifestation player) => player?.CarriedEffects.Clear();
 
         /// <summary>
-        /// On arrival, with the player in the new map's cells: the kept buffs go on again with
-        /// the time they had left. Returns how many.
+        /// On arrival, with the player in the new map's cells and Ingame: the kept buffs go on
+        /// again with the time they had left. Returns how many.
         /// </summary>
         public static int Restore(Client client)
         {

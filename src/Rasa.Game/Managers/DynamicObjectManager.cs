@@ -1235,6 +1235,11 @@ namespace Rasa.Managers
                                 dropship.Client.Player.MapContextId == dropship.MapContextId)
                             {
                                 dropship.Client.State = ClientState.Ingame;
+
+                                // The buffs brought from the map left, now the player is in the
+                                // world and an attach around them reaches their own client too.
+                                EffectCarry.Restore(dropship.Client);
+
                                 Maps.ResumeMissionScenes(dropship.Client);
                                 ManifestationManager.Instance.FinishArrival(dropship.Client);
                                 ManifestationManager.Instance.ResetInactivity(dropship.Client);

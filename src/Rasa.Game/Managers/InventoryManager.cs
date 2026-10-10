@@ -2307,12 +2307,56 @@ namespace Rasa.Managers
         {
             InitCharacterInventory(client);
 
+            // Before the player is shown to anyone: the weapon in their hand is the one they hold.
+            SyncHeldWeaponAppearance(client);
+
             // Auctions that ran out while this character was away, or while the server was down,
             // are returned now - before the load below would otherwise show them as still listed.
             AuctionHouseManager.Instance.ExpireAuctionsFor(client);
 
             // init LockboxTabPermissions
             client.CallMethod(SysEntity.ClientInventoryManagerId, new LockboxTabPermissionsPacket(client.Player.LockboxTabs));
+        }
+
+        /// <summary>
+        /// The Weapon appearance entry - what the character is drawn holding - made to match the
+        /// weapon in its active drawer slot, kept in character_appearance. The two are written
+        /// separately, and a character can come in with them apart: a new character made before
+        /// its starting pistol had an entry fired with nothing in its hands until the pistol was
+        /// taken out and put back. A weapon in hand with no entry, or another, is shown; an entry
+        /// with no weapon in hand is cleared. Nothing is written when they already agree.
+        /// </summary>
+        internal void SyncHeldWeaponAppearance(Client client)
+        {
+            var player = client.Player;
+            var held = EntityManager.Instance.GetItem(player.Inventory.EquippedInventory[13]);
+
+            if (held != null && EntityClassManager.Instance.GetEquipableClassInfo(held)?.EquipmentSlotId != EquipmentData.Weapon)
+                held = null;
+
+            player.AppearanceData.TryGetValue(EquipmentData.Weapon, out var shown);
+
+            var classId = (uint)(held?.ItemTemplate.Class ?? 0);
+            var color = held?.Color ?? 0;
+
+            if (held == null ? shown == null || shown.Class == 0 : shown != null && shown.Class == classId && shown.Color?.Hue == color)
+                return;
+
+            // As ManifestationManager.SetAppearanceItem and RemoveAppearanceItem keep it.
+            if (shown == null)
+                player.AppearanceData[EquipmentData.Weapon] = shown = new AppearanceData { SlotId = EquipmentData.Weapon };
+
+            shown.Class = classId;
+
+            if (held != null)
+            {
+                shown.Color = new Color(color);
+                shown.Hue2 = new Color(color);
+            }
+
+            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+            unitOfWork.CharacterAppearances.AddOrUpdate(player.Id, new CharacterAppearanceEntry((uint)EquipmentData.Weapon, classId, color));
+            unitOfWork.Complete();
         }
 
         /// <summary>

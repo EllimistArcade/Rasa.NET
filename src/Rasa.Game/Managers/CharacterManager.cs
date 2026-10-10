@@ -38,6 +38,9 @@ namespace Rasa.Managers
         private const uint StartingPistolTemplateId = 17131;
         private const uint StartingAmmoTemplateId = 28;
         private const uint StartingAmmoQuantity = 1000;
+
+        /// <summary>The colour the starting items and the recruit armour are made in.</summary>
+        private const uint StartingItemColor = 2139062144;
         internal static readonly IReadOnlyList<uint> StartingLogos = new[] { AbilityLogos.Power };
         internal Game.Missions.Integration.IStartingExperiencePolicy StartingExperience { get; }
 
@@ -804,7 +807,15 @@ namespace Rasa.Managers
                 return null;
             }
 
-            var appearances = CreateCharacterAppearanceEntries(packet.AppearanceData);
+            var appearances = CreateCharacterAppearanceEntries(packet.AppearanceData).ToList();
+
+            // The starting pistol goes in the active drawer slot (CreateStartingLoadout), so it is
+            // the weapon in hand, and what a character shows in its hand is its Weapon appearance
+            // entry. Without one the client had nothing to draw: a new recruit fired with empty
+            // hands until the pistol was taken out of the drawer and put back.
+            if (appearances.All(entry => entry.Slot != (uint)EquipmentData.Weapon) && StartingWeaponAppearance() is { } weapon)
+                appearances.Add(weapon);
+
             if (!unitOfWork.CharacterAppearances.Add(characterEntry, appearances))
             {
                 SendCharacterCreateFailed(client, CreateCharacterResult.TechnicalDifficulty);
@@ -861,7 +872,7 @@ namespace Rasa.Managers
                     entityClass.ItemClassInfo.StackSize < quantity)
                     throw new GameplayRejectionException($"Starting item template {templateId} is unavailable or cannot hold {quantity} items.");
 
-                var item = new Item(templateId, quantity, entityClass.ItemClassInfo.MaxHitPoints, 2139062144);
+                var item = new Item(templateId, quantity, entityClass.ItemClassInfo.MaxHitPoints, StartingItemColor);
                 var itemId = unitOfWork.Items.CreateItem(item);
                 unitOfWork.CharacterInventories.AddInvItem(
                     accountId, characterId, (uint)inventoryType, slot, itemId);
@@ -893,6 +904,12 @@ namespace Rasa.Managers
                 return false;
             }
         }
+
+        /// <summary>The starting pistol as a Weapon appearance entry; null if its template is not loaded (CreateStartingLoadout then refuses the character).</summary>
+        private static CharacterAppearanceEntry StartingWeaponAppearance() =>
+            ItemManager.Instance.ItemTemplateItemClass.TryGetValue(StartingPistolTemplateId, out var classId)
+                ? new CharacterAppearanceEntry((uint)EquipmentData.Weapon, (uint)classId, StartingItemColor)
+                : null;
 
         private IEnumerable<CharacterAppearanceEntry> CreateCharacterAppearanceEntries(
             IDictionary<EquipmentData, AppearanceData> appearanceData)

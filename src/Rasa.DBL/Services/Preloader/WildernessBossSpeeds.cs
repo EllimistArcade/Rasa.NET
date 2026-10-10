@@ -5,8 +5,11 @@ namespace Rasa.Services.Preloader
     using Structures.World;
 
     /// <summary>
-    /// The creature rows (CreaturePreloader) whose speeds were wrong, and the migration that puts
-    /// them right in a database that already has them.
+    /// The creature rows whose speeds were wrong, and the migration that puts them right. Every
+    /// world database is seeded by CreaturePreloader in an early migration and then comes through
+    /// this one, so the preloader keeps the rows as they were and this migration corrects new and
+    /// existing databases alike; Down puts back exactly what the seed wrote, which the rollback
+    /// check (MigrationConsolidationTests) holds it to.
     ///
     /// Six Wilderness bosses could not reach anyone: Proctor Fulgor (76), Arioch (77), Atropos
     /// (78), the Fithik Hive Monarch (89) and Overseer Graal (90) had a run and a walk speed of

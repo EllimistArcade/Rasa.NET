@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
@@ -293,6 +294,60 @@ namespace Rasa.Managers
             return (Math.Max(0, knockback), chance, ms);
         }
 
+        /// <summary>The creature classes whose targetGameEffect is KnockbackEffect: they throw whoever they hit.</summary>
+        private static readonly HashSet<string> ThrowingModules = new HashSet<string>
+        {
+            "abilities.ai.stridergroundpulseability", "abilities.ai.kaelgroundpoundability"
+        };
+
+        /// <summary>
+        /// How far a knockback throws when the action has a chance of one, or a class that throws,
+        /// and no KNOCKBACK_DISTANCE and no area to throw out of (the Atta Soldier's rock throw).
+        /// Ours, not the client's: the Kael ground pound's and the Thrax kick's KNOCKBACK_DISTANCE.
+        /// </summary>
+        public const float DefaultKnockbackDistance = 10f;
+
+        /// <summary>
+        /// How far a creature's attack throws the player it hit, standing where they stand:
+        ///  - KNOCKBACK_DISTANCE where the action gives one, and none where it gives 0 (the Thrax
+        ///    lightning's knockback class with KNOCKBACK_DISTANCE 0);
+        ///  - an action that throws without a distance - a class whose target effect is the
+        ///    knockback (the Strider ground pulse), or a CHANCE_KNOCK_BACK - throws out of its
+        ///    area: to RADIUS_AROUND_SOURCE from the creature, its edge;
+        ///  - with no area, DefaultKnockbackDistance;
+        ///  - otherwise nothing.
+        /// </summary>
+        public static float KnockbackDistanceOf(string module, ActionLevelInfo info, Vector3 source, Vector3 victim)
+        {
+            if (info == null)
+                return 0f;
+
+            if (info.Has(AbilityProperty.KnockbackDistance))
+                return Math.Max(0, info.Get(AbilityProperty.KnockbackDistance));
+
+            if (!ThrowingModules.Contains(module) && !info.Has(AbilityProperty.ChanceKnockBack))
+                return 0f;
+
+            var radius = info.Get(AbilityProperty.RadiusAroundSource);
+
+            if (radius > 0)
+                return Math.Max(0f, radius - Vector3.Distance(source, victim));
+
+            return DefaultKnockbackDistance;
+        }
+
+        /// <summary>
+        /// How long a creature's knockback keeps its player down after the getup: a Tectonic
+        /// Strike's stun, or DURATION_KNOCK_BACK where the action gives one (the rock throw's 2-3 s).
+        /// </summary>
+        public static int ExtraDownMs(string module, ActionLevelInfo info, int stunMs)
+        {
+            if (KnocksDownAndStuns(module))
+                return stunMs;
+
+            return info == null ? 0 : Math.Max(0, info.Get(AbilityProperty.DurationKnockBack)) * 1000;
+        }
+
         /// <summary>Whether the action's knockback carries its stun too, rather than the stun being what it does when it does not knock back.</summary>
         public static bool KnocksDownAndStuns(string module) => module == "abilities.tectonicstrike";
 
@@ -303,14 +358,15 @@ namespace Rasa.Managers
                 || !AbilityManager.Instance.TryGetAction(actionId, actionArgId, out var module, out var info))
                 return;
 
-            var (knockback, chance, ms) = OfCreatureAction(module, info);
+            var (_, chance, ms) = OfCreatureAction(module, info);
+            var knockback = KnockbackDistanceOf(module, info, attacker.Position, player.Position);
 
             // CHANCE_KNOCK_BACK, where the action gives one (Kael rushing blow: 30%), is the
             // chance the knockback lands; one that does not can still stagger. A Tectonic Strike
             // knocks back and stuns, as a player's does: the stun keeps them down after the
             // getup (the Treeback's stomp: 20 m, then 8 s).
             if (knockback > 0 && Stuns.Roll(info.Get(AbilityProperty.ChanceKnockBack, 100)))
-                Knockback(mapChannel, player, attacker, knockback, KnocksDownAndStuns(module) ? ms : 0);
+                Knockback(mapChannel, player, attacker, knockback, ExtraDownMs(module, info, ms));
             else if (ms > 0 && Stuns.Roll(chance))
                 Stun(mapChannel, player, attacker, ms);
         }

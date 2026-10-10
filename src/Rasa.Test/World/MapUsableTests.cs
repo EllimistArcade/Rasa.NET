@@ -220,13 +220,14 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
-        public void TheBrannTeleportersAndWormholeAndTheMiningCoreDrillAreSentRunning()
+        public void TheBrannTeleportersWormholeAndAlarmLightsAndTheMiningCoreDrillAreSentRunning()
         {
             var running = new[]
             {
                 (Class: MapUsables.BrannTeleporter, Map: MapUsables.BurningSteps, Count: 2, State: UseObjectState.TsState1),
                 (Class: MapUsables.BrannWormhole, Map: MapUsables.TahrendraBase, Count: 1, State: UseObjectState.TsState1),
                 (Class: MapUsables.BaneMiningCoreDrill, Map: MapUsables.TheRefuge, Count: 1, State: UseObjectState.TsState0),
+                (Class: MapUsables.BrannAlarmLight, Map: MapUsables.BrannWaterRefinery, Count: 10, State: UseObjectState.TsState1),
             };
 
             using var world = new WorldTestContext();

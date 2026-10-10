@@ -109,6 +109,10 @@ namespace Rasa.Managers
     ///    0 static" looping, arch_bane_drill_mining_v01_on.anm, with
     ///    arch_bane_mining_core_drill_on.pkg; 56 is it stopped, at the end of _on_to_off.anm.
     ///    One, in the Refuge.
+    ///  - UsableTwoStateBrannAlarmLightV01 (24679): 56, arch_brann_gen_obj_alarmlight_on_v01.anm
+    ///    looping, with arch_brann_gen_obj_alarm_light_on.pkg; 55 is the still off pose
+    ///    (_off_v01.anm). Neither way has a transition. Ten, in the Brann Water Refinery, which the
+    ///    Warden-bots have overrun: on throughout.
     /// </summary>
     public static class MapUsables
     {
@@ -163,6 +167,7 @@ namespace Rasa.Managers
         public const uint Thunderhead = 1911;           // adv_arieki_ligo_thunderhead
         public const uint TahrendraBase = 2125;         // adv_arieki_torden_mires_tahrendrabase
         public const uint TheRefuge = 2156;             // adv_foreas_valverde_descent_therefuge
+        public const uint BrannWaterRefinery = 2093;    // adv_arieki_torden_plains_brannwaterrefinery
 
         public const uint ForeanFirePitV01 = 6137;     // UsableTwoStateForeanFirePitV01
         public const uint ForeanFirePitV03 = 6212;     // UsableTwoStateForeanFirePitV03
@@ -174,6 +179,7 @@ namespace Rasa.Managers
         public const uint BrannTeleporter = 24805;     // UsableTwoStateBrannTeleporter
         public const uint BrannWormhole = 25273;       // UsableTwoStateBrannWormhole
         public const uint BaneMiningCoreDrill = 25263; // UsableTwoStateBaneMiningCoreDrillV01
+        public const uint BrannAlarmLight = 24679;     // UsableTwoStateBrannAlarmLightV01
 
         public static readonly IReadOnlyList<Usable> All = new[]
         {
@@ -225,6 +231,18 @@ namespace Rasa.Managers
             Running(BurningSteps, 134419591469780, BrannTeleporter, UseObjectState.TsState1, -214.899f, 244.4991f, 319.7714f, "Burning Steps Brann teleporter, upper"),
             Running(TahrendraBase, 134419591464274, BrannWormhole, UseObjectState.TsState1, -166.0f, 111.5642f, 12.0f, "Tahrendra Base Brann wormhole"),
             Running(TheRefuge, 134419591462928, BaneMiningCoreDrill, UseObjectState.TsState0, -178.5924f, 99.6789f, 182.8202f, "The Refuge mining core drill"),
+
+            // The Brann alarm lights of the Brann Water Refinery, on.
+            Running(BrannWaterRefinery, 134419591464234, BrannAlarmLight, UseObjectState.TsState1, 2.0f, 421.0f, -137.0f, "Brann Water Refinery alarm light 1"),
+            Running(BrannWaterRefinery, 134419591464373, BrannAlarmLight, UseObjectState.TsState1, -23.5f, 427.5f, -153.25f, "Brann Water Refinery alarm light 2"),
+            Running(BrannWaterRefinery, 134419591464387, BrannAlarmLight, UseObjectState.TsState1, -75.3133f, 421.0f, -137.0032f, "Brann Water Refinery alarm light 3"),
+            Running(BrannWaterRefinery, 134419591464406, BrannAlarmLight, UseObjectState.TsState1, -52.25f, 427.5f, -152.75f, "Brann Water Refinery alarm light 4"),
+            Running(BrannWaterRefinery, 134419591464407, BrannAlarmLight, UseObjectState.TsState1, -23.75f, 427.5f, -121.25f, "Brann Water Refinery alarm light 5"),
+            Running(BrannWaterRefinery, 134419591464408, BrannAlarmLight, UseObjectState.TsState1, -52.5f, 427.5f, -120.75f, "Brann Water Refinery alarm light 6"),
+            Running(BrannWaterRefinery, 134419591464559, BrannAlarmLight, UseObjectState.TsState1, -52.5f, 427.5f, -225.0f, "Brann Water Refinery alarm light 7"),
+            Running(BrannWaterRefinery, 134419591464560, BrannAlarmLight, UseObjectState.TsState1, -23.75f, 427.5f, -225.5f, "Brann Water Refinery alarm light 8"),
+            Running(BrannWaterRefinery, 134419591464561, BrannAlarmLight, UseObjectState.TsState1, -24.0f, 427.5f, -193.5f, "Brann Water Refinery alarm light 9"),
+            Running(BrannWaterRefinery, 134419591464562, BrannAlarmLight, UseObjectState.TsState1, -52.75f, 427.5f, -193.0f, "Brann Water Refinery alarm light 10"),
 
             // The Brann monitors, on: thirty-one V01 and thirty-three V02 in the Comm Tower, four V01 in Burning Steps.
             Monitor(CommTower, 134419591463952, BrannMonitorV01, 5.6896f, 226.5989f, -14.1714f, "Comm Tower monitor 1"),

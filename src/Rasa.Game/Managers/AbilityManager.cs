@@ -893,13 +893,12 @@ namespace Rasa.Managers
                 return;
             }
 
-            // Paid on landing, not on asking. A sustained ability pays as it runs, through its
-            // effect's drain, not here.
-            if (!IsSustained(info))
-                TakeCosts(client, player, info);
-
             // The items it takes, and the one it was used from, in one write; never a mission's.
             // An emote's flag or a title goes in the same write; a rocket or a pet is kept (Toys).
+            // This is the last thing that can still refuse the ability, so it comes before the
+            // costs: power or chi used to be taken first, and an ability refused here for want
+            // of an item - used up or moved while the windup ran - had been paid for all the
+            // same, with nothing to give it back.
             var toyCommit = new ToyCommit();
 
             try
@@ -913,6 +912,11 @@ namespace Rasa.Managers
                 Fail(client, action.ActionId, action.ActionArgId, PlayerMessage.PmMissingReqItem);
                 return;
             }
+
+            // Paid on landing, not on asking, and once nothing can refuse it. A sustained ability
+            // pays as it runs, through its effect's drain, not here.
+            if (!IsSustained(info))
+                TakeCosts(client, player, info);
 
             StartCooldown(client, player, info);
 

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -233,6 +233,42 @@ namespace Rasa.Test.Missions
             var packet = new RequestSetAbilitySlotPacket();
             packet.Read(reader);
             return packet;
+        }
+
+        [TestMethod]
+        public void AnAbilityRefusedOnLandingForItsItemIsNotPaidFor()
+        {
+            using var harness = BootcampRuntimeTestHarness.Create();
+            var pet = ToyTests.Grant(harness, PineOckTemplate);
+            ToyTests.LoadClass(harness, 7747);
+            var manager = ToyTests.CreateManager(harness, 460, 1, PineOckTemplate);
+            using var abilities = UseAbilityManager(manager);
+            var player = harness.Client.Player;
+
+            // Give the pet a power cost, as a consumable has.
+            var actions = (System.Collections.Generic.Dictionary<ActionId, ActionInfo>)typeof(AbilityManager)
+                .GetField("_actions", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);
+            actions[ActionId.AccountrewardPet].Levels[1].Costs.Add(new ActionCost { Attribute = Attributes.Power, Amount = 40 });
+
+            var power = player.Attributes[Attributes.Power];
+            power.Current = 100;
+            power.CurrentMax = 100;
+
+            manager.RequestPerformAbility(harness.Client, ToyTests.Request(460, 1, pet.EntityId));
+            var pending = harness.BootcampMap.PerformRecovery.Single(action => action.ActionId == ActionId.AccountrewardPet);
+            Assert.AreEqual(100, power.Current, "paid on landing, not on asking");
+
+            // While the windup runs the item becomes a mission's: still in the pack, so the
+            // landing's checks pass, and refused by the consumption, which will not take a
+            // mission's item for an ordinary ability.
+            pet.MissionOwnership = new MissionItemOwnership(player.Id, 1, "assignment", 1, "pet");
+            harness.Drain();
+
+            ToyTests.Land(harness, manager, pending);
+
+            Assert.AreEqual(PlayerMessage.PmMissingReqItem, harness.Drain().OfType<UserActionFailedPacket>().Single().MsgId);
+            Assert.AreEqual(100, power.Current, "refused, so not paid for: the cost used to be taken before the consumption could refuse");
+            Assert.IsNull(AbilityManager.PetCreatureOf(player));
         }
 
         private static Restore UseAbilityManager(AbilityManager manager)

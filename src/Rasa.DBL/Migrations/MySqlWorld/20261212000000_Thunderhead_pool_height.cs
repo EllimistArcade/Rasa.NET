@@ -18,8 +18,6 @@ namespace Rasa.Migrations.MySqlWorld
     /// </summary>
     // ReSharper disable once InconsistentNaming
     [UsedImplicitly]
-    [DbContext(typeof(MySqlWorldContext))]
-    [Migration("20261212000000_Thunderhead_pool_height")]
     public partial class Thunderhead_pool_height : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

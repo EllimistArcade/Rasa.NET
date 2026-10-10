@@ -17,8 +17,6 @@ namespace Rasa.Migrations.SqliteWorld
     /// </summary>
     // ReSharper disable once InconsistentNaming
     [UsedImplicitly]
-    [DbContext(typeof(SqliteWorldContext))]
-    [Migration("20261211000000_Wilderness_boss_speeds")]
     public partial class Wilderness_boss_speeds : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

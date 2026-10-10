@@ -295,6 +295,25 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// Milliseconds since a timed worker last ran on this map, by the manager's clock; 0 the
+        /// first time. The once-a-second workers - the spawn pools' respawn clocks, the Bane
+        /// teleporters, the objects' respawns - used to be handed the loop's own delta, about
+        /// 100 ms, once a second, and so ran at a tenth of the time: a pool of respawn 900 (90 s,
+        /// in tenths of a second) took fifteen minutes. And they run only while the map has
+        /// players, on a server that has clients: the time a map stood empty is counted when it
+        /// next has someone, so what would have come back while nobody was there has.
+        /// </summary>
+        internal long SinceLastRun(MapChannel mapChannel, string worker)
+        {
+            var now = _clock();
+            var elapsed = mapChannel.WorkerRanAt.TryGetValue(worker, out var last) ? Math.Max(0, now - last) : 0;
+
+            mapChannel.WorkerRanAt[worker] = now;
+
+            return elapsed;
+        }
+
         public void MapChannelWorker(long delta)
         {
             Timer.Update(delta);
@@ -443,11 +462,18 @@ namespace Rasa.Managers
 
                     // check for objects
                     if (Timer.IsTriggered("CheckForObjects"))
-                        Guard("DynamicObjectManager.DynamicObjectWorker", mapChannel, () => DynamicObjectManager.Instance.DynamicObjectWorker(mapChannel, delta));
+                    {
+                        var sinceObjects = SinceLastRun(mapChannel, "CheckForObjects");
+                        Guard("DynamicObjectManager.DynamicObjectWorker", mapChannel, () => DynamicObjectManager.Instance.DynamicObjectWorker(mapChannel, sinceObjects));
+                    }
 
-                    // check for creatures
+                    // check for creatures: the pools' respawn clocks and the Bane teleporters,
+                    // by the time since this last ran here (SinceLastRun)
                     if (Timer.IsTriggered("CheckForCreatures"))
-                        Guard("SpawnPoolManager.SpawnPoolWorker", mapChannel, () => SpawnPoolManager.Instance.SpawnPoolWorker(mapChannel, delta));
+                    {
+                        var sinceCreatures = SinceLastRun(mapChannel, "CheckForCreatures");
+                        Guard("SpawnPoolManager.SpawnPoolWorker", mapChannel, () => SpawnPoolManager.Instance.SpawnPoolWorker(mapChannel, sinceCreatures));
+                    }
 
                     // check for mapTriggers
                     if (Timer.IsTriggered("CheckForMapTriggers"))

@@ -86,7 +86,7 @@ namespace Rasa.Structures
         /// </summary>
         public long ClearedAtUtcMs { get; set; }
 
-        // Runtime milliseconds; the persisted RespawnTime is in seconds.
+        // Runtime milliseconds; the persisted respawn time (spawnpool.respown_time) is in tenths of a second.
         public long UpdateTimer { get; set; }
         public long RespawnTime { get; set; }
         

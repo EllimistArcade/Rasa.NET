@@ -1,4 +1,4 @@
-extern alias RasaGame;
+﻿extern alias RasaGame;
 
 using System;
 using System.Collections.Generic;
@@ -934,6 +934,14 @@ namespace Rasa.Test.World
             Assert.AreEqual(PlayerMessage.PmControlpointClaiming, claiming.MsgId);
             Assert.AreEqual("Red Team", claiming.Args["faction"]);
             Assert.AreEqual("Whiskey", claiming.Args["cpName"]);
+
+            // Begun again within ControlPoints.ClaimAnnounceGapMs: the match is not told again;
+            // past it, it is.
+            f.Grounds.Claiming(red, point);
+            Assert.AreEqual(0, Packets(red).OfType<DisplayClientMessagePacket>().Count(m => m.MsgId == PlayerMessage.PmControlpointClaiming));
+            f.Now += ControlPoints.ClaimAnnounceGapMs;
+            f.Grounds.Claiming(red, point);
+            Assert.AreEqual(1, Packets(red).OfType<DisplayClientMessagePacket>().Count(m => m.MsgId == PlayerMessage.PmControlpointClaiming));
 
             Assert.IsTrue(f.Grounds.Captured(red, point));
 

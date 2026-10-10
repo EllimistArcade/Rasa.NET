@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -170,6 +170,9 @@ namespace Rasa.Managers
 
             /// <summary>Up to when the clan has been paid for holding the point (<see cref="UtcNow"/>); 0 with no clan.</summary>
             public long PaidAt { get; set; }
+
+            /// <summary>When "claiming" was last announced for the point (<see cref="Now"/>); 0 if it never was. See <see cref="ClaimAnnounceGapMs"/>.</summary>
+            public long ClaimAnnouncedAt { get; set; }
 
             /// <summary>The footlocker row of the point's clan lockbox, or 0 while it has none.</summary>
             public uint LockboxId { get; set; }
@@ -724,8 +727,29 @@ namespace Rasa.Managers
         /// A player has begun the use that captures a point: everyone on the map is told, by the
         /// clan it would be for if it is for one.
         /// </summary>
+        /// <summary>
+        /// The least time between two "claiming" announcements for one point, in ms. Every use
+        /// of a point that was begun announced it to the whole map, and a use can be begun as
+        /// often as the player likes - start, step away to break it, start again - so one player
+        /// could fill everyone's chat with it.
+        /// </summary>
+        public const long ClaimAnnounceGapMs = 10_000;
+
+        /// <summary>Whether a "claiming" of the point may be announced now, and marks it announced if so.</summary>
+        internal static bool MayAnnounceClaim(Point point, long now)
+        {
+            if (point.ClaimAnnouncedAt != 0 && now - point.ClaimAnnouncedAt < ClaimAnnounceGapMs)
+                return false;
+
+            point.ClaimAnnouncedAt = now;
+            return true;
+        }
+
         public void Claiming(MapChannel mapChannel, Point point, Client by = null)
         {
+            if (!MayAnnounceClaim(point, Now()))
+                return;
+
             var clanId = ClanFor(by);
 
             Announce(mapChannel, PlayerMessage.PmControlpointClaiming, point, clanId != 0 ? ClanName(clanId) ?? FactionName(Afs) : FactionName(Afs));

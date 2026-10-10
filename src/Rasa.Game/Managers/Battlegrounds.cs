@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -253,6 +253,9 @@ namespace Rasa.Managers
 
             /// <summary>The client's id for it, in the scoreboard's game score; 0 if it has none.</summary>
             public uint ClientId { get; set; }
+
+            /// <summary>When "claiming" was last told to the match for this point (<see cref="Now"/>); 0 if it never was. See ControlPoints.ClaimAnnounceGapMs.</summary>
+            public long ClaimAnnouncedAt { get; set; }
 
             public uint Id => Source.Id;
             public string Name => Source.Name;
@@ -1172,8 +1175,19 @@ namespace Rasa.Managers
             var match = MatchWith(point);
             var member = match?.Find(client);
 
-            if (member != null)
-                Tell(match, PlayerMessage.PmControlpointClaiming, ("faction", TeamName(member.Team)), ("cpName", point.Name));
+            if (member == null)
+                return;
+
+            // Not more than once in ControlPoints.ClaimAnnounceGapMs per point: a use can be
+            // begun as often as the player likes, and each one told the whole match.
+            var now = Now();
+
+            if (point.ClaimAnnouncedAt != 0 && now - point.ClaimAnnouncedAt < ControlPoints.ClaimAnnounceGapMs)
+                return;
+
+            point.ClaimAnnouncedAt = now;
+
+            Tell(match, PlayerMessage.PmControlpointClaiming, ("faction", TeamName(member.Team)), ("cpName", point.Name));
         }
 
         /// <summary>

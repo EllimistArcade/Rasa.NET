@@ -594,7 +594,7 @@ namespace Rasa.Managers
             // Answered, either way: the invitation is spent whether they take it or not.
             if (!_invites.Remove(client.Player.Id, out var invite))
             {
-                RefuseClanAction(client, PlayerMessage.PmClanNotInvited);
+                RefuseClanAction(client, PlayerMessage.PmClanNotInvited, ClanNameArgs(packet.ClanId));
                 return;
             }
 
@@ -606,7 +606,7 @@ namespace Rasa.Managers
             {
                 Logger.WriteLog(LogType.Security,
                     $"{client.Player.FamilyName} (character {client.Player.Id}) was invited to clan {invite.ClanId} and answered for clan {packet.ClanId}; ignored.");
-                RefuseClanAction(client, PlayerMessage.PmClanNotInvited);
+                RefuseClanAction(client, PlayerMessage.PmClanNotInvited, ClanNameArgs(packet.ClanId));
                 return;
             }
 
@@ -629,7 +629,7 @@ namespace Rasa.Managers
                 // connection.
                 if (validation.Clans.GetClanByCharacterId(client.Player.Id) != null)
                 {
-                    RefuseClanAction(client, PlayerMessage.PmClanAcceptAlreadyInAClan);
+                    RefuseClanAction(client, PlayerMessage.PmClanAcceptAlreadyInAClan, new Dictionary<string, string> { { "clanName", clan.Name } });
                     return;
                 }
 
@@ -645,9 +645,16 @@ namespace Rasa.Managers
                 {
                     var character = validation.Characters.Get(client.Player.Id);
 
-                    if (character != null && PvPCooldownRemainingSeconds(character) > 0)
+                    var remaining = character == null ? 0 : PvPCooldownRemainingSeconds(character);
+
+                    if (remaining > 0)
                     {
-                        client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanAcceptInPvpTimeout, new Dictionary<string, string>()));
+                        // "You cannot accept an invitation to %(clanName)s. You cannot join a
+                        // PvP-enabled Clan for another %(days)s days, %(hours)s hours ..."
+                        var args = CooldownArgs(remaining);
+                        args["clanName"] = clan.Name;
+
+                        RefuseClanAction(client, PlayerMessage.PmClanAcceptInPvpTimeout, args);
                         return;
                     }
                 }
@@ -1232,7 +1239,7 @@ namespace Rasa.Managers
 
             if (target == null)
             {
-                RefuseClanAction(client, PlayerMessage.PmClanPlayerNotInClan);
+                RefuseClanAction(client, PlayerMessage.PmClanPlayerNotInClan, ClanNameArgs(client.Player.ClanId));
                 return false;
             }
 
@@ -1273,13 +1280,41 @@ namespace Rasa.Managers
         }
 
         /// <summary>Tells the client the clan window why nothing happened.</summary>
-        private static void RefuseClanAction(Client client, PlayerMessage reason)
+        /// <param name="args">
+        /// The text's substitutions, for a reason whose text takes any: the client formats the
+        /// text with them (clientlanguagemanager), and one sent without a value its text names
+        /// prints "Invalid substitutions ..." in place of the reason. Six refusals went out that
+        /// way: the two "not invited" and "not in clan", which name the clan, and the two PvP
+        /// cooldowns, which give the time left.
+        /// </param>
+        private static void RefuseClanAction(Client client, PlayerMessage reason, Dictionary<string, string> args = null)
         {
             Logger.WriteLog(LogType.Security,
                 $"{client.Player.FamilyName} (character {client.Player.Id}, clan {client.Player.ClanId}) was refused a clan action: {reason}.");
 
             client.CallMethod(SysEntity.ClientClanManagerId,
-                new DisplayClanMessagePacket((int)reason, new Dictionary<string, string>()));
+                new DisplayClanMessagePacket((int)reason, args ?? new Dictionary<string, string>()));
+        }
+
+        /// <summary>The "clanname" substitution PmClanNotInvited and PmClanPlayerNotInClan take; the name is empty for a clan that is gone.</summary>
+        private Dictionary<string, string> ClanNameArgs(uint clanId) =>
+            new Dictionary<string, string> { { "clanname", ClanNameOf(clanId) ?? "" } };
+
+        /// <summary>
+        /// The "days", "hours", "mins" and "secs" substitutions the two PvP-clan cooldown texts take,
+        /// for this many seconds left.
+        /// </summary>
+        private static Dictionary<string, string> CooldownArgs(uint remainingSeconds)
+        {
+            var remaining = TimeSpan.FromSeconds(remainingSeconds);
+
+            return new Dictionary<string, string>
+            {
+                { "days", remaining.Days.ToString() },
+                { "hours", remaining.Hours.ToString() },
+                { "mins", remaining.Minutes.ToString() },
+                { "secs", remaining.Seconds.ToString() },
+            };
         }
 
         /// <summary>
@@ -1421,10 +1456,15 @@ namespace Rasa.Managers
             {
                 CharacterEntry character = unitOfWork.Characters.Get(characterId);
 
-                // Verify the creator is not on PvP timeout: PmClanCannotCreateUserInPvpTimeout
-                if (character != null && PvPCooldownRemainingSeconds(character) > 0)
+                // Verify the creator is not on PvP timeout: "You cannot create a PvP enabled
+                // clan for another %(days)s days, %(hours)s hours, %(mins)s minutes, and
+                // %(secs)s seconds."
+                var remaining = character == null ? 0 : PvPCooldownRemainingSeconds(character);
+
+                if (remaining > 0)
                 {
-                    client.CallMethod(SysEntity.ClientClanManagerId, new DisplayClanMessagePacket((int)PlayerMessage.PmClanCannotCreateUserInPvpTimeout, new Dictionary<string, string>()));
+                    client.CallMethod(SysEntity.ClientClanManagerId,
+                        new DisplayClanMessagePacket((int)PlayerMessage.PmClanCannotCreateUserInPvpTimeout, CooldownArgs(remaining)));
                     return false;
                 }
             }

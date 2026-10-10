@@ -3790,7 +3790,10 @@ namespace Rasa.Managers
 
             if (client.Player.Attributes[Attributes.Health].Current <= 0 || client.Player.State == CharacterState.Dead)
             {
-                Unhelpful(client, PlayerMessage.PmAboutToRespawn);
+                // "You cannot do that while dead." PmAboutToRespawn was sent here, whose text
+                // takes a %(reason)s nothing supplied, so the client printed "Invalid
+                // substitutions" in place of the message.
+                Unhelpful(client, PlayerMessage.PmCannotDoThatWhileDead);
                 return;
             }
 

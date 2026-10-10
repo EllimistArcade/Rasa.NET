@@ -512,9 +512,10 @@ namespace Rasa.Test.World
             Assert.AreEqual(creature.Position, sent[0].Position);
 
             // Already standing as far as they know: nothing more is sent for standing again.
+            // (MovesOf drains what the watcher was sent, so this counts only what came since.)
             BehaviorManager.Instance.StopFighting(creature);
 
-            Assert.AreEqual(1, MovesOf(watcher, creature.EntityId).Count);
+            Assert.AreEqual(0, MovesOf(watcher, creature.EntityId).Count);
         }
 
         [TestMethod]

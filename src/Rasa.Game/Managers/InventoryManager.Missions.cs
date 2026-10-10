@@ -495,25 +495,37 @@ namespace Rasa.Managers
                 if (_published)
                     return;
                 _published = true;
-                foreach (var stack in _stacks.Where(stack => stack.Changed))
+                var changed = _stacks.Where(stack => stack.Changed).ToList();
+
+                // Every removal before any addition. The client takes an item out of its pack by
+                // the slot it has it in (inventory._RemoveEntityFromMappings), so a removal sent
+                // after something else has been added to that slot takes that out instead: a swap
+                // of slots L < H sent Remove(L) Add(L→H) Remove(H) Add(H→L), and the third took
+                // the item that had just gone to H off the client's pack until the next relog.
+                foreach (var stack in changed)
+                {
+                    var item = stack.Existing ?? stack.Incoming?.Item ?? stack.Staged;
+                    if (stack.Count == 0)
+                        MissionApplication.TryPublish(() => client.CallMethod(SysEntity.ClientInventoryManagerId,
+                            new InventoryRemoveItemPacket(InventoryType.Personal, item.EntityId)), $"item {item.Id} inventory removal");
+                    else if (stack.Existing != null && stack.Index != stack.OriginalIndex)
+                        MissionApplication.TryPublish(() => client.CallMethod(SysEntity.ClientInventoryManagerId,
+                            new InventoryRemoveItemPacket(InventoryType.Personal, item.EntityId)), $"item {item.Id} old slot");
+                }
+
+                foreach (var stack in changed)
                 {
                     var item = stack.Existing ?? stack.Incoming?.Item ?? stack.Staged;
                     if (stack.Count == 0)
                     {
-                        MissionApplication.TryPublish(() => client.CallMethod(SysEntity.ClientInventoryManagerId,
-                            new InventoryRemoveItemPacket(InventoryType.Personal, item.EntityId)), $"item {item.Id} inventory removal");
                         MissionApplication.TryPublish(() => client.CallMethod(SysEntity.ClientMethodId,
                             new DestroyPhysicalEntityPacket(item.EntityId)), $"item {item.Id} entity removal");
                     }
                     else if (stack.Existing != null)
                     {
                         if (stack.Index != stack.OriginalIndex)
-                        {
-                            MissionApplication.TryPublish(() => client.CallMethod(SysEntity.ClientInventoryManagerId,
-                                new InventoryRemoveItemPacket(InventoryType.Personal, item.EntityId)), $"item {item.Id} old slot");
                             MissionApplication.TryPublish(() => client.CallMethod(SysEntity.ClientInventoryManagerId,
                                 new InventoryAddItemPacket(InventoryType.Personal, item.EntityId, (uint)stack.Index)), $"item {item.Id} new slot");
-                        }
                         MissionApplication.TryPublish(() => client.CallMethod(item.EntityId,
                             new SetStackCountPacket(stack.Count)), $"item {item.Id} count");
                     }

@@ -678,7 +678,14 @@ namespace Rasa.Managers
             if (!BindPassingThroughFootlocker(client, entityId) || swappedOut != 0 && !BindPassingThroughFootlocker(client, swappedOut))
                 return;
 
+            // Both out before either goes in (BR-186): the client takes an item out of a container
+            // by the slot it has it in there, and the footlocker's item, never taken out of the
+            // footlocker on the client, stayed listed in the slot the pack's item went to.
             RemoveItemBySlot(client, InventoryType.Personal, packet.SrcSlot);
+
+            if (swappedOut != 0)
+                RemoveItemBySlot(client, InventoryType.HomeInventory, packet.DestSlot);
+
             // if toSlot is not empty, move current item to the pack (item swap)
             if (swappedOut != 0)
                 AddItemBySlot(client, InventoryType.Personal, swappedOut, (uint)returnSlot, true);
@@ -1173,10 +1180,16 @@ namespace Rasa.Managers
             if (!BindPassingThroughFootlocker(client, entityId) || swappedIn != 0 && !BindPassingThroughFootlocker(client, swappedIn))
                 return;
 
+            // Both out before either goes in (BR-186): the pack's item, never taken out of the pack
+            // on the client, stayed listed there in the slot the footlocker's item went to.
             RemoveItemBySlot(client, InventoryType.HomeInventory, packet.SrcSlot);
+
+            if (swappedIn != 0)
+                RemoveItemBySlot(client, InventoryType.Personal, destSlot);
+
             // if toSlot is not empty, move current item to SrcSlot (item swap)
-            if (client.Player.Inventory.PersonalInventory[(int)destSlot] != 0)
-                AddItemBySlot(client, InventoryType.HomeInventory, client.Player.Inventory.PersonalInventory[(int)destSlot], packet.SrcSlot, true);
+            if (swappedIn != 0)
+                AddItemBySlot(client, InventoryType.HomeInventory, swappedIn, packet.SrcSlot, true);
 
             AddItemBySlot(client, InventoryType.Personal, entityId, destSlot, true);
         }

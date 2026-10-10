@@ -1136,11 +1136,14 @@ namespace Rasa.Managers
             if (!TryResolveRankChange(client, client.Player.ClanId, packet.CharacterId, out var actor, out var member))
                 return;
 
-            // Only the leader promotes, and only into the rank below their own. Leadership moves
-            // through MakePlayerClanLeader, which hands it over; promoting into it would mint a
-            // second leader. This read the target's row and never the caller's, so a rank 0
-            // member could promote themselves 0 - 1 - 2 - 3 and own the clan.
-            if (actor.Rank != ClanRank.Leader || member.Rank >= ClanRank.Leader - 1)
+            // As the clan window offers it (ClanRank.MayPromote): the leader and the rank below
+            // them promote, a member at least two ranks under them, into a rank below their own
+            // and never into Leader, which MakePlayerClanLeader hands over - promoting into it
+            // would mint a second leader. The leader alone used to be allowed, so an officer who
+            // was offered Promote on a recruit was refused by the server for lack of permission.
+            // Before that this read the target's row and never the caller's, so a rank 0 member
+            // could promote themselves 0 - 1 - 2 - 3 and own the clan.
+            if (!ClanRank.MayPromote(actor.Rank, member.Rank))
             {
                 RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
                 return;
@@ -1154,9 +1157,12 @@ namespace Rasa.Managers
             if (!TryResolveRankChange(client, client.Player.ClanId, packet.CharacterId, out var actor, out var member))
                 return;
 
-            // Same the other way: any member could demote the leader, and a clan with nobody at
-            // Leader can never be renamed, disbanded, or have its leadership handed on again.
-            if (actor.Rank != ClanRank.Leader || member.Rank <= ClanRank.Member)
+            // Same the other way (ClanRank.MayDemote): the leader and the rank below them demote
+            // a member under them, never below Member. Once any member could demote the leader,
+            // and a clan with nobody at Leader can never be renamed, disbanded, or have its
+            // leadership handed on again; then the leader alone could, and an officer offered
+            // Demote on a rank 1 member was refused.
+            if (!ClanRank.MayDemote(actor.Rank, member.Rank))
             {
                 RefuseClanAction(client, PlayerMessage.PmClanInsufficientPermissions);
                 return;

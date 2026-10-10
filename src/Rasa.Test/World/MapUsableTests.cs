@@ -206,9 +206,9 @@ namespace Rasa.Test.World
 
             using var world = new WorldTestContext();
 
-            // Concordia Divide: its fire pit and its drill.
+            // Concordia Divide: its fire pit and its drill (and its tesla coils).
             var divide = On(world, Divide());
-            Assert.AreEqual(2, MapUsables.PlayerEnteredMap(divide));
+            Assert.AreEqual(MapUsables.OnMap(MapUsables.ConcordiaDivide).Count(), MapUsables.PlayerEnteredMap(divide));
             var sent = States(divide).ToDictionary(state => state.EntityId, state => state.Packet.State);
             Assert.AreEqual(UseObjectState.IdesStateIntact, sent[132770324750504UL]);
             Assert.AreEqual(UseObjectState.TsState0, sent[ThoriaDas]);

@@ -2153,6 +2153,9 @@ namespace Rasa.Managers
             // without one: its fire pits unlit, its machines still, its screens dark (MapUsables).
             MapUsables.PlayerEnteredMap(client);
 
+            // And the hit points of those that can be shot down, which makes them targets (WorldDestructibles).
+            WorldDestructibles.PlayerEnteredMap(client);
+
             client.CallMethod(player.EntityId, new AdvancementStatsPacket(
                 player.Level,
                 player.Experience,

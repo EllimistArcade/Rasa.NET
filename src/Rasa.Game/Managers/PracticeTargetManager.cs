@@ -43,6 +43,10 @@ namespace Rasa.Managers
 
         internal static bool TryGetTarget(MapChannel map, ulong entityId, out DynamicObject target)
         {
+            // A destructible prop of the .map (WorldDestructibles): its stand-in, while it stands.
+            if (WorldDestructibles.TryGetTarget(map, entityId, out target))
+                return true;
+
             target = null;
             if (map == null || !EntityManager.Instance.TryGetObject(entityId, out var candidate) ||
                 candidate.DynamicObjectType != DynamicObjectType.PracticeDummy ||
@@ -82,6 +86,13 @@ namespace Rasa.Managers
             var client = map.ClientList.FirstOrDefault(candidate => ReferenceEquals(candidate.Player, source));
             if (client?.State != ClientState.Ingame || client.PendingTransfer != null)
                 return;
+
+            // A destructible prop of the .map: its own hit points, damaged states and wreck.
+            if (WorldDestructibles.IsOne(target))
+            {
+                WorldDestructibles.Hit(map, client, target, damage);
+                return;
+            }
 
             if (target.MissionDestruction != null)
             {

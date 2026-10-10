@@ -400,6 +400,10 @@ namespace Rasa.Managers
                     // Bane tunnel doors open as a player comes up to one, and close behind them.
                     Guard("TunnelDoors.Worker", mapChannel, () => TunnelDoors.Worker(mapChannel));
 
+                    // The .map's destructible props that are due back, and its tesla coils' zapping.
+                    Guard("WorldDestructibles.Worker", mapChannel, () => WorldDestructibles.Worker(mapChannel));
+                    Guard("TeslaCoils.Worker", mapChannel, () => TeslaCoils.Worker(mapChannel));
+
                     // Crab Mines: seeking, running, going off.
                     Guard("AbilityManager.CrabMineWorker", mapChannel, () => AbilityManager.Instance.CrabMineWorker(mapChannel));
 

@@ -776,6 +776,10 @@ namespace Rasa.Managers
                 // target on entity
                 var targetType = EntityManager.Instance.GetEntityType(action.TargetId);
 
+                // A destructible prop of the .map is in no registry (WorldDestructibles): an object.
+                if (targetType == 0 && WorldDestructibles.TryGetTarget(mapChannel, action.TargetId, out _))
+                    targetType = EntityType.Object;
+
                 if (targetType == 0)
                 {
                     Logger.WriteLog(LogType.Error, $"The missile target doesnt exist: {action.TargetId}");
@@ -1196,6 +1200,10 @@ namespace Rasa.Managers
         public void MissileTrigger(MapChannel mapChannel, Missile missile)
         {
             var targetType = EntityManager.Instance.GetEntityType(missile.TargetEntityId);
+
+            // A destructible prop of the .map (WorldDestructibles) is an object, as it was at the launch.
+            if (targetType == 0 && WorldDestructibles.IsOne(missile.TargetObject))
+                targetType = EntityType.Object;
 
             // Checked again here: the missile was queued a tick ago, and the target can have
             // left the map (or the world) since.

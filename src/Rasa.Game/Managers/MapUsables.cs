@@ -113,6 +113,14 @@ namespace Rasa.Managers
     ///    looping, with arch_brann_gen_obj_alarm_light_on.pkg; 55 is the still off pose
     ///    (_off_v01.anm). Neither way has a transition. Ten, in the Brann Water Refinery, which the
     ///    Warden-bots have overrun: on throughout.
+    ///  - UsableTeslaCoilBaneV01 (3899), a TeslaCoil (augmentation 58: USE_STATE_POWER_DOWN 171,
+    ///    USE_STATE_POWER_UP 172, destroyed): the coil's arcing, weapon_bane_teslacoil_active.pkg,
+    ///    is the state effect of 171 (usabledata.specialFX (3899, 171, USE_STATE_NULL)), whatever
+    ///    its name; 172 has none. Five, in Concordia Divide, sent 171. They zap players near them
+    ///    (TeslaCoils) and can be shot down (WorldDestructibles).
+    ///
+    /// The tables, chambers, drills and coils can be destroyed by players and come back
+    /// (WorldDestructibles); their state on a channel follows (SetState).
     /// </summary>
     public static class MapUsables
     {
@@ -180,6 +188,7 @@ namespace Rasa.Managers
         public const uint BrannWormhole = 25273;       // UsableTwoStateBrannWormhole
         public const uint BaneMiningCoreDrill = 25263; // UsableTwoStateBaneMiningCoreDrillV01
         public const uint BrannAlarmLight = 24679;     // UsableTwoStateBrannAlarmLightV01
+        public const uint BaneTeslaCoil = 3899;        // UsableTeslaCoilBaneV01
 
         public static readonly IReadOnlyList<Usable> All = new[]
         {
@@ -243,6 +252,13 @@ namespace Rasa.Managers
             Running(BrannWaterRefinery, 134419591464560, BrannAlarmLight, UseObjectState.TsState1, -23.75f, 427.5f, -225.5f, "Brann Water Refinery alarm light 8"),
             Running(BrannWaterRefinery, 134419591464561, BrannAlarmLight, UseObjectState.TsState1, -24.0f, 427.5f, -193.5f, "Brann Water Refinery alarm light 9"),
             Running(BrannWaterRefinery, 134419591464562, BrannAlarmLight, UseObjectState.TsState1, -52.75f, 427.5f, -193.0f, "Brann Water Refinery alarm light 10"),
+
+            // The Bane tesla coils of Concordia Divide: active (WorldDestructibles, TeslaCoils).
+            Running(ConcordiaDivide, 132770324036699, BaneTeslaCoil, UseObjectState.StatePowerDown, -360.4334f, 74.0802f, -592.9681f, "Concordia Divide tesla coil 1"),
+            Running(ConcordiaDivide, 132770324036701, BaneTeslaCoil, UseObjectState.StatePowerDown, -347.3694f, 74.1182f, -551.7658f, "Concordia Divide tesla coil 2"),
+            Running(ConcordiaDivide, 132770324315881, BaneTeslaCoil, UseObjectState.StatePowerDown, -752.6387f, 119.9923f, -865.8325f, "Concordia Divide tesla coil 3"),
+            Running(ConcordiaDivide, 132770324749115, BaneTeslaCoil, UseObjectState.StatePowerDown, -793.5133f, 131.8226f, -815.2523f, "Concordia Divide tesla coil 4"),
+            Running(ConcordiaDivide, 132770324749116, BaneTeslaCoil, UseObjectState.StatePowerDown, -844.6591f, 127.9965f, -800.4529f, "Concordia Divide tesla coil 5"),
 
             // The Brann monitors, on: thirty-one V01 and thirty-three V02 in the Comm Tower, four V01 in Burning Steps.
             Monitor(CommTower, 134419591463952, BrannMonitorV01, 5.6896f, 226.5989f, -14.1714f, "Comm Tower monitor 1"),
@@ -346,6 +362,16 @@ namespace Rasa.Managers
 
         /// <summary>The usable with this id, on any map, or null.</summary>
         public static Usable Find(ulong entityId) => entityId == 0 ? null : All.FirstOrDefault(usable => usable.EntityId == entityId);
+
+        /// <summary>
+        /// Sets the state a usable is in on a map channel, which is what whoever arrives is sent. The
+        /// clients already there are told by whoever changes it (WorldDestructibles, the fire pits' use).
+        /// </summary>
+        internal static void SetState(MapChannel mapChannel, ulong entityId, UseObjectState state)
+        {
+            if (mapChannel != null)
+                States.GetOrCreateValue(mapChannel)[entityId] = state;
+        }
 
         /// <summary>The state a usable is in on a map channel.</summary>
         public static UseObjectState StateOf(MapChannel mapChannel, Usable usable)

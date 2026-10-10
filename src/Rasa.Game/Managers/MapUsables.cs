@@ -95,6 +95,20 @@ namespace Rasa.Managers
     /// arch_bane_gen_obj_sonictower_v02_exploding.anm and _exploding.pkg, then the wreck and
     /// _destroyed.pkg), and it is neither targetable nor given hit points, so there is no state
     /// to send that would show anything.
+    ///
+    /// Three more two-state switches, none targetable (entityclass target flag 0), so none used,
+    /// each sent the state that has it running:
+    ///  - UsableTwoStateBrannTeleporter (24805): USE_TS_STATE_1 (56), "Usable state 1 static"
+    ///    looping, prop_brann_teleporter_on_v01.anm, with arch_brann_teleporter_on_v01.pkg; in 55
+    ///    it is the dark mesh, prop_brann_teleporter_off_v01.geo (usabledata.alternateMesh). Two,
+    ///    one above the other, by the Staal Detention Facility in Burning Steps.
+    ///  - UsableTwoStateBrannWormhole (25273): 56, prop_brann_wormhole_v01_on.anm looping, with
+    ///    prop_brann_wormhole_v01_on.pkg; in 55 it stands at the end of _on_to_off.anm. One, in
+    ///    Tahrendra Base.
+    ///  - UsableTwoStateBaneMiningCoreDrillV01 (25263): the other way about, 55, "Usable state
+    ///    0 static" looping, arch_bane_drill_mining_v01_on.anm, with
+    ///    arch_bane_mining_core_drill_on.pkg; 56 is it stopped, at the end of _on_to_off.anm.
+    ///    One, in the Refuge.
     /// </summary>
     public static class MapUsables
     {
@@ -147,6 +161,8 @@ namespace Rasa.Managers
         public const uint CommTower = 2085;             // adv_arieki_torden_incline_commtower
         public const uint TreebackCamp = 1397;          // adv_foreas_concordia_palisades_treebackcamp
         public const uint Thunderhead = 1911;           // adv_arieki_ligo_thunderhead
+        public const uint TahrendraBase = 2125;         // adv_arieki_torden_mires_tahrendrabase
+        public const uint TheRefuge = 2156;             // adv_foreas_valverde_descent_therefuge
 
         public const uint ForeanFirePitV01 = 6137;     // UsableTwoStateForeanFirePitV01
         public const uint ForeanFirePitV03 = 6212;     // UsableTwoStateForeanFirePitV03
@@ -155,6 +171,9 @@ namespace Rasa.Managers
         public const uint BrannMonitorV01 = 23885;     // UsableTwoStateBrannMonitorGenericV01
         public const uint BrannMonitorV02 = 23886;     // UsableTwoStateBrannMonitorGenericV02
         public const uint BaneArticulatedDrill = 6318; // UsableInertDestBaneArticulatedDrillV01
+        public const uint BrannTeleporter = 24805;     // UsableTwoStateBrannTeleporter
+        public const uint BrannWormhole = 25273;       // UsableTwoStateBrannWormhole
+        public const uint BaneMiningCoreDrill = 25263; // UsableTwoStateBaneMiningCoreDrillV01
 
         public static readonly IReadOnlyList<Usable> All = new[]
         {
@@ -199,6 +218,13 @@ namespace Rasa.Managers
             Drill(ConcordiaDivide, 132770324750504, -554.8872f, 183.4147f, -1104.4224f, "Concordia Divide articulated drill"),
             Drill(TreebackCamp, 133835475914614, 248.069f, 145.4277f, -266.646f, "Treeback Camp articulated drill"),
             Drill(Thunderhead, 134419591464915, -238.4222f, 438.671f, 695.0093f, "Thunderhead articulated drill"),
+
+            // The Brann teleporters by the Staal Detention Facility in Burning Steps, the Brann wormhole
+            // of Tahrendra Base, and the Bane mining core drill of the Refuge: all on.
+            Running(BurningSteps, 134419591469779, BrannTeleporter, UseObjectState.TsState1, -206.738f, 183.3619f, 317.945f, "Burning Steps Brann teleporter, lower"),
+            Running(BurningSteps, 134419591469780, BrannTeleporter, UseObjectState.TsState1, -214.899f, 244.4991f, 319.7714f, "Burning Steps Brann teleporter, upper"),
+            Running(TahrendraBase, 134419591464274, BrannWormhole, UseObjectState.TsState1, -166.0f, 111.5642f, 12.0f, "Tahrendra Base Brann wormhole"),
+            Running(TheRefuge, 134419591462928, BaneMiningCoreDrill, UseObjectState.TsState0, -178.5924f, 99.6789f, 182.8202f, "The Refuge mining core drill"),
 
             // The Brann monitors, on: thirty-one V01 and thirty-three V02 in the Comm Tower, four V01 in Burning Steps.
             Monitor(CommTower, 134419591463952, BrannMonitorV01, 5.6896f, 226.5989f, -14.1714f, "Comm Tower monitor 1"),
@@ -278,6 +304,10 @@ namespace Rasa.Managers
         /// <summary>A Bane stasis chamber, intact.</summary>
         private static Usable StasisChamber(uint mapContextId, ulong entityId, float x, float y, float z, string name) =>
             new Usable(mapContextId, entityId, BaneStasisChamber, new Vector3(x, y, z), UseObjectState.IdesStateIntact, null, name);
+
+        /// <summary>A two-state machine in the state that has it running.</summary>
+        private static Usable Running(uint mapContextId, ulong entityId, uint classId, UseObjectState state, float x, float y, float z, string name) =>
+            new Usable(mapContextId, entityId, classId, new Vector3(x, y, z), state, null, name);
 
         /// <summary>A Bane articulated drill, intact.</summary>
         private static Usable Drill(uint mapContextId, ulong entityId, float x, float y, float z, string name) =>

@@ -165,10 +165,10 @@ namespace Rasa.Test.World
 
             using var world = new WorldTestContext();
 
-            // Burning Steps: its four, on, and nothing else.
+            // Burning Steps: its four, on (with its two Brann teleporters).
             var steps = On(world, Channel(MapUsables.BurningSteps, "adv_arieki_ligo_burningsteps"));
-            Assert.AreEqual(4, MapUsables.PlayerEnteredMap(steps));
-            var sent = States(steps);
+            Assert.AreEqual(MapUsables.OnMap(MapUsables.BurningSteps).Count(), MapUsables.PlayerEnteredMap(steps));
+            var sent = States(steps).Where(state => MapUsables.Find(state.EntityId).ClassId == MapUsables.BrannMonitorV01).ToList();
             CollectionAssert.AreEquivalent(monitors.Where(monitor => monitor.MapContextId == MapUsables.BurningSteps).Select(monitor => monitor.EntityId).ToList(),
                 sent.Select(state => state.EntityId).ToList());
             Assert.IsTrue(sent.All(state => state.Packet.State == UseObjectState.TsState1));
@@ -217,6 +217,38 @@ namespace Rasa.Test.World
             divide.Player.Position = drills.Single(drill => drill.MapContextId == MapUsables.ConcordiaDivide).Position;
             Assert.IsTrue(MapUsables.TryRequestUse(divide, Use(132770324750504UL)));
             Assert.AreEqual(PlayerMessage.PmUseObjectNotUsable, Refusal(divide));
+        }
+
+        [TestMethod]
+        public void TheBrannTeleportersAndWormholeAndTheMiningCoreDrillAreSentRunning()
+        {
+            var running = new[]
+            {
+                (Class: MapUsables.BrannTeleporter, Map: MapUsables.BurningSteps, Count: 2, State: UseObjectState.TsState1),
+                (Class: MapUsables.BrannWormhole, Map: MapUsables.TahrendraBase, Count: 1, State: UseObjectState.TsState1),
+                (Class: MapUsables.BaneMiningCoreDrill, Map: MapUsables.TheRefuge, Count: 1, State: UseObjectState.TsState0),
+            };
+
+            using var world = new WorldTestContext();
+
+            foreach (var (classId, map, count, state) in running)
+            {
+                var usables = MapUsables.All.Where(usable => usable.ClassId == classId).ToList();
+                Assert.HasCount(count, usables, classId.ToString());
+
+                foreach (var usable in usables)
+                {
+                    Assert.AreEqual(map, usable.MapContextId, usable.ToString());
+                    Assert.AreEqual(state, usable.State, $"{usable}: the state with its running animation and effect");
+                    Assert.IsNull(usable.UsedState, usable.ToString());
+                }
+
+                var client = On(world, Channel(map, "fixture"));
+                MapUsables.PlayerEnteredMap(client);
+                var sent = States(client).Where(sentState => usables.Any(usable => usable.EntityId == sentState.EntityId)).ToList();
+                Assert.HasCount(count, sent);
+                Assert.IsTrue(sent.All(sentState => sentState.Packet.State == state));
+            }
         }
 
         [TestMethod]

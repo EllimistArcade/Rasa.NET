@@ -623,6 +623,9 @@ namespace Rasa.Game.Missions
                 {
                     obj.CurrentHitPoints -= (uint)damage;
                     PublishObjectDamage(resident.Map, obj);
+
+                    // Down to the damaged state its hit points are at, where its class has them.
+                    DestroyableStates.ShowDamage(resident.Map, obj, destruction.HitPoints, client.Player.EntityId);
                     return true;
                 }
                 return Submit(obj.SceneRunId, new SceneObservation(SceneEventKind.Signal, obj.SceneGeneration,
@@ -1022,6 +1025,8 @@ namespace Rasa.Game.Missions
                             ? null : ValidateObjectObservation(resident, observation, unit);
                         if (destroyed != null)
                         {
+                            // The state its clients were last shown, from which its destruction is played.
+                            var shown = destroyed.StateId;
                             publication.AddRuntimeConvergence(() =>
                             {
                                 destroyed.CurrentHitPoints = 0;
@@ -1033,7 +1038,12 @@ namespace Rasa.Game.Missions
                                 if (!MapInstanceScope.Contains(resident.Map, destroyed))
                                     return;
                                 PublishObjectDamage(resident.Map, destroyed);
-                                DynamicObjectManager.Instance.ForceState(destroyed, destroyed.StateId, 0);
+
+                                // Its explosion and then its wreck, where its class has the way
+                                // there from what it was showing (DestroyableStates); ForceState
+                                // otherwise, as before.
+                                DestroyableStates.ShowDestroyed(resident.Map, destroyed, shown, destroyed.StateId,
+                                    resident.Owner?.Player?.EntityId ?? 0);
                             });
                         }
                     }

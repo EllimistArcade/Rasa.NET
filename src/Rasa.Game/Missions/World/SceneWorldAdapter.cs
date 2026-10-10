@@ -188,7 +188,18 @@ namespace Rasa.Game.Missions.World
                     return WorldEffectResult.Failed("Object-state transition requires a world object and supported native state.");
                 var state = (UseObjectState)transition.State;
                 if (actor.Object.MissionDestruction is { } destruction && transition.State == destruction.DestroyedState)
+                {
                     actor.Object.CurrentHitPoints = 0;
+
+                    // Destroyed by the scene, not by damage: its explosion and wreck as damage
+                    // would have shown them (DestroyableStates).
+                    if (actor.Object.StateId != state)
+                    {
+                        DestroyableStates.ShowDestroyed(world.Map, actor.Object, actor.Object.StateId, state,
+                            world.Owner?.Player?.EntityId ?? 0);
+                        return WorldEffectResult.Applied();
+                    }
+                }
                 if (actor.Object.StateId != state)
                 {
                     actor.Object.StateId = state;

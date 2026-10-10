@@ -188,7 +188,7 @@ namespace Rasa.Managers
                 ManifestationManager.Instance.RefreshStats(actor as Manifestation);
             else
             {
-                if (effect.MaxHealthPercent != 0)
+                if (effect.MaxHealthPercent != 0 || effect.MaxHealthPoints != 0)
                     ApplyMaxHealth(mapChannel, actor, effect);
 
                 if (!(actor is Manifestation) && effect.AttributeId.HasValue && effect.AttributePercent != 0)
@@ -1310,8 +1310,8 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// MaxHealthPercent, applied: the maximum moves by that share of what it was, and so
-        /// does the current health, so a full bar stays full and a lowered maximum does not
+        /// MaxHealthPercent, applied: the maximum moves by that share of what it was, and by
+        /// MaxHealthPoints more, and so does the current health, so a full bar stays full and a lowered maximum does not
         /// leave health above it. The points moved are kept on the effect and are exactly what
         /// <see cref="RevertMaxHealth"/> puts back.
         /// </summary>
@@ -1320,7 +1320,7 @@ namespace Rasa.Managers
             if (!actor.Attributes.TryGetValue(Attributes.Health, out var health) || health.CurrentMax <= 0)
                 return;
 
-            var delta = (int)Math.Round(health.CurrentMax * effect.MaxHealthPercent / 100.0);
+            var delta = (int)Math.Round(health.CurrentMax * effect.MaxHealthPercent / 100.0) + effect.MaxHealthPoints;
 
             // A maximum has to stay a maximum: at least one point.
             delta = Math.Max(delta, 1 - health.CurrentMax);

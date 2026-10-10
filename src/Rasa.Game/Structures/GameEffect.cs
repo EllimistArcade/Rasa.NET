@@ -340,6 +340,12 @@ namespace Rasa.Structures
         /// <summary>Percent change to the holder's maximum health while on; negative lowers it.</summary>
         public int MaxHealthPercent { get; set; }
 
+        /// <summary>
+        /// Points added to the holder's maximum health while on, on top of MaxHealthPercent: a
+        /// creature's (XANX_FORTIFY); a player's maximum is worked out from their stats instead.
+        /// </summary>
+        public int MaxHealthPoints { get; set; }
+
         /// <summary>The points of maximum health actually added (or taken) when it was attached, so exactly that is put back.</summary>
         public int MaxHealthApplied { get; set; }
 

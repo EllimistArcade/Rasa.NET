@@ -714,7 +714,7 @@ namespace Rasa.Managers
             if (!AuctioneerInReach(client, packet.EntityId))
                 return;
 
-            if (!AuctionCategory.Names.TryGetValue(packet.CategoryId, out var category))
+            if (!AuctionCategory.Codes.ContainsKey(packet.CategoryId))
             {
                 QueryFailed(client, PlayerMessage.PmAuctionNoResultsFound);
                 Logger.WriteLog(LogType.Error, $"Auction search for category {packet.CategoryId}, which is not a category the client offers.");
@@ -740,10 +740,10 @@ namespace Rasa.Managers
 
                 var level = LevelRequirementOf(item);
 
-                if (level < packet.MinLevel || level > packet.MaxLevel)
+                if (!AuctionItemCategories.InLevelRange(level, packet.MinLevel, packet.MaxLevel))
                     continue;
 
-                if (!MatchesCategory(item, category))
+                if (!AuctionItemCategories.InCategory(item.ItemTemplate, packet.CategoryId))
                     continue;
 
                 matches.Add((auction, item, level));
@@ -809,7 +809,7 @@ namespace Rasa.Managers
 
             if (reply.AuctionItemList.Count < matches.Count)
                 Logger.WriteLog(LogType.Debug,
-                    $"Auction search by {client.Player.FamilyName} matched {matches.Count} auctions in {category}; the {reply.AuctionItemList.Count} cheapest fit the reply.");
+                    $"Auction search by {client.Player.FamilyName} matched {matches.Count} auctions in {AuctionCategory.Names[packet.CategoryId]}; the {reply.AuctionItemList.Count} cheapest fit the reply.");
 
             client.CallMethod(SysEntity.ClientAuctionHouseManagerId, reply);
         }
@@ -1222,38 +1222,6 @@ namespace Rasa.Managers
             return item.ItemTemplate.ItemInfo.Requirements.TryGetValue(RequirementsType.ReqXpLevel, out var level)
                 ? level
                 : 0;
-        }
-
-        /// <summary>
-        /// Whether an item belongs to one of the browse tab's categories. The category name is a
-        /// path through the item class naming scheme, so "Weapon_Pistol" wants a class whose
-        /// name starts with Weapon and carries Pistol as one of its underscore-separated words -
-        /// Weapon_Avatar_Pistol_Physical_CMN_01_to_04 and not Weapon_Avatar_Rifle_Physical.
-        /// </summary>
-        public static bool MatchesCategory(Item item, string category)
-        {
-            if (string.IsNullOrEmpty(category) || item?.ItemTemplate == null)
-                return false;
-
-            if (!EntityClassManager.Instance.LoadedEntityClasses.TryGetValue(item.ItemTemplate.Class, out var entityClass))
-                return false;
-
-            var className = entityClass?.ClassName;
-
-            if (string.IsNullOrEmpty(className))
-                return false;
-
-            var parts = category.Split('_');
-            var words = className.Split('_');
-
-            if (words.Length == 0 || !words[0].Equals(parts[0], StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            for (var i = 1; i < parts.Length; i++)
-                if (!words.Any(word => word.Equals(parts[i], StringComparison.OrdinalIgnoreCase)))
-                    return false;
-
-            return true;
         }
 
         private static void BuyoutFailed(Client client, ulong itemEntityId, PlayerMessage message)

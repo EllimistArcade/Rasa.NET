@@ -18,6 +18,8 @@ namespace Rasa.Managers
     using Misc;
     using Structures;
     using Structures.Char;
+    using Repositories;
+    using Repositories.Char;
     using Repositories.UnitOfWork;
 
     public class ClanManager
@@ -975,6 +977,118 @@ namespace Rasa.Managers
             UnregisterClanMembers(clan.Id);
 
             //TODO: Clear clan lockbox db inventory?
+        }
+
+        /// <summary>
+        /// A character is being deleted (CharacterManager.RequestDeleteCharacterInSlot), inside
+        /// its transaction: their clan membership goes with them. clan_member's foreign key to the
+        /// character is Restrict, so a member's row left standing failed the whole delete.
+        ///
+        /// The row work is done here, on <paramref name="unitOfWork"/>, so it commits or rolls
+        /// back with the character. What is returned is the rest - caches, feuds, the members
+        /// online - for the caller to run once the transaction has committed, and not before:
+        /// nothing in memory should say the character has gone while the row might yet stay.
+        /// Null when the character was in no clan.
+        ///
+        /// A leader's departure is the one LeaveClan refuses them: the leadership passes to the
+        /// highest ranked member left (the longest serving of them, by character id, when ranks
+        /// tie), as if MakePlayerClanLeader had been used. A leader who was the clan's only member
+        /// takes the clan with them, as DisbandClan would - its feuds lost, its control points the
+        /// AFS's, its rows deleted. The PvP-clan cooldown is not stamped: there is no character
+        /// left to serve it.
+        /// </summary>
+        internal Action RemoveDeletedCharacter(ICharUnitOfWork unitOfWork, CharacterEntry character, string familyName)
+        {
+            if (unitOfWork == null)
+                throw new ArgumentNullException(nameof(unitOfWork));
+
+            if (character == null)
+                throw new ArgumentNullException(nameof(character));
+
+            // The database, not the cache: RemovePlayer drops a member from the cache as they
+            // log out, and a character is deleted from the selection screen.
+            var member = unitOfWork.ClanMembers.GetClanMemberByCharacterId(character.Id);
+
+            if (member == null)
+                return null;
+
+            var clanId = member.ClanId;
+            var clan = GetClan(clanId);
+            var others = unitOfWork.ClanMembers.GetAllClanMembersByClanId(clanId)
+                .Where(m => m.CharacterId != character.Id)
+                .ToList();
+
+            if (member.Rank == ClanRank.Leader && others.Count == 0)
+            {
+                unitOfWork.ClanMembers.DeleteClanMembers(clanId);
+                unitOfWork.Clans.DeleteClan(clanId);
+
+                return () =>
+                {
+                    // Feuds and control points first, while the clan is still known to the caches
+                    // they read - the order DisbandClan keeps.
+                    ClanFeuds.Instance.ClanDisbanded(clanId);
+                    ControlPoints.Instance.ClanDisbanded(clanId);
+
+                    if (clan != null)
+                        UnregisterClan(clan);
+
+                    UnregisterClanMembers(clanId);
+
+                    Logger.WriteLog(LogType.Debug,
+                        $"Clan {clanId} \"{clan?.Name}\" was disbanded: its leader and only member, character {character.Id} ({character.Name} {familyName}), was deleted.");
+                };
+            }
+
+            ClanMemberEntry successor = null;
+
+            if (member.Rank == ClanRank.Leader)
+            {
+                successor = others.OrderByDescending(m => m.Rank).ThenBy(m => m.CharacterId).First();
+                unitOfWork.ClanMembers.UpdateRankByCharacterId(ClanRank.Leader, successor.CharacterId);
+            }
+
+            if (!unitOfWork.ClanMembers.DeleteClanMember(member))
+                throw new EntityNotFoundException(ClanMemberEntry.TableName, "character_id", character.Id);
+
+            return () =>
+            {
+                // What they have wagered stays at stake in the clan's feuds. They are not in the
+                // world to be told.
+                ClanFeuds.Instance.MemberRemoved(character.Id, clanId);
+
+                if (ClanMembers.TryGetValue(clanId, out var cached) && cached.IsValueCreated)
+                    cached.Value?.RemoveAll(m => m.CharacterId == character.Id);
+
+                // PlayerLeftClan takes the member out of each client's roster by itself.
+                CallMethodForOnlineMembers(clanId, (uint)SysEntity.ClientClanManagerId,
+                    new PlayerLeftClanPacket(character.Id, character.Name, familyName, clanId, false));
+
+                if (successor == null)
+                    return;
+
+                successor.Rank = ClanRank.Leader;
+                RegisterClanMember(clanId, successor);
+
+                var newLeader = GetMemberData(successor.CharacterId);
+
+                if (newLeader == null)
+                    return;
+
+                SendMemberData(newLeader);
+
+                var messageArgs = new Dictionary<string, string>
+                {
+                    { "leadername", $"{newLeader.CharacterName} {newLeader.FamilyName}" },
+                    { "clanname", clan?.Name ?? "" },
+                };
+
+                CallMethodForOnlineMembers(clanId, (uint)SysEntity.ClientClanManagerId,
+                    new DisplayClanMessagePacket((int)PlayerMessage.PmClanNewLeader, messageArgs));
+
+                Logger.WriteLog(LogType.Debug,
+                    $"Clan {clanId} \"{clan?.Name}\": leader {character.Id} ({character.Name} {familyName}) was deleted; {successor.CharacterId} ({newLeader.CharacterName} {newLeader.FamilyName}) leads it now.");
+            };
         }
 
         internal void RemovePlayer(Client client)

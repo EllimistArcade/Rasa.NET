@@ -957,6 +957,7 @@ namespace Rasa.Managers
                 }
 
                 int listings;
+                Action clanDeparture = null;
 
                 using (var unitOfWork = _gameUnitOfWorkFactory.CreateChar())
                 {
@@ -977,10 +978,17 @@ namespace Rasa.Managers
                         // And the cooldowns it logged out with.
                         unitOfWork.CharacterActionReuses.DeleteForCharacter(charactersBySlot.Id);
 
-                        // TODO delete ClanMember entry
+                        // Their clan membership: clan_member's foreign key to the character is
+                        // Restrict, so with the row standing the delete below failed. The clan
+                        // side of it (caches, the members online) waits for the commit.
+                        clanDeparture = ClanManager.Instance.RemoveDeletedCharacter(unitOfWork,
+                            charactersBySlot, client.AccountEntry.FamilyName);
+
                         unitOfWork.Characters.Delete(charactersBySlot.Id);
                     });
                 }
+
+                clanDeparture?.Invoke();
 
                 if (listings > 0)
                     Logger.WriteLog(LogType.Debug,

@@ -59,9 +59,9 @@ namespace Rasa.Test.World
             {
                 var client = On(world, Channel(map, name));
 
-                Assert.AreEqual(1, MapUsables.PlayerEnteredMap(client), name);
+                Assert.AreEqual(MapUsables.OnMap(map).Count(), MapUsables.PlayerEnteredMap(client), name);
 
-                var sent = States(client).Single();
+                var sent = States(client).Single(state => MapUsables.Find(state.EntityId).ClassId is MapUsables.ForeanFirePitV01 or MapUsables.ForeanFirePitV03);
                 Assert.AreEqual(entityId, sent.EntityId, $"{name}: the .map's own id for its fire pit");
                 Assert.AreEqual(UseObjectState.TsState0, sent.Packet.State, $"{name}: USE_TS_STATE_0, whose effect is the fire");
                 Assert.AreEqual(0, sent.Packet.WindupTimeMs);
@@ -82,7 +82,8 @@ namespace Rasa.Test.World
             var visitor = On(world, copy);
 
             MapUsables.PlayerEnteredMap(visitor);
-            Assert.AreEqual(132770324522631UL, States(visitor).Single().EntityId, "a copy loads the same .map");
+            CollectionAssert.AreEquivalent(MapUsables.OnMap(MapUsables.ConcordiaDivide).Select(usable => usable.EntityId).ToList(),
+                States(visitor).Select(state => state.EntityId).ToList(), "a copy loads the same .map");
 
             Assert.AreEqual(0, MapUsables.PlayerEnteredMap(null));
         }
@@ -186,6 +187,39 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
+        public void TheArticulatedDrillsAreSentIntactAndTheSonicTowersAreLeftAlone()
+        {
+            var drills = MapUsables.All.Where(usable => usable.ClassId == MapUsables.BaneArticulatedDrill).ToList();
+
+            Assert.HasCount(3, drills);
+            CollectionAssert.AreEquivalent(new[] { MapUsables.ConcordiaDivide, MapUsables.TreebackCamp, MapUsables.Thunderhead },
+                drills.Select(drill => drill.MapContextId).ToArray());
+
+            foreach (var drill in drills)
+            {
+                Assert.AreEqual(UseObjectState.IdesStateIntact, drill.State, drill.ToString());
+                Assert.IsNull(drill.UsedState, drill.ToString());
+            }
+
+            // Nothing of UsableInertDestBaneSonicTowerV02 (21964): its intact states have nothing to show.
+            Assert.IsFalse(MapUsables.All.Any(usable => usable.ClassId == 21964));
+
+            using var world = new WorldTestContext();
+
+            // Concordia Divide: its fire pit and its drill.
+            var divide = On(world, Divide());
+            Assert.AreEqual(2, MapUsables.PlayerEnteredMap(divide));
+            var sent = States(divide).ToDictionary(state => state.EntityId, state => state.Packet.State);
+            Assert.AreEqual(UseObjectState.IdesStateIntact, sent[132770324750504UL]);
+            Assert.AreEqual(UseObjectState.TsState0, sent[ThoriaDas]);
+
+            // Used by a client that made it up: refused.
+            divide.Player.Position = drills.Single(drill => drill.MapContextId == MapUsables.ConcordiaDivide).Position;
+            Assert.IsTrue(MapUsables.TryRequestUse(divide, Use(132770324750504UL)));
+            Assert.AreEqual(PlayerMessage.PmUseObjectNotUsable, Refusal(divide));
+        }
+
+        [TestMethod]
         public void ArrivingOnTheMapSendsThem()
         {
             using var harness = BootcampRuntimeTestHarness.Create();
@@ -272,7 +306,7 @@ namespace Rasa.Test.World
             // Whoever arrives now is shown it out.
             var later = On(world, map);
             MapUsables.PlayerEnteredMap(later);
-            Assert.AreEqual(UseObjectState.TsState1, States(later).Single().Packet.State);
+            Assert.AreEqual(UseObjectState.TsState1, States(later).Single(state => state.EntityId == ThoriaDas).Packet.State);
 
             // And lit again.
             Assert.IsTrue(MapUsables.TryRequestUse(user, Use()));

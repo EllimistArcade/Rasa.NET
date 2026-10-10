@@ -79,6 +79,22 @@ namespace Rasa.Managers
     /// V01 and thirty-three V02 in the Comm Tower, four V01 in Burning Steps. The Brann monitor
     /// props the .maps also place (PropBrannMonitorV04 and the destroyed ones) are no usables
     /// and have no states.
+    ///
+    /// The Bane articulated drills. UsableInertDestBaneArticulatedDrillV01 (6318) is an inert
+    /// destroyable like the tables and chambers, and works in USE_IDES_STATE_INTACT (110):
+    /// "Usable Inactive", animation family 277 as recurring one-shots (type 3), the drill going
+    /// between arch_bane_gen_obj_articulateddrill_drilling_v01.anm, _idle_fidget_v01.anm and
+    /// _idle_long_v01.anm, with arch_bane_gen_obj_articulateddrill_v01.pkg. Its damaged states
+    /// (50% and 25%: the drilling alone) and its destroyed one (wreck, explosion) are not used,
+    /// as the client has no hit points for it. Three on the maps: Concordia Divide, by the Timora
+    /// Mines tunnel; the Treeback Camp; Thunderhead.
+    ///
+    /// Not here: the sonic towers of Maligo Base (UsableInertDestBaneSonicTowerV02, 21964, two
+    /// on adv_foreas_valverde_plateau_maligobasev3). Their class has nothing in any intact
+    /// state - no animation, no effect - only its destruction (the 25% to destroyed transition,
+    /// arch_bane_gen_obj_sonictower_v02_exploding.anm and _exploding.pkg, then the wreck and
+    /// _destroyed.pkg), and it is neither targetable nor given hit points, so there is no state
+    /// to send that would show anything.
     /// </summary>
     public static class MapUsables
     {
@@ -129,6 +145,8 @@ namespace Rasa.Managers
         public const uint StaalJunkyard = 2138;         // adv_arieki_ligo_staaljunkyard
         public const uint BurningSteps = 1993;          // adv_arieki_ligo_burningsteps
         public const uint CommTower = 2085;             // adv_arieki_torden_incline_commtower
+        public const uint TreebackCamp = 1397;          // adv_foreas_concordia_palisades_treebackcamp
+        public const uint Thunderhead = 1911;           // adv_arieki_ligo_thunderhead
 
         public const uint ForeanFirePitV01 = 6137;     // UsableTwoStateForeanFirePitV01
         public const uint ForeanFirePitV03 = 6212;     // UsableTwoStateForeanFirePitV03
@@ -136,6 +154,7 @@ namespace Rasa.Managers
         public const uint BrannDissectionTable = 25269; // UsableInertDestBrannTableDissectionAttaV01DELETEDUPE
         public const uint BrannMonitorV01 = 23885;     // UsableTwoStateBrannMonitorGenericV01
         public const uint BrannMonitorV02 = 23886;     // UsableTwoStateBrannMonitorGenericV02
+        public const uint BaneArticulatedDrill = 6318; // UsableInertDestBaneArticulatedDrillV01
 
         public static readonly IReadOnlyList<Usable> All = new[]
         {
@@ -175,6 +194,11 @@ namespace Rasa.Managers
             // The Bane stasis chambers: one each in Pravus Research and the Test Weapons Center.
             StasisChamber(PravusResearch, 133981504835290, 224.0f, 7.6172f, 40.0f, "Pravus Research stasis chamber"),
             StasisChamber(TestWeaponsCenter, 134131828656196, 280.0f, -24.5f, 24.0f, "Test Weapons Center stasis chamber"),
+
+            // The Bane articulated drills: Concordia Divide (by the Timora Mines tunnel), the Treeback Camp, Thunderhead.
+            Drill(ConcordiaDivide, 132770324750504, -554.8872f, 183.4147f, -1104.4224f, "Concordia Divide articulated drill"),
+            Drill(TreebackCamp, 133835475914614, 248.069f, 145.4277f, -266.646f, "Treeback Camp articulated drill"),
+            Drill(Thunderhead, 134419591464915, -238.4222f, 438.671f, 695.0093f, "Thunderhead articulated drill"),
 
             // The Brann monitors, on: thirty-one V01 and thirty-three V02 in the Comm Tower, four V01 in Burning Steps.
             Monitor(CommTower, 134419591463952, BrannMonitorV01, 5.6896f, 226.5989f, -14.1714f, "Comm Tower monitor 1"),
@@ -254,6 +278,10 @@ namespace Rasa.Managers
         /// <summary>A Bane stasis chamber, intact.</summary>
         private static Usable StasisChamber(uint mapContextId, ulong entityId, float x, float y, float z, string name) =>
             new Usable(mapContextId, entityId, BaneStasisChamber, new Vector3(x, y, z), UseObjectState.IdesStateIntact, null, name);
+
+        /// <summary>A Bane articulated drill, intact.</summary>
+        private static Usable Drill(uint mapContextId, ulong entityId, float x, float y, float z, string name) =>
+            new Usable(mapContextId, entityId, BaneArticulatedDrill, new Vector3(x, y, z), UseObjectState.IdesStateIntact, null, name);
 
         /// <summary>A Brann monitor, on.</summary>
         private static Usable Monitor(uint mapContextId, ulong entityId, uint classId, float x, float y, float z, string name) =>

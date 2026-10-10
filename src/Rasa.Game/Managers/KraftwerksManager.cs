@@ -184,24 +184,26 @@ namespace Rasa.Managers
             if (_jobs.Count == 0)
                 return;
 
+            // The jobs are one list for every map, and every populated map's worker walks it.
+            // A job is marked reported only once its status has gone to the crafter, on the map
+            // its station stands on: the first map to tick used to mark it whether or not the
+            // crafter was there, so a job finished while they were on another map was never
+            // reported - Take did nothing and Fabricate stayed disabled until they used the
+            // station again. A crafter away from the station's map is told when they are back
+            // on it, or when they next use the station (SendStatus).
             foreach (var entry in _jobs)
             {
                 var (stationId, characterId) = entry.Key;
-                var finished = false;
 
-                foreach (var job in entry.Value)
-                    if (!job.FinishReported && job.IsFinished)
-                    {
-                        job.FinishReported = true;
-                        finished = true;
-                    }
+                if (!entry.Value.Any(job => !job.FinishReported && job.IsFinished))
+                    continue;
 
-                if (!finished)
+                if (!EntityManager.Instance.TryGetObject(stationId, out var station) || station.MapContextId != mapChannel.MapInfo.MapContextId)
                     continue;
 
                 var client = mapChannel.ClientList.FirstOrDefault(c => c?.Player != null && c.Player.Id == characterId && c.State == ClientState.Ingame);
 
-                if (client != null && EntityManager.Instance.TryGetObject(stationId, out var station) && station.MapContextId == mapChannel.MapInfo.MapContextId)
+                if (client != null)
                     SendStatus(client, station);
             }
         }
@@ -275,9 +277,20 @@ namespace Rasa.Managers
             return jobs;
         }
 
+        /// <summary>
+        /// The player's jobs at the station, to their client. A finished job's finish is reported
+        /// by this, however it came to be sent - the worker, a use of the station, a job taken -
+        /// so the worker does not send it again.
+        /// </summary>
         private void SendStatus(Client client, DynamicObject station)
         {
-            client.CallMethod(station.EntityId, new CraftingStatusPacket(client.Player.EntityId, JobsFor(client, station)));
+            var jobs = JobsFor(client, station);
+
+            client.CallMethod(station.EntityId, new CraftingStatusPacket(client.Player.EntityId, jobs));
+
+            foreach (var job in jobs)
+                if (job.IsFinished)
+                    job.FinishReported = true;
         }
 
         /// <summary>

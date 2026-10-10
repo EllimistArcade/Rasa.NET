@@ -1,3 +1,5 @@
+﻿extern alias RasaGame;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,6 +13,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Rasa.Test.Gameplay
 {
+    using ClientState = RasaGame::Rasa.Data.ClientState;
     using Rasa.Context;
     using Rasa.Context.World;
     using Rasa.Data;
@@ -211,6 +214,57 @@ namespace Rasa.Test.Gameplay
                 rows.Add(string.Join("|", Enumerable.Range(0, reader.FieldCount).Select(i => Convert.ToString(reader.GetValue(i), System.Globalization.CultureInfo.InvariantCulture))));
 
             return rows;
+        }
+
+        [TestMethod]
+        public void AFinishedJobIsReportedByTheStationsMapAndNotMarkedByAnother()
+        {
+            using var bench = new Bench();
+            var job = bench.FinishedJob();
+            var elsewhere = new MapChannel { MapInfo = new MapInfo(1220, "adv_foreas_concordia_wilderness", 1556, 0), ClientList = new List<Client>() };
+
+            // Another populated map's worker ticks first: the station is not on it, so the job is
+            // not its to report. It used to mark the job reported all the same, and the crafter
+            // never heard.
+            bench.Client.State = ClientState.Ingame;
+            bench.Station.Worker(elsewhere);
+
+            Assert.IsFalse(job.FinishReported);
+            Assert.IsEmpty(bench.Drain().OfType<CraftingStatusPacket>().ToList());
+
+            // The station's own map: the crafter is there, and is told.
+            if (!bench.Map.ClientList.Contains(bench.Client))
+                bench.Map.ClientList.Add(bench.Client);
+
+            bench.Station.Worker(bench.Map);
+
+            var status = bench.Drain().OfType<CraftingStatusPacket>().Single();
+
+            Assert.AreEqual(1, status.Jobs.Count);
+            Assert.IsTrue(job.FinishReported);
+
+            // And once only.
+            bench.Station.Worker(bench.Map);
+            Assert.IsEmpty(bench.Drain().OfType<CraftingStatusPacket>().ToList());
+        }
+
+        [TestMethod]
+        public void AFinishedJobWaitsForACrafterWhoIsAway()
+        {
+            using var bench = new Bench();
+            var job = bench.FinishedJob();
+
+            bench.Map.ClientList.Remove(bench.Client);
+            bench.Station.Worker(bench.Map);
+
+            Assert.IsFalse(job.FinishReported, "the crafter is not on the station's map: told when they are back");
+
+            bench.Map.ClientList.Add(bench.Client);
+            bench.Client.State = ClientState.Ingame;
+            bench.Station.Worker(bench.Map);
+
+            Assert.IsTrue(job.FinishReported);
+            Assert.AreEqual(1, bench.Drain().OfType<CraftingStatusPacket>().Count());
         }
 
         [TestMethod]
@@ -448,6 +502,19 @@ namespace Rasa.Test.Gameplay
             internal KraftwerksManager Station { get; }
             internal DynamicObject Object { get; }
             internal Client Client => _harness.Client;
+            internal MapChannel Map => _harness.BootcampMap;
+
+            /// <summary>A job of the player's at the station, finished, and not yet reported to them.</summary>
+            internal CraftingJob FinishedJob()
+            {
+                var jobs = (Dictionary<(ulong, uint), List<CraftingJob>>)typeof(KraftwerksManager)
+                    .GetField("_jobs", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(Station);
+                var job = new CraftingJob { ResultItemId = 77, ResultClassId = ModuleItemClass, ResultItemTemplateId = Body1Item, Count = 1, CraftingPage = 1, FinishTick = Environment.TickCount64 - 1 };
+
+                jobs[(Object.EntityId, Client.Player.Id)] = new List<CraftingJob> { job };
+
+                return job;
+            }
 
             internal Bench()
             {
@@ -552,6 +619,8 @@ namespace Rasa.Test.Gameplay
                 .Where(entityId => entityId != 0)
                 .Select(entityId => EntityManager.Instance.GetItem(entityId))
                 .Single(item => item.ItemTemplate.ItemTemplateId == templateId);
+
+            internal IReadOnlyList<PythonPacket> Drain() => _harness.Drain();
 
             /// <summary>What a request sent the client.</summary>
             internal IReadOnlyList<PythonPacket> After(Action<KraftwerksManager, ulong> request)

@@ -1053,8 +1053,9 @@ namespace Rasa.Managers
                         break;
                     }
 
-                    // A Kael's rushing blow is a charge: its windup carries the Kael to its
-                    // target, and the blow lands when it gets there (KaelRushingBlow).
+                    // A rushing blow - a Kael's, an AFS soldier's - is a charge: its windup carries
+                    // the creature to its target, and the blow lands when it gets there
+                    // (KaelRushingBlow).
                     if (KaelRushingBlow.Is(action))
                     {
                         creature.Controller.Path.Clear();

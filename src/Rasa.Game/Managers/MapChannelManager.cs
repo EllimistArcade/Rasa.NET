@@ -102,6 +102,13 @@ namespace Rasa.Managers
         /// </summary>
         private const int LogoutDelayToleranceMs = 250;
 
+        /// <summary>
+        /// How long past the countdown a requested logout still counts as pending
+        /// (Manifestation.LogoutPending): the client's Logout button enables as its own countdown
+        /// ends, which is a little after the server's.
+        /// </summary>
+        public const int LogoutPendingGraceMs = 1000;
+
         public void CharacterLogout(Client client)
         {
             // Nothing requested, or the request was cancelled.

@@ -41,7 +41,7 @@ namespace Rasa.Game.Missions.Integration
             var map = player?.MapChannel;
             return client?.State == ClientState.Ingame && client.PendingTransfer == null &&
                 client.AccountEntry != null && player?.Id > 0 && map != null &&
-                !player.Disconected && !player.RemoveFromMap && !player.LogoutActive &&
+                !player.Disconected && !player.RemoveFromMap && !player.LogoutPending &&
                 player.State is not (CharacterState.Dead or CharacterState.Dying) &&
                 player.MapContextId == map.MapInfo.MapContextId &&
                 ReferenceEquals(player.RuntimeMapChannel, map) &&

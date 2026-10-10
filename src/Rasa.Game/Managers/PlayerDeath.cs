@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -158,6 +158,10 @@ namespace Rasa.Managers
             victim.StateBeforeDeath = victim.State;
             victim.State = CharacterState.Dead;
             victim.DiedInPvp = pvp;
+
+            // A logout asked for is off: the death closes its window on the client, and nothing
+            // would clear it otherwise (Manifestation.LogoutPending).
+            victim.LogoutActive = false;
 
             // A creature that has killed its target says so (Battlecries).
             Battlecries.KilledTarget(mapChannel, source as Creature);

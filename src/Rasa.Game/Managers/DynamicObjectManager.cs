@@ -1679,7 +1679,7 @@ namespace Rasa.Managers
                     return;
                 }
                 if (client.State != ClientState.Ingame || client.Player?.MapChannel == null || client.Player.Id == 0 ||
-                    client.Player.Disconected || client.Player.RemoveFromMap || client.Player.LogoutActive ||
+                    client.Player.Disconected || client.Player.RemoveFromMap || client.Player.LogoutPending ||
                     client.Player.State == CharacterState.Dead ||
                     !CellManager.Instance.IsInWorld(client) ||
                     !Teleporters.TryGetValue(packet.WaypointId, out var teleporter) ||
@@ -1948,7 +1948,7 @@ namespace Rasa.Managers
             {
                 if (client.PendingTransfer != null || client.State != ClientState.Ingame ||
                     client.Player?.MapChannel == null || client.Player.Disconected || client.Player.RemoveFromMap ||
-                    client.Player.LogoutActive || client.Player.State == CharacterState.Dead ||
+                    client.Player.LogoutPending || client.Player.State == CharacterState.Dead ||
                     !CellManager.Instance.IsInWorld(client) ||
                     !CellManager.TryGetCellCoordinates(destination, out _, out _) || !double.IsFinite(rotation))
                     return false;
@@ -1987,7 +1987,7 @@ namespace Rasa.Managers
                         continue;
 
                     if (client.State != ClientState.Ingame || client.Player?.MapChannel != transfer.OriginMap ||
-                        client.Player.Disconected || client.Player.RemoveFromMap || client.Player.LogoutActive ||
+                        client.Player.Disconected || client.Player.RemoveFromMap || client.Player.LogoutPending ||
                         client.Player.State == CharacterState.Dead || !CellManager.Instance.IsInWorld(client))
                     {
                         client.PendingTransfer = null;
@@ -2026,7 +2026,7 @@ namespace Rasa.Managers
                     return;
                 }
                 if (client.State != ClientState.Ingame || client.Player?.MapChannel == null || client.Player.Id == 0 ||
-                    client.Player.Disconected || client.Player.RemoveFromMap || client.Player.LogoutActive ||
+                    client.Player.Disconected || client.Player.RemoveFromMap || client.Player.LogoutPending ||
                     client.Player.State == CharacterState.Dead ||
                     !CellManager.Instance.IsInWorld(client))
                 {

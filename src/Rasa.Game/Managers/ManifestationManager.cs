@@ -3497,6 +3497,11 @@ namespace Rasa.Managers
             RemoveAutoFire(client);
             ConstantFire.Stop(client, release: false);
 
+            // A logout asked for on this map is off with it, whichever way they leave; a logout
+            // itself has what it needs by now (CharacterLogout).
+            if (client?.Player != null)
+                client.Player.LogoutActive = false;
+
             // A Rushing Blow charge ends with the map: left on the old map's list it outlived
             // the map change, and once that map emptied nothing ended it, so every Move from
             // the new map was set aside (AbilityManager.IsCharging) until the player relogged.

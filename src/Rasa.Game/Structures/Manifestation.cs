@@ -6,6 +6,7 @@ namespace Rasa.Structures
 {
     using Char;
     using Data;
+    using Managers;
     using Repositories.Char.Character;
 
     public class Manifestation : Actor, ICharacterChange
@@ -228,8 +229,25 @@ namespace Rasa.Structures
             }
         }
         public bool Disconected { get; set; }
-        /// <summary>Set by RequestLogout, cleared by CancelLogoutRequest.</summary>
+        /// <summary>
+        /// A logout was asked for (MapChannelManager.RequestLogout) and has not been cancelled
+        /// (CancelLogoutRequest), nor overtaken by a death or by leaving the map. What
+        /// CharacterLogout needs to find.
+        /// </summary>
         public bool LogoutActive { get; set; }
+
+        /// <summary>
+        /// Whether the logout asked for is still in its countdown
+        /// (MapChannelManager.LogoutDelayMs, and LogoutPendingGraceMs over): what travel, the
+        /// NPCs and a squad's instance refuse the player during. LogoutActive alone used to say
+        /// so, and only the window's Cancel button cleared it: a logout window closed another
+        /// way - a death, another centre dialog (logoutwindow.py Show hands Hide to the dialog
+        /// manager) - left the player refused all of those until a relog. The window is modal
+        /// while it is open, so once the countdown is over a request that reaches the server is
+        /// the player doing something else, with the window gone, and is not refused.
+        /// </summary>
+        public bool LogoutPending =>
+            LogoutActive && Environment.TickCount64 - LogoutRequestedTick <= MapChannelManager.LogoutDelayMs + MapChannelManager.LogoutPendingGraceMs;
 
         /// <summary>
         /// Whether this player is in a fight, as the server counts it: they have dealt or taken

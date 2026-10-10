@@ -1,4 +1,4 @@
-extern alias RasaGame;
+﻿extern alias RasaGame;
 
 using System;
 using System.Collections.Generic;
@@ -242,7 +242,7 @@ namespace Rasa.Test.Missions
                 case "unregistered-player": EntityManager.Instance.UnregisterPlayer(context.Client.Player.EntityId); break;
                 case "transfer": context.Client.PendingTransfer = new PlayerTransfer { OriginMap = context.Map }; break;
                 case "logout": context.Client.State = ClientState.LoggedIn; break;
-                case "pending-logout": context.Client.Player.LogoutActive = true; break;
+                case "pending-logout": context.Client.Player.LogoutActive = true; context.Client.Player.LogoutRequestedTick = System.Environment.TickCount64; break;
                 case "removal": context.Client.Player.RemoveFromMap = true; break;
             }
 

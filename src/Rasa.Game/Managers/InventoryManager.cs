@@ -7,6 +7,7 @@ namespace Rasa.Managers
     using Data;
     using Game;
     using Game.Missions.Persistence;
+    using Packets;
     using Packets.Communicator.Server;
     using Packets.Clan.Client;
     using Packets.Clan.Server;
@@ -1523,7 +1524,7 @@ namespace Rasa.Managers
             if (ClanManager.Instance.Clans.ContainsKey(clanId))
                 ClanManager.Instance.Clans[clanId] = new Lazy<ClanEntry>(() => clan);
 
-            ClanManager.Instance.CallMethodForOnlineMembers(clanId, (uint)SysEntity.ClientInventoryManagerId, new UpdateClanLockboxTabCountPacket(tabId));
+            ToClanLockboxes(clanId, new UpdateClanLockboxTabCountPacket(tabId));
 
             RecordClanLockboxLog(client, ClanLockboxLogEntry.ForCredits(clanId, InventoryTransactionType.TabPurchase,
                 client.Player.Id, client.Player.Name, client.Player.FamilyName, (byte)CurencyType.Prestige, price));
@@ -1591,16 +1592,42 @@ namespace Rasa.Managers
             if (stored == null)
                 return;
 
-            ClanManager.Instance.CallMethodForOnlineMembers(entry.ClanId, (uint)SysEntity.ClientClanManagerId,
-                ClanLockboxLogsPacket.Update(new List<ClanLockboxLogEntry> { stored }));
+            ToClanLockboxes(entry.ClanId, ClanLockboxLogsPacket.Update(new List<ClanLockboxLogEntry> { stored }));
         }
 
         /// <summary>
-        /// The clan's lockbox history and tab count, sent when a member enters the world. Nothing
-        /// in the client asks for either - the window draws whatever it was last told - so this is
-        /// the only chance to fill it.
+        /// Every clan lockbox standing in the world: the static ones, and a control point's.
         /// </summary>
-        public void SendClanLockboxState(Client client)
+        private static List<DynamicObject> ClanLockboxes() =>
+            EntityManager.Instance.DynamicObjects.Values.Where(o => o.EntityClassId == EntityClasses.UsableClanLockboxV01).ToList();
+
+        /// <summary>
+        /// Sends a clan lockbox message to the clan's members online, on each lockbox's own entity.
+        /// The client handles UpdateClanLockboxCredits, UpdateClanLockboxTabCount,
+        /// LoadClanLockboxLogs and UpdateClanLockboxLogs on its ClanLockbox augmentation and
+        /// nowhere else (clanlockbox.py); a client that has no such entity in view drops the call,
+        /// and reads the state when it next opens one (SendClanLockboxState).
+        ///
+        /// The tab count used to go to the client's inventory manager and the history to its clan
+        /// manager, which have no handler for them: every tab past the first showed locked and
+        /// could not be bought, and the history stayed empty. The credits went to the lockbox
+        /// entities, and arrived.
+        /// </summary>
+        private static void ToClanLockboxes(uint clanId, ServerPythonPacket packet)
+        {
+            foreach (var lockbox in ClanLockboxes())
+                ClanManager.Instance.CallMethodForOnlineMembers(clanId, lockbox.EntityId, packet);
+        }
+
+        /// <summary>
+        /// What the lockbox window shows besides its items - the tab count, the balance, the
+        /// history - sent to the player's client on the lockbox they are opening
+        /// (DynamicObjectManager, the Use). The window draws whatever it was last told and asks
+        /// for nothing, and its handlers are the lockbox entity's, so this is where it can be
+        /// filled: at login it was sent to entities the client does not handle it on, and the
+        /// balance was not sent at all until money moved.
+        /// </summary>
+        public void SendClanLockboxState(Client client, ulong lockboxEntityId)
         {
             var clanId = client.Player?.ClanId ?? 0;
 
@@ -1610,13 +1637,15 @@ namespace Rasa.Managers
             using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
             var clan = unitOfWork.Clans.GetClanById(clanId);
 
-            client.CallMethod(SysEntity.ClientInventoryManagerId,
-                new UpdateClanLockboxTabCountPacket(Math.Max(clan?.PurashedTabs ?? 0, ClanLockboxTab.FreeTab)));
+            if (clan == null)
+                return;
+
+            client.CallMethod(lockboxEntityId, new UpdateClanLockboxTabCountPacket(Math.Max(clan.PurashedTabs, ClanLockboxTab.FreeTab)));
+            client.CallMethod(lockboxEntityId, new UpdateClanLockboxCreditsPacket(clan.Credits, clan.Prestige));
 
             // The client keeps CLAN_LOCKBOX_LOGS_DISPLAY_LIMIT of them and throws the rest away
             // as they arrive, so sending more than that is work nobody sees.
-            client.CallMethod(SysEntity.ClientClanManagerId,
-                ClanLockboxLogsPacket.Load(unitOfWork.ClanLockboxLogs.Get(clanId, ClanLockboxLogDisplayLimit)));
+            client.CallMethod(lockboxEntityId, ClanLockboxLogsPacket.Load(unitOfWork.ClanLockboxLogs.Get(clanId, ClanLockboxLogDisplayLimit)));
         }
 
         /// <summary>CLAN_LOCKBOX_LOGS_DISPLAY_LIMIT.</summary>
@@ -1656,8 +1685,7 @@ namespace Rasa.Managers
                 return false;
             }
 
-            foreach (var lockbox in EntityManager.Instance.DynamicObjects.Values.Where(o => o.EntityClassId == EntityClasses.UsableClanLockboxV01).ToList())
-                ClanManager.Instance.CallMethodForOnlineMembers(clanId, lockbox.EntityId, new UpdateClanLockboxCreditsPacket(credits, prestige));
+            ToClanLockboxes(clanId, new UpdateClanLockboxCreditsPacket(credits, prestige));
 
             try
             {
@@ -1781,13 +1809,7 @@ namespace Rasa.Managers
             var lockboxCredits = creditType == 1 ? (uint)lockboxAfter : clanInfo.Credits;
             var lockboxPrestige = creditType == 2 ? (uint)lockboxAfter : clanInfo.Prestige;
 
-            foreach (var dynamicObj in EntityManager.Instance.DynamicObjects)
-            {
-                var dynamicObject = dynamicObj.Value;
-
-                if (dynamicObject.EntityClassId == EntityClasses.UsableClanLockboxV01)
-                    ClanManager.Instance.CallMethodForOnlineMembers(client.Player.ClanId, dynamicObject.EntityId, new UpdateClanLockboxCreditsPacket(lockboxCredits, lockboxPrestige));
-            }
+            ToClanLockboxes(client.Player.ClanId, new UpdateClanLockboxCreditsPacket(lockboxCredits, lockboxPrestige));
 
             // Logged by which way the money went, with the amount as a positive number: the
             // client prints the transaction type as its own word and the amount beside it, so a

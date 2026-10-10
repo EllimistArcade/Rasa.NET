@@ -403,6 +403,11 @@ namespace Rasa.Managers
                         client.CallMethod(packet.EntityId, new UsePacket(client.Player.EntityId, obj.StateId, 100));
                         client.Player.MapChannel.PerformRecovery.Add(new ActionData(client.Player, packet.ActionId, packet.ActionArgId, 100));
 
+                        // A clan's lockbox: the window the Use opens draws the tab count, the
+                        // balance and the history it was last told, on this entity.
+                        if (obj.EntityClassId == EntityClasses.UsableClanLockboxV01)
+                            InventoryManager.Instance.SendClanLockboxState(client, obj.EntityId);
+
                         if (!obj.TriggeredByPlayers.Contains(client))
                             obj.TriggeredByPlayers.Add(client);
                         break;

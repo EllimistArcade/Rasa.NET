@@ -167,9 +167,9 @@ namespace Rasa.Managers
                 // roster for every member online, and send them the clan's own data again besides.
                 SendMemberData(MemberDataFor(client, member, true), client.Player.Id);
 
-                // The lockbox window draws whatever it was last told and asks for nothing, so
-                // its tab count and history have to be pushed on the way in.
-                InventoryManager.Instance.SendClanLockboxState(client);
+                // The lockbox window's tab count, balance and history are sent when a lockbox is
+                // opened (InventoryManager.SendClanLockboxState): the client handles them on the
+                // lockbox's entity, which it has only when one is in view.
             }
         }
 

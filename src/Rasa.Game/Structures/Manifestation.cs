@@ -127,6 +127,9 @@ namespace Rasa.Structures
         public long WeaponCheckLogTick { get; set; }
         public int WeaponCheckHits { get; set; }
 
+        /// <summary>When this player was last told a shot's target was out of range (WeaponChecks.Tell).</summary>
+        public long WeaponRangeToldTick { get; set; }
+
         /// <summary>
         /// The clients that hold this player's entity from beyond their cells: squad and team
         /// mates elsewhere on the map (Managers.FarAllies). What the player's cells are told of

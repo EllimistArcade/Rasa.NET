@@ -32,9 +32,10 @@ namespace Rasa.Test.Gameplay
         [TestInitialize]
         public void Initialize()
         {
-            // As shipped: a shot at a target out of the weapon's reach is refused.
+            // A shot at a target out of the weapon's reach is refused: logged only as shipped
+            // (BR-163), but a server can choose to refuse it, and the fire must carry on.
             _previous = WeaponChecks.Config;
-            WeaponChecks.Config = new WeaponChecksConfig();
+            WeaponChecks.Config = new WeaponChecksConfig { Range = "refuse" };
         }
 
         [TestCleanup]

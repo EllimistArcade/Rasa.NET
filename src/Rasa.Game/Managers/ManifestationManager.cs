@@ -1049,7 +1049,10 @@ namespace Rasa.Managers
                 WeaponChecks.Report(client, aim, now);
 
                 if (aim.Refuse)
+                {
+                    WeaponChecks.Tell(client, aim, now);
                     return FireResult.NotFired;
+                }
             }
 
             // The rounds come out of the clip in memory. The row is not written for a shot: it

@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -239,36 +240,54 @@ namespace Rasa.Test.Missions
         public void AnAbilityRefusedOnLandingForItsItemIsNotPaidFor()
         {
             using var harness = BootcampRuntimeTestHarness.Create();
-            var pet = ToyTests.Grant(harness, PineOckTemplate);
-            ToyTests.LoadClass(harness, 7747);
-            var manager = ToyTests.CreateManager(harness, 460, 1, PineOckTemplate);
+            var snowballs = ToyTests.Grant(harness, SnowballTemplate, 3);
+            var manager = ToyTests.CreateManager(harness, 528, 1, SnowballTemplate);
             using var abilities = UseAbilityManager(manager);
             var player = harness.Client.Player;
 
-            // Give the pet a power cost, as a consumable has.
+            // Give the throw a power cost, as other consumables have.
             var actions = (System.Collections.Generic.Dictionary<ActionId, ActionInfo>)typeof(AbilityManager)
                 .GetField("_actions", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);
-            actions[ActionId.AccountrewardPet].Levels[1].Costs.Add(new ActionCost { Attribute = Attributes.Power, Amount = 40 });
+            actions[(ActionId)528].Levels[1].Costs.Add(new ActionCost { Attribute = Attributes.Power, Amount = 40 });
 
             var power = player.Attributes[Attributes.Power];
             power.Current = 100;
             power.CurrentMax = 100;
 
-            manager.RequestPerformAbility(harness.Client, ToyTests.Request(460, 1, pet.EntityId));
-            var pending = harness.BootcampMap.PerformRecovery.Single(action => action.ActionId == ActionId.AccountrewardPet);
+            manager.RequestPerformAbility(harness.Client, ToyTests.Request(528, 1, snowballs.EntityId));
+            var pending = harness.BootcampMap.PerformRecovery.Single(action => action.ActionId == (ActionId)528);
             Assert.AreEqual(100, power.Current, "paid on landing, not on asking");
 
-            // While the windup runs the item becomes a mission's: still in the pack, so the
-            // landing's checks pass, and refused by the consumption, which will not take a
-            // mission's item for an ordinary ability.
-            pet.MissionOwnership = new MissionItemOwnership(player.Id, 1, "assignment", 1, "pet");
+            // The landing's checks pass - the snowballs are still in the pack - and the write that
+            // uses one up fails: the consumption is the last thing that can refuse the throw. (A
+            // pet would not do: it keeps its item, so nothing is consumed that could refuse.)
             harness.Drain();
+            var refused = false;
+            harness.Context.BeforeCommand = sql =>
+            {
+                if (!refused && sql.Contains("UPDATE \"items\"", StringComparison.Ordinal))
+                {
+                    refused = true;
+                    throw new Microsoft.Data.Sqlite.SqliteException("disk I/O error", 10);
+                }
+            };
 
-            ToyTests.Land(harness, manager, pending);
+            try
+            {
+                ToyTests.Land(harness, manager, pending);
+            }
+            finally
+            {
+                harness.Context.BeforeCommand = null;
+            }
+
+            Assert.IsTrue(refused, "the stack's write was reached");
 
             Assert.AreEqual(PlayerMessage.PmMissingReqItem, harness.Drain().OfType<UserActionFailedPacket>().Single().MsgId);
             Assert.AreEqual(100, power.Current, "refused, so not paid for: the cost used to be taken before the consumption could refuse");
-            Assert.IsNull(AbilityManager.PetCreatureOf(player));
+            Assert.AreEqual(3U, snowballs.StackSize, "nothing used up");
+            using var unit = harness.Context.CreateChar();
+            Assert.AreEqual(3U, unit.Items.GetItem(snowballs.Id).StackSize);
         }
 
         private static Restore UseAbilityManager(AbilityManager manager)

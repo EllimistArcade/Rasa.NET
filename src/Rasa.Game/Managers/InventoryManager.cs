@@ -1367,19 +1367,13 @@ namespace Rasa.Managers
 
         public void TransferCreditToLockbox(Client client, int amount)
         {
-            /*
-             * ToDo:
-             * there is some bug with withdraw if withdraw value is less then 256
-             * client send positive value, insted of negative one
-             * so we will set min transfer value to 500 for now
-             * we can take closer look at this later
-             */
-
-            if (amount > -500 && amount < 500)
-            {
-                CommunicatorManager.Instance.SystemMessage(client, "Minimum transfer value is 500 credits");
+            // The client sends a withdrawal as the negated amount, and its marshaller puts
+            // -128..-1 in one byte, which PythonReader.ReadInt used to take unsigned: a withdrawal
+            // of 100 arrived as a deposit of 156. A 500-credit floor on both directions was the
+            // workaround; the reader is signed now, so any amount the client lets through (its
+            // GetCreditAmount refuses 0 and below) is transferred as asked.
+            if (amount == 0)
                 return;
-            }
 
             // Worked in long: purse and lockbox are both int columns. The sums were int + int, so a
             // big enough deposit wrapped the lockbox negative (and stranded it, since a withdrawal
@@ -1685,11 +1679,10 @@ namespace Rasa.Managers
             if (amount < 0 && !CanTakeFromClanLockbox(client))
                 return;
 
-            if (amount > -500 && amount < 500)
-            {
-                CommunicatorManager.Instance.SystemMessage(client, "Minimum transfer value is 500 credits");
+            // Small withdrawals used to arrive positive (PythonReader.ReadInt took a one byte int
+            // unsigned); the 500 floor that covered for it is gone with the cause.
+            if (amount == 0)
                 return;
-            }
 
             // The character side is an int; anything past that cannot be a real request.
             if (amount < int.MinValue || amount > int.MaxValue)

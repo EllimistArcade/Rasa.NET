@@ -946,8 +946,10 @@ namespace Rasa.Managers
                 foreach (var action in ByReadiness(creature.Actions))
                 {
                     // Heals and revives are not aimed at the enemy (CreatureSupport.TryStart), nor
-                    // are the habits (CreatureHabits).
-                    if (CreatureSupport.Is(action) || CreatureHabits.Is(action))
+                    // are the habits (CreatureHabits), nor a Shield Drone's heal, which its shield
+                    // casts on its own schedule (ShieldDrone.Worker): taken as an attack, it was a
+                    // shot of no damage at the player that reset the heal's cooldown.
+                    if (CreatureSupport.Is(action) || CreatureHabits.Is(action) || action.ActionId == ShieldDrone.HealAction)
                         continue;
 
                     // check if we can execute action

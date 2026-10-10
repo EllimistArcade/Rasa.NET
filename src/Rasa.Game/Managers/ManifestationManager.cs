@@ -126,11 +126,11 @@ namespace Rasa.Managers
         internal const long ShotTolerance = 250;
 
         /// <summary>
-        /// The least a shot is charged, in ms. The auto-fire list is walked once every 100 ms
-        /// (MapChannelManager's "AutoFire" timer), which is the fastest the server fires a weapon
+        /// The least a shot is charged, in ms. The auto-fire list is walked once a tick of the
+        /// main loop (Server.MainLoopTime, 100 ms), which is the fastest the server fires a weapon
         /// by itself; a weapon whose refire reads 0 is held to that rather than to nothing.
         /// </summary>
-        private const long MinRefire = 100;
+        private const long MinRefire = Server.MainLoopTime;
 
         private enum FireResult
         {
@@ -2250,33 +2250,67 @@ namespace Rasa.Managers
 
                 timer.Delay -= delta;
 
-                if (timer.Delay <= 0)
+                if (timer.Delay > 0)
+                    continue;
+
+                // This list is walked at the top of the map channel worker, before any map
+                // is touched. A shot that throws used to abandon the whole tick - every
+                // map's queued actions, missiles, creature behaviour and visibility - and
+                // the delay below never being reached meant the same client threw again on
+                // the very next tick, so one player could hold the world still. The timer
+                // that could not be fired is dropped instead, and costs only itself.
+                try
                 {
-                    // This list is walked at the top of the map channel worker, before any map
-                    // is touched. A shot that throws used to abandon the whole tick - every
-                    // map's queued actions, missiles, creature behaviour and visibility - and
-                    // the delay below never being reached meant the same client threw again on
-                    // the very next tick, so one player could hold the world still. The timer
-                    // that could not be fired is dropped instead, and costs only itself.
-                    try
+                    switch (TryFireWeapon(timer.Client))
                     {
-                        // A constant fire that cannot go on - out of ammo, jammed, too hot -
-                        // comes off, so the client stops charging and can reload; a shot merely
-                        // early leaves it running.
-                        if (TryFireWeapon(timer.Client) == FireResult.NotFired)
+                        case FireResult.Fired:
+                            // The next shot is a refire after this one came due, not after the
+                            // tick that found it due. The list is walked once a tick, so a shot
+                            // is found up to a tick late, and setting the delay to a whole
+                            // refire charged that lateness to every shot: a 350 ms pistol fired
+                            // every 400, a 933 ms blade every 1,000. What is carried over is at
+                            // most a tick's worth, so that after a stall the fire goes on at the
+                            // weapon's pace rather than making up the shots the stall swallowed
+                            // in a burst.
+                            timer.Delay = timer.RefireTime - Math.Min(-timer.Delay, Server.MainLoopTime);
+                            break;
+
+                        case FireResult.TooSoon:
+                            // The shot clock has a little to run - a RequestWeaponAttack of the
+                            // client's own was charged since the last shot here. Ask again when
+                            // it is up, not a whole refire from now.
+                            timer.Delay = Math.Max(1, ShotWait(timer.Client.Player, Environment.TickCount64));
+                            break;
+
+                        case FireResult.NotFired:
+                            // A constant fire that cannot go on - out of ammo, jammed, too hot -
+                            // comes off, so the client stops charging and can reload; a shot
+                            // merely early leaves it running.
                             ConstantFire.Stop(timer.Client);
+
+                            // A refusal for a draw or a reload under way is asked again when it
+                            // is over. Waiting a whole refire instead cost a one round launcher
+                            // a refire on top of every reload. The list is walked before the
+                            // map's queue, and the queue has this tick's time still to add, so
+                            // the reload that has the remaining time left ends with a queue pass
+                            // before the walk that finds this delay up - the tick after it, as
+                            // StartAutoFire arranges with its +1, which here would be a tick
+                            // late. A walk that finds it a few ms short (uneven ticks) meets
+                            // IsReloading and waits those few ms. Any other refusal - stunned,
+                            // out of reach, jammed, dry with nothing to load - waits a refire as
+                            // before, so what a refusal says is not said every tick.
+                            var busy = WeaponBusyFor(timer.Client.Player);
+
+                            timer.Delay = busy < 0 ? timer.RefireTime : busy;
+                            break;
                     }
-                    catch (Exception e)
-                    {
-                        AutoFire.RemoveAt(i);
-                        ConstantFire.Stop(timer.Client);
+                }
+                catch (Exception e)
+                {
+                    AutoFire.RemoveAt(i);
+                    ConstantFire.Stop(timer.Client);
 
-                        Logger.WriteLog(LogType.Error, $"Auto-fire for entity {timer.Client.Player?.EntityId} threw and was stopped: {e}");
-
-                        continue;
-                    }
-
-                    timer.Delay = timer.RefireTime;
+                    Logger.WriteLog(LogType.Error, $"Auto-fire for entity {timer.Client.Player?.EntityId} threw and was stopped: {e}");
                 }
             }
         }

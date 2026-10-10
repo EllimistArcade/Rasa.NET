@@ -240,7 +240,6 @@ namespace Rasa.Managers
                 // register mapChannel
                 MapChannelArray.Add(mapInfo.Id, newMapChannel);
             }
-            Timer.Add("AutoFire", 100, true, null);
             Timer.Add("CheckForObjects", 1000, true, null);
             Timer.Add("ClientEffectUpdate", 500, true, null);
             Timer.Add("CellUpdateVisibility", 1000, true, null);
@@ -325,8 +324,12 @@ namespace Rasa.Managers
             // Server-wide lists, ticked once. These used to run inside the per-map loop below,
             // guarded by that map having players, so with N populated maps every auto-fire
             // timer and every dropship advanced N times per tick.
-            if (Timer.IsTriggered("AutoFire"))
-                Guard("ManifestationManager.AutoFireTimerDoWork", null, () => ManifestationManager.Instance.AutoFireTimerDoWork(delta));
+            //
+            // Every tick, not on a 100 ms timer of its own: the loop's ticks run a little
+            // under or over 100 ms, and a tick that came in under did not trip the timer, so
+            // its delta never reached the fire timers - held fire ran slow by every short tick,
+            // on top of the whole-refire reset AutoFireTimerDoWork used to make.
+            Guard("ManifestationManager.AutoFireTimerDoWork", null, () => ManifestationManager.Instance.AutoFireTimerDoWork(delta));
 
             foreach (var mapChannel in MapChannelArray.Values
                          .Concat(_privateInstances.Snapshot())

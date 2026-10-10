@@ -127,10 +127,18 @@ namespace Rasa.Test.World
 
                 inventory.PurchaseClanLockboxTab(client, new Rasa.Packets.Clan.Client.PurchaseClanLockboxTabPacket { TabId = 2 });
 
-                var tabs = Calls(client).Where(c => c.Packet is UpdateClanLockboxTabCountPacket).ToList();
+                var calls = Calls(client);
+                var tabs = calls.Where(c => c.Packet is UpdateClanLockboxTabCountPacket).ToList();
 
                 CollectionAssert.AreEquivalent(new[] { first.EntityId, second.EntityId }, tabs.Select(c => c.EntityId).ToList(), "once per lockbox, each on its own entity");
                 Assert.IsTrue(tabs.All(c => ((UpdateClanLockboxTabCountPacket)c.Packet).Count == 2));
+
+                // Tab 2 is paid for in prestige; the open window shows what is left.
+                var price = ClanLockboxTab.Price(2);
+                var funds = calls.Where(c => c.Packet is UpdateClanLockboxCreditsPacket).ToList();
+
+                CollectionAssert.AreEquivalent(new[] { first.EntityId, second.EntityId }, funds.Select(c => c.EntityId).ToList(), "the balance, once per lockbox");
+                Assert.IsTrue(funds.All(c => ((UpdateClanLockboxCreditsPacket)c.Packet).ListCredits[1] == 100000 - price));
             }
             finally
             {

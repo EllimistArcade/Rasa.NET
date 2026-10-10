@@ -1526,6 +1526,9 @@ namespace Rasa.Managers
 
             ToClanLockboxes(clanId, new UpdateClanLockboxTabCountPacket(tabId));
 
+            // The tab is paid for in prestige, and an open window shows the balance it was last sent.
+            ToClanLockboxes(clanId, new UpdateClanLockboxCreditsPacket(clan.Credits, prestigeLeft));
+
             RecordClanLockboxLog(client, ClanLockboxLogEntry.ForCredits(clanId, InventoryTransactionType.TabPurchase,
                 client.Player.Id, client.Player.Name, client.Player.FamilyName, (byte)CurencyType.Prestige, price));
         }
@@ -1634,18 +1637,32 @@ namespace Rasa.Managers
             if (clanId == 0)
                 return;
 
-            using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
-            var clan = unitOfWork.Clans.GetClanById(clanId);
+            ClanEntry clan;
+            List<ClanLockboxLogEntry> logs;
+
+            // This runs inside the Use: a read that fails leaves the window as it was and the
+            // lockbox still opens.
+            try
+            {
+                using var unitOfWork = _gameUnitOfWorkFactory.CreateChar();
+                clan = unitOfWork.Clans.GetClanById(clanId);
+
+                // The client keeps CLAN_LOCKBOX_LOGS_DISPLAY_LIMIT of them and throws the rest
+                // away as they arrive, so sending more than that is work nobody sees.
+                logs = clan == null ? null : unitOfWork.ClanLockboxLogs.Get(clanId, ClanLockboxLogDisplayLimit);
+            }
+            catch (Exception e)
+            {
+                Logger.WriteLog(LogType.Error, $"SendClanLockboxState: clan {clanId}'s lockbox could not be read for {client.Player.FamilyName}: {e.Message}");
+                return;
+            }
 
             if (clan == null)
                 return;
 
             client.CallMethod(lockboxEntityId, new UpdateClanLockboxTabCountPacket(Math.Max(clan.PurashedTabs, ClanLockboxTab.FreeTab)));
             client.CallMethod(lockboxEntityId, new UpdateClanLockboxCreditsPacket(clan.Credits, clan.Prestige));
-
-            // The client keeps CLAN_LOCKBOX_LOGS_DISPLAY_LIMIT of them and throws the rest away
-            // as they arrive, so sending more than that is work nobody sees.
-            client.CallMethod(lockboxEntityId, ClanLockboxLogsPacket.Load(unitOfWork.ClanLockboxLogs.Get(clanId, ClanLockboxLogDisplayLimit)));
+            client.CallMethod(lockboxEntityId, ClanLockboxLogsPacket.Load(logs));
         }
 
         /// <summary>CLAN_LOCKBOX_LOGS_DISPLAY_LIMIT.</summary>

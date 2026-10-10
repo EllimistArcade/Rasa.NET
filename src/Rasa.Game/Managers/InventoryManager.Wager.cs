@@ -724,9 +724,15 @@ namespace Rasa.Managers
                             ownerEntry?.Name ?? "", ownerEntry == null ? "" : unitOfWork.GameAccounts.Find(ownerEntry.AccountId)?.FamilyName ?? "",
                             template.ItemTemplateId, Math.Max(1u, itemData.StackSize)));
 
+                        // On each lockbox's entity, the only place the client handles it (ToClanLockboxes).
                         if (stored != null)
-                            foreach (var member in winnersOnline)
-                                member.CallMethod(SysEntity.ClientClanManagerId, Packets.Clan.Server.ClanLockboxLogsPacket.Update(new List<ClanLockboxLogEntry> { stored }));
+                        {
+                            var logged = Packets.Clan.Server.ClanLockboxLogsPacket.Update(new List<ClanLockboxLogEntry> { stored });
+
+                            foreach (var lockbox in ClanLockboxes())
+                                foreach (var member in winnersOnline)
+                                    member.CallMethod(lockbox.EntityId, logged);
+                        }
 
                         touchedLockbox = true;
                         result.ToLockbox++;

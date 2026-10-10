@@ -496,6 +496,47 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
+        public void AForfeitsLockboxHistoryGoesToTheWinnersOnTheLockbox()
+        {
+            using var context = Context(out var loser, out var inventory);
+            var winner = context.CreateAdditionalClient(2);
+            var lockbox = new DynamicObject { EntityClassId = EntityClasses.UsableClanLockboxV01, DynamicObjectType = DynamicObjectType.Lockbox };
+
+            var losers = Clan(context, "Losers", (1, ClanRank.Leader));
+            var winners = Clan(context, "Winners", (2, ClanRank.Leader));
+
+            Join(loser, losers);
+            Join(winner, winners);
+
+            Gear(context, loser, 9001, 0);
+            inventory.WagerItem(loser, new WagerItemPacket { Slot = 0 });
+            inventory.SetWagerLocked(loser, true);
+
+            EntityManager.Instance.RegisterDynamicObject(lockbox);
+
+            try
+            {
+                context.Drain();
+                WorldTestContext.Drain(winner);
+
+                Assert.AreEqual(1, inventory.ForfeitWagers(losers.Id, winners.Id, 2, "Losers", "Winners").ToLockbox);
+
+                // The client handles the history only on the lockbox's entity (clanlockbox.py).
+                var logs = WorldTestContext.Drain(winner).Select(p => p.Message).OfType<Rasa.Packets.Protocol.CallMethodMessage>()
+                    .Where(c => c.Packet is Rasa.Packets.Clan.Server.ClanLockboxLogsPacket).ToList();
+
+                Assert.AreEqual(1, logs.Count, "one line, once");
+                Assert.AreEqual(lockbox.EntityId, logs[0].EntityId);
+                Assert.AreEqual(GameOpcode.UpdateClanLockboxLogs, logs[0].Packet.Opcode);
+            }
+            finally
+            {
+                EntityManager.Instance.UnregisterDynamicObject(lockbox.EntityId);
+                EntityManager.Instance.FreeEntity(lockbox.EntityId);
+            }
+        }
+
+        [TestMethod]
         public void ACharacterUniqueItemIsNotMailedToARecipientWhoHoldsOne()
         {
             using var context = Context(out var loser, out var inventory);

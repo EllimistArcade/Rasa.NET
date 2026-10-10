@@ -1402,6 +1402,7 @@ namespace Rasa.Managers
                                 0));
 
                         var logosId = 0u;
+                        Logos shrine = null;
                         foreach (var entry in mapChannel.DynamicObjects)
                         {
                             if (entry is not Logos logos ||
@@ -1409,13 +1410,19 @@ namespace Rasa.Managers
                                 continue;
 
                             logosId = logos.Id;
+                            shrine = logos;
                             break;
                         }
 
                         var haveLogos = logosId != 0 &&
                                         client.Player.Logos.Any(logos => logos == logosId);
                         if (logosId != 0 && !haveLogos)
-                            CharacterManager.Instance.UpdateCharacter(client, CharacterUpdate.Logos, logosId);
+                        {
+                            _updateCharacter(client, CharacterUpdate.Logos, logosId);
+
+                            if (client.Player.Logos.Contains(logosId))
+                                PlayLogosAcquire(shrine ?? obj, client.Player);
+                        }
                         (_missionManager ?? MissionApplication.Instance).RecordProgress(
                             client,
                             MissionProgressEvent.Interaction((uint)obj.EntityClassId));
@@ -1424,6 +1431,22 @@ namespace Rasa.Managers
                     }
             }
         }
+        /// <summary>
+        /// The shrine giving up its logos to the player: OBJ_RECEIVE_LOGOS (416) argument 1, whose
+        /// client class (abilities.newobjectability) does nothing but play the action's FX family,
+        /// OBJECT_ABILITY_LOGOS_ELEMENT_ACQUIRE (1027), from the shrine at whoever it hits. Played
+        /// for a logos learned, not for a use of one already held, and seen by everyone around.
+        /// </summary>
+        private static void PlayLogosAcquire(DynamicObject shrine, Manifestation player)
+        {
+            var perform = new PerformObjectAbilityPacket(ActionId.ObjReceiveLogos, LogosAcquireArgId);
+
+            perform.Hits.Add(player.EntityId);
+            CellManager.Instance.CellCallMethod(shrine, perform);
+        }
+
+        /// <summary>OBJ_RECEIVE_LOGOS's one argument in the client's data, (416, 1).</summary>
+        internal const uint LogosAcquireArgId = 1;
         #endregion
 
         #region Waypoint

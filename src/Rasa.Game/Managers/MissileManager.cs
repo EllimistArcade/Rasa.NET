@@ -1009,18 +1009,28 @@ namespace Rasa.Managers
         /// <summary>
         /// A launcher's splash (Splash): every other hostile creature within the missile's
         /// SplashRadius of where it landed takes SplashDamage as a hit of its own, and is added
-        /// to the missile's hits so the one recovery shows them all.
+        /// to the missile's hits so the one recovery shows them all. A creature's splashes
+        /// whatever it may fight there, players and creatures (CreatureAreaAttacks.FoesAround).
         /// </summary>
         private void SplashAround(MapChannel mapChannel, Missile missile)
         {
-            if (missile.SplashRadius <= 0 || missile.SplashDamage <= 0 || !(missile.Source is Manifestation shooter)
+            if (missile.SplashRadius <= 0 || missile.SplashDamage <= 0 || !(missile.Source is Actor shooter)
                 || missile.TargetActor == null || !IsOnMap(mapChannel, missile.TargetActor))
                 return;
 
-            // The round flew as far as its target, and the splash is as weak as the round (RangeFalloff).
-            var damage = RangeFalloff.Scale(missile.SplashDamage, missile.OptimalRange, shooter.Position, missile.TargetActor.Position);
+            var centre = missile.TargetActor.Position;
+            var victims = shooter switch
+            {
+                Manifestation player => AbilityManager.VictimsWithin(mapChannel, player, centre, missile.SplashRadius),
+                Creature creature when creature.State != CharacterState.Dead && IsOnMap(mapChannel, creature)
+                    => CreatureAreaAttacks.FoesAround(mapChannel, creature, centre, missile.SplashRadius, missile.TargetActor),
+                _ => new List<Actor>()
+            };
 
-            foreach (var victim in AbilityManager.VictimsWithin(mapChannel, shooter, missile.TargetActor.Position, missile.SplashRadius))
+            // The round flew as far as its target, and the splash is as weak as the round (RangeFalloff).
+            var damage = RangeFalloff.Scale(missile.SplashDamage, missile.OptimalRange, shooter.Position, centre);
+
+            foreach (var victim in victims)
                 if (victim != missile.TargetActor)
                     ExtraHit(mapChannel, missile, shooter, victim, damage, false);
         }
@@ -1047,7 +1057,7 @@ namespace Rasa.Managers
         /// resolved as a missile of its own (resistance, armour, threat, what the hit carries) and
         /// added to the missile's hits.
         /// </summary>
-        private void ExtraHit(MapChannel mapChannel, Missile missile, Manifestation shooter, Actor creature, int damage, bool canCrit)
+        private void ExtraHit(MapChannel mapChannel, Missile missile, Actor shooter, Actor creature, int damage, bool canCrit)
         {
             if (creature.State == CharacterState.Dead || creature.State == CharacterState.Dying || damage <= 0 ||
                 !creature.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current <= 0)
@@ -1068,7 +1078,8 @@ namespace Rasa.Managers
                 StunMs = missile.StunMs,
                 RootMs = canCrit ? missile.RootMs : 0,
                 KnockbackChance = canCrit ? missile.KnockbackChance : 0,
-                KnockbackStunMs = missile.KnockbackStunMs
+                KnockbackStunMs = missile.KnockbackStunMs,
+                CreatureAction = missile.CreatureAction
             };
 
             if (canCrit)

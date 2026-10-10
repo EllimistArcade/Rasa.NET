@@ -407,6 +407,14 @@ namespace Rasa.Managers
                 || CreatureSupport.IsCasting(creature) || CreatureHabits.IsBusy(creature) || CreatureSummons.IsBusy(creature)
                 || CreatureWindups.IsWindingUp(creature) || CreatureMiasma.IsDissipated(creature) || FithikEggClusters.IsHatching(creature))
             {
+                // Busy in a fight is still the fight. LastAgression is how long the fighting
+                // think has gone without attending to its target, and AggressionTime (5 s) of
+                // it gives the fight up; it grew through every return here, so a long windup, a
+                // channel or a chain of stuns ran it out, and the creature came out of them to
+                // drop its hate table and turn on whoever stood nearest.
+                if (creature.Controller.CurrentAction == BehaviorActionFighting)
+                    creature.LastAgression = 0;
+
                 needCellUpdate = CellChanged(creature, delta);
                 return;
             }

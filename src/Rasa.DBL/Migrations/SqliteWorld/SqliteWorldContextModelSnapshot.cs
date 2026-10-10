@@ -3210,6 +3210,63 @@ namespace Rasa.Migrations.SqliteWorld
                     b.ToTable("weaponclass");
                 });
 
+            modelBuilder.Entity("Rasa.Structures.World.WorldDestructibleEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<uint>("ClassId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("class_id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("comment");
+
+                    b.Property<uint>("CreatureCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("creature_count");
+
+                    b.Property<uint>("CreatureId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("creature_id");
+
+                    b.Property<uint>("HitPoints")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("hit_points");
+
+                    b.Property<uint>("MapContextId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("map_context_id");
+
+                    b.Property<double>("PosX")
+                        .HasColumnType("REAL")
+                        .HasColumnName("pos_x");
+
+                    b.Property<double>("PosY")
+                        .HasColumnType("REAL")
+                        .HasColumnName("pos_y");
+
+                    b.Property<double>("PosZ")
+                        .HasColumnType("REAL")
+                        .HasColumnName("pos_z");
+
+                    b.Property<double>("Rotation")
+                        .HasColumnType("REAL")
+                        .HasColumnName("rotation");
+
+                    b.Property<uint>("Side")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("side");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("world_destructible");
+                });
+
             modelBuilder.Entity("Rasa.Structures.World.WormholeLockEntry", b =>
                 {
                     b.Property<uint>("Id")

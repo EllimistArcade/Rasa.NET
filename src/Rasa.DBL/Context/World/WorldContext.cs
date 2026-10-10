@@ -64,6 +64,7 @@ namespace Rasa.Context.World
         public DbSet<MapMarkerEntry> MapMarkerEntries { get; set; }
         public DbSet<MapEmitterEntry> MapEmitterEntries { get; set; }
         public DbSet<AmbientNpcEntry> AmbientNpcEntries { get; set; }
+        public DbSet<WorldDestructibleEntry> WorldDestructibleEntries { get; set; }
         public DbSet<ControlPointEntry> ControlPointEntries { get; set; }
         public DbSet<ControlPointLinkEntry> ControlPointLinkEntries { get; set; }
         public DbSet<SpawnPoolArrivalEntry> SpawnPoolArrivalEntries { get; set; }

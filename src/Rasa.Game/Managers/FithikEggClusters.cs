@@ -217,7 +217,7 @@ namespace Rasa.Managers
 
             for (var i = 0; i < Hatchlings; i++)
             {
-                var hatchling = Birth(map, egg, target, now);
+                var hatchling = Birth(map, egg, RanjaEggClusterHatching.HatchlingCreatureId, target, now);
 
                 if (hatchling != null)
                     clutch.Brood.Add(hatchling);
@@ -230,9 +230,18 @@ namespace Rasa.Managers
             CellManager.Instance.CellCallMethod(map, egg, new ForceStatePacket(UseObjectState.CsStateEnd, 0));
         }
 
-        private static Creature Birth(MapChannel map, DynamicObject egg, Manifestation target, long now)
+        /// <summary>
+        /// One creature out of another spawner, as a hatchling comes out of a cluster: beside it, its
+        /// birth, held for as long, then after <paramref name="target"/>; taken away
+        /// <see cref="LifetimeMs"/> later if it is fighting nothing (PlacedDestructibles). Null if the
+        /// creature row cannot be made.
+        /// </summary>
+        public static Creature Hatch(MapChannel map, DynamicObject from, uint creatureDbId, Manifestation target) =>
+            map == null || from == null ? null : Birth(map, from, creatureDbId, target, Now());
+
+        private static Creature Birth(MapChannel map, DynamicObject egg, uint creatureDbId, Manifestation target, long now)
         {
-            var hatchling = CreatureManager.Instance.CreateCreature(RanjaEggClusterHatching.HatchlingCreatureId, null);
+            var hatchling = CreatureManager.Instance.CreateCreature(creatureDbId, null);
 
             if (hatchling == null)
                 return null;

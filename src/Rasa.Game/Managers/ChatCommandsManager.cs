@@ -275,6 +275,7 @@ namespace Rasa.Managers
             RegisterCommand(".placefield", GmLevel.GameMaster, PlaceFieldCommand, "action", "arg1", "arg2", "arg3");
             RegisterCommand(".pose", GmLevel.GameMaster, PoseCommand, "pose");
             RegisterCommand(".ambient", GmLevel.GameMaster, AmbientCommand, "class | clear");
+            RegisterCommand(".destructible", GmLevel.GameMaster, DestructibleCommand, "action", "arg1", "arg2", "arg3", "arg4", "arg5");
             RegisterCommand(".removeobj", GmLevel.GameMaster, RemoveObjectCommand, "entityId");
             RegisterCommand(".moveobj", GmLevel.GameMaster, MoveObjectCommand, "entityId", "x", "y", "z", "rotation");
             RegisterCommand(".rename", GmLevel.GameMaster, RenameCommand, "part", "newName", "familyName");
@@ -920,6 +921,222 @@ namespace Rasa.Managers
             // Logged as .where is, with the class, so the line is all a row of ambient_npc needs.
             Logger.WriteLog(LogType.Command,
                 $"[.ambient] {_client.Player.FamilyName}: class={chosen.ClassId} {AmbientNpcs.ShortName(chosen)} map={_client.Player.MapContextId} pos=({position.X:0.####}, {position.Y:0.####}, {position.Z:0.####}) rot={rotation:0.####}");
+        }
+
+        /// <summary>How far .destructible looks for the nearest placed object when no row id is given.</summary>
+        private const float NearestDestructibleRange = 30f;
+
+        /// <summary>
+        /// .destructible: the destructible world objects the server puts down (PlacedDestructibles).
+        ///   .destructible classes [word]   - the classes that can be placed, with what they are and their hit points
+        ///   .destructible put &lt;class&gt; [hp] [creatureId] [count] [afs|bane]   - at your feet, facing your way; not saved
+        ///   .destructible near             - what is placed within 30 m
+        ///   .destructible kill [row]       - takes the nearest (or the row's) down at once
+        ///   .destructible back [row]       - brings it back now
+        ///   .destructible clear            - takes away what .destructible put put down
+        /// A put logs the WorldDestructiblePreloader Row line for where it stands.
+        /// </summary>
+        private void DestructibleCommand(string[] parts)
+        {
+            var player = _client.Player;
+            var mapChannel = player.MapChannel;
+            var sub = parts.Length > 1 ? parts[1].ToLowerInvariant() : string.Empty;
+
+            void Say(string text) => CommunicatorManager.Instance.SystemMessage(_client, text);
+
+            string Describe(PlacedDestructibles.Live live)
+            {
+                var obj = live.Object;
+                var back = live.RespawnAt > 0 ? $", back in {Math.Max(0, live.RespawnAt - PlacedDestructibles.Now()) / 1000} s" : "";
+                var spawns = live.CreatureId != 0 ? $", spawns {live.CreatureCount} x creature {live.CreatureId}" : "";
+
+                return $"{(live.Placement.IsPutDown ? "put down" : $"row {live.Placement.Id}")}: {(uint)live.Placement.ClassId} "
+                    + $"{EntityClassManager.Instance.GetClassInfo(live.Placement.ClassId)?.ClassName} ({live.Placement.Kind}), "
+                    + $"{live.HitPoints}/{live.MaxHitPoints} hp, {obj?.StateId}{back}{spawns}, {Vector3.Distance(obj?.Position ?? player.Position, player.Position):0.0} m away";
+            }
+
+            PlacedDestructibles.Live Target(string row)
+            {
+                if (row != null)
+                {
+                    var byRow = uint.TryParse(row, out var rowId) ? PlacedDestructibles.LiveOf(mapChannel, rowId) : null;
+
+                    if (byRow == null)
+                        Say($"No world_destructible row {row} on this map.");
+
+                    return byRow;
+                }
+
+                var nearest = PlacedDestructibles.On(mapChannel)
+                    .Where(live => live.Object != null && Vector3.Distance(live.Object.Position, player.Position) <= NearestDestructibleRange)
+                    .OrderBy(live => Vector3.DistanceSquared(live.Object.Position, player.Position))
+                    .FirstOrDefault();
+
+                if (nearest == null)
+                    Say($"Nothing placed within {NearestDestructibleRange:0} m.");
+
+                return nearest;
+            }
+
+            switch (sub)
+            {
+                case "classes":
+                    {
+                        var words = parts.Skip(2).Where(word => word.Length > 0).ToList();
+                        var classes = EntityClassManager.Instance.LoadedEntityClasses.Values
+                            .Where(c => c?.ClassName != null && PlacedDestructibles.WhyNot((EntityClasses)c.ClassId, out _) == null)
+                            .Where(c => words.All(word => c.ClassName.Contains(word, StringComparison.OrdinalIgnoreCase)))
+                            .OrderBy(c => c.ClassName)
+                            .ToList();
+
+                        Say($"{classes.Count} class(es) that can be placed: id, name, kind, size and hit points, and whether a player can target it.");
+
+                        foreach (var c in classes.Take(25))
+                        {
+                            PlacedDestructibles.WhyNot((EntityClasses)c.ClassId, out var kind);
+                            var placement = new PlacedDestructibles.Placement { ClassId = (EntityClasses)c.ClassId, Kind = kind };
+
+                            Say($"{c.ClassId} {c.ClassName} ({kind}, {(kind == PlacedDestructibles.Kind.Scenery ? "no hit points" : PlacedDestructibles.HitPointsOf(placement) + " hp")}"
+                                + $"{(c.TargetFlag ? "" : ", not targetable")})");
+                        }
+
+                        if (classes.Count > 25)
+                            Say($"... and {classes.Count - 25} more; add a word to narrow it: .destructible classes barrel");
+
+                        return;
+                    }
+
+                case "put":
+                    {
+                        if (parts.Length < 3)
+                        {
+                            Say("usage: .destructible put <class id or name> [hp] [creatureId] [count] [afs|bane] - 0 for the class's own");
+                            return;
+                        }
+
+                        EntityClasses classId;
+
+                        if (uint.TryParse(parts[2], out var id))
+                            classId = (EntityClasses)id;
+                        else
+                        {
+                            var named = EntityClassManager.Instance.LoadedEntityClasses.Values
+                                .Where(c => c?.ClassName != null && c.ClassName.Contains(parts[2], StringComparison.OrdinalIgnoreCase)
+                                    && PlacedDestructibles.WhyNot((EntityClasses)c.ClassId, out _) == null)
+                                .ToList();
+                            var exact = named.FirstOrDefault(c => c.ClassName.Equals(parts[2], StringComparison.OrdinalIgnoreCase))
+                                ?? (named.Count == 1 ? named[0] : null);
+
+                            if (exact == null)
+                            {
+                                Say(named.Count == 0
+                                    ? $"No class that can be placed is named like '{parts[2]}'. See .destructible classes."
+                                    : $"{named.Count} classes match '{parts[2]}': {string.Join(", ", named.Take(6).Select(c => c.ClassName))}{(named.Count > 6 ? ", ..." : "")}");
+                                return;
+                            }
+
+                            classId = (EntityClasses)exact.ClassId;
+                        }
+
+                        var why = PlacedDestructibles.WhyNot(classId, out _);
+
+                        if (why != null)
+                        {
+                            Say($"Not placed: {why}.");
+                            return;
+                        }
+
+                        var sidePart = parts.Skip(3).FirstOrDefault(p => p.Equals("afs", StringComparison.OrdinalIgnoreCase) || p.Equals("bane", StringComparison.OrdinalIgnoreCase));
+                        var side = sidePart == null ? Structures.World.WorldDestructibleEntry.SideDefault
+                            : sidePart.Equals("afs", StringComparison.OrdinalIgnoreCase) ? Structures.World.WorldDestructibleEntry.SideAfs : Structures.World.WorldDestructibleEntry.SideBane;
+                        var numbers = parts.Where(p => p != sidePart).ToArray();
+                        uint NumberOf(int index) => numbers.Length > index && uint.TryParse(numbers[index], out var value) ? value : 0;
+
+                        var hitPoints = NumberOf(3);
+                        var creatureId = NumberOf(4);
+                        var count = NumberOf(5);
+
+                        if (creatureId != 0 && !CreatureManager.Instance.LoadedCreatures.ContainsKey(creatureId))
+                        {
+                            Say($"Creature {creatureId} is not in the database.");
+                            return;
+                        }
+
+                        var position = _client.Movement.Position;
+                        var rotation = _client.Movement.ViewDirection.X;
+                        var live = PlacedDestructibles.PutDown(mapChannel, classId, position, rotation, hitPoints, creatureId, count, side);
+
+                        if (live == null)
+                        {
+                            Say("It could not be put down here.");
+                            return;
+                        }
+
+                        Say($"{Describe(live)}. Not saved; .destructible clear takes it away.");
+
+                        // The preloader's line for a migration, as it stands: the id is the next free one.
+                        var line = FormattableString.Invariant(
+                            $"Row(id, {player.MapContextId}, {(uint)classId}, {position.X:0.####}, {position.Y:0.####}, {position.Z:0.####}, {rotation:0.####}, \"{EntityClassManager.Instance.GetClassInfo(classId)?.ClassName}\", {hitPoints}, {creatureId}, {count}, {side})");
+
+                        Say(line);
+                        Logger.WriteLog(LogType.Command, $"[.destructible] {player.FamilyName}: {line}");
+                        return;
+                    }
+
+                case "near":
+                    {
+                        var near = PlacedDestructibles.On(mapChannel)
+                            .Where(live => live.Object != null && Vector3.Distance(live.Object.Position, player.Position) <= NearestDestructibleRange)
+                            .OrderBy(live => Vector3.DistanceSquared(live.Object.Position, player.Position))
+                            .ToList();
+
+                        if (near.Count == 0)
+                            Say($"Nothing placed within {NearestDestructibleRange:0} m; {PlacedDestructibles.On(mapChannel).Count} on this map.");
+
+                        foreach (var live in near.Take(15))
+                            Say(Describe(live));
+
+                        return;
+                    }
+
+                case "kill":
+                    {
+                        var live = Target(parts.Length > 2 ? parts[2] : null);
+
+                        if (live == null)
+                            return;
+
+                        Say(PlacedDestructibles.Destroy(live, player) ? $"Down: {Describe(live)}." : $"It is down already, or cannot be: {Describe(live)}.");
+                        return;
+                    }
+
+                case "back":
+                    {
+                        var live = Target(parts.Length > 2 ? parts[2] : null);
+
+                        if (live == null)
+                            return;
+
+                        if (!live.IsDown)
+                        {
+                            Say($"It is standing: {Describe(live)}.");
+                            return;
+                        }
+
+                        PlacedDestructibles.Respawn(live);
+                        Say($"Back: {Describe(live)}.");
+                        return;
+                    }
+
+                case "clear":
+                    Say($"Took away {PlacedDestructibles.TakeAwayPutDown(mapChannel)} object(s) put down with .destructible put.");
+                    return;
+
+                default:
+                    Say("usage: .destructible classes [word] | put <class> [hp] [creatureId] [count] [afs|bane] | near | kill [row] | back [row] | clear");
+                    Say("       put stands it at your feet, facing your way, not saved, and prints the WorldDestructiblePreloader Row line for a migration.");
+                    return;
+            }
         }
 
         /// <summary>

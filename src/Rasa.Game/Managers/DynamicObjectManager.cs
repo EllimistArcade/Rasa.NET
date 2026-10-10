@@ -227,6 +227,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A destructible world object the server put down (PlacedDestructibles): shot, not used.
+            if (obj.DynamicObjectType == DynamicObjectType.Destructible)
+            {
+                Logger.WriteLog(LogType.Debug, $"Object {obj.EntityId} must be destroyed, not used.");
+                return;
+            }
+
             // Out of service (SetEnabled): the client offers no Use for it, so only a client that
             // did not know yet - or did not care - asks. Refused as the client itself would put it,
             // and the request closed and cancelled.
@@ -773,6 +780,10 @@ namespace Rasa.Managers
                     dynamicObject.MissionDestruction?.HitPoints ?? PracticeTargetManager.HitPoints,
                     dynamicObject.MissionDestruction == null ? PracticeTargetManager.HitPoints : dynamicObject.CurrentHitPoints));
             }
+
+            // A destructible world object the server put down: an object, and its hit points.
+            if (dynamicObject.DynamicObjectType == DynamicObjectType.Destructible)
+                entityData.AddRange(PlacedDestructibles.EntityData(dynamicObject));
 
             client.CallMethod(SysEntity.ClientMethodId, new CreatePhysicalEntityPacket(dynamicObject.EntityId, dynamicObject.EntityClassId, entityData));
             PublishRewardLoot(client, dynamicObject);

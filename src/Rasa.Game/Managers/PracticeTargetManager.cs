@@ -47,6 +47,10 @@ namespace Rasa.Managers
             if (WorldDestructibles.TryGetTarget(map, entityId, out target))
                 return true;
 
+            // One the server put down (PlacedDestructibles), while it stands.
+            if (PlacedDestructibles.TryGetTarget(map, entityId, out target))
+                return true;
+
             target = null;
             if (map == null || !EntityManager.Instance.TryGetObject(entityId, out var candidate) ||
                 candidate.DynamicObjectType != DynamicObjectType.PracticeDummy ||
@@ -91,6 +95,13 @@ namespace Rasa.Managers
             if (WorldDestructibles.IsOne(target))
             {
                 WorldDestructibles.Hit(map, client, target, damage);
+                return;
+            }
+
+            // One the server put down: the same, and a spawner's creatures.
+            if (PlacedDestructibles.IsOne(target))
+            {
+                PlacedDestructibles.Hit(map, client.Player, target, damage);
                 return;
             }
 

@@ -430,6 +430,9 @@ namespace Rasa.Managers
                     Guard("WorldDestructibles.Worker", mapChannel, () => WorldDestructibles.Worker(mapChannel));
                     Guard("TeslaCoils.Worker", mapChannel, () => TeslaCoils.Worker(mapChannel));
 
+                    // The destructible objects the server put down: back when due, and the creature spawners spawning.
+                    Guard("PlacedDestructibles.Worker", mapChannel, () => PlacedDestructibles.Worker(mapChannel));
+
                     // Crab Mines: seeking, running, going off.
                     Guard("AbilityManager.CrabMineWorker", mapChannel, () => AbilityManager.Instance.CrabMineWorker(mapChannel));
 
@@ -1555,6 +1558,9 @@ namespace Rasa.Managers
 
             DynamicObjectManager.Instance.CleanupMapDropships(map);
 
+            // What was placed on it (PlacedDestructibles), its force fields out of ForceFields' list too.
+            PlacedDestructibles.Forget(map);
+
             var dynamicObjects = map.MapCellInfo.Cells.Values
                 .SelectMany(cell => cell.DynamicObjectList)
                 .Concat(map.DynamicObjects)
@@ -1599,6 +1605,9 @@ namespace Rasa.Managers
 
             // Nor the doors of the Bane tunnel mouths (TunnelDoors).
             TunnelDoors.Place(map);
+
+            // Nor the destructible objects the server puts down: rows by map (world_destructible).
+            PlacedDestructibles.Place(map);
         }
     }
 }

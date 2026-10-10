@@ -23,7 +23,8 @@ namespace Rasa.Managers
     /// over the target as damage. Nothing says how near, how often or how hard.
     ///
     /// Ours, as LavaDamage is:
-    ///  - a coil that is standing (WorldDestructibles: one shot down zaps nobody until it is back)
+    ///  - a coil that is standing (WorldDestructibles for the .map's, PlacedDestructibles for one
+    ///    the server put down: one shot down zaps nobody until it is back)
     ///    zaps a living player within <see cref="Radius"/> of its foot, level, and from
     ///    <see cref="Below"/> under its foot to <see cref="Above"/> over it - the coil is 14 m high;
     ///  - the zap goes on at once, the coil its source (the effect's sourceId), and the first jolt
@@ -71,14 +72,32 @@ namespace Rasa.Managers
 
         private static readonly ConditionalWeakTable<MapChannel, Dictionary<ulong, Contact>> Contacts = new();
 
-        /// <summary>The coils of a map.</summary>
+        /// <summary>The .map's coils of a map.</summary>
         public static IEnumerable<WorldDestructibles.Destructible> OnMap(uint mapContextId) =>
             WorldDestructibles.OnMap(mapContextId).Where(coil => coil.Usable.ClassId == MapUsables.BaneTeslaCoil);
 
-        /// <summary>Whether a point is in a coil's reach.</summary>
-        public static bool InReach(WorldDestructibles.Destructible coil, Vector3 position)
+        /// <summary>A coil that is standing on a map channel: its entity, and its foot.</summary>
+        public sealed record Standing(ulong EntityId, Vector3 Foot);
+
+        /// <summary>The coils standing on a map channel now: the .map's and those the server put down.</summary>
+        public static List<Standing> StandingOn(MapChannel map)
         {
-            var foot = coil.Usable.Position;
+            if (map?.MapInfo == null)
+                return new List<Standing>();
+
+            return OnMap(map.MapInfo.MapContextId)
+                .Where(coil => WorldDestructibles.IsUp(map, coil.EntityId))
+                .Select(coil => new Standing(coil.EntityId, coil.Usable.Position))
+                .Concat(PlacedDestructibles.StandingCoils(map).Select(coil => new Standing(coil.EntityId, coil.Position)))
+                .ToList();
+        }
+
+        /// <summary>Whether a point is in a coil's reach.</summary>
+        public static bool InReach(WorldDestructibles.Destructible coil, Vector3 position) => InReach(coil.Usable.Position, position);
+
+        /// <summary>Whether a point is in reach of a coil standing on this foot.</summary>
+        public static bool InReach(Vector3 foot, Vector3 position)
+        {
             var level = new Vector2(position.X - foot.X, position.Z - foot.Z);
 
             return level.Length() <= Radius && position.Y >= foot.Y - Below && position.Y <= foot.Y + Above;
@@ -94,13 +113,14 @@ namespace Rasa.Managers
             if (map?.MapInfo == null)
                 return;
 
-            var coils = OnMap(map.MapInfo.MapContextId).ToList();
+            var coils = StandingOn(map);
+            var contacts = Contacts.GetOrCreateValue(map);
 
-            if (coils.Count == 0)
+            // Nothing standing to zap anyone, and nobody zapped to let go of.
+            if (coils.Count == 0 && contacts.Count == 0)
                 return;
 
             var now = Now();
-            var contacts = Contacts.GetOrCreateValue(map);
 
             foreach (var client in map.ClientList.ToArray())
             {
@@ -111,7 +131,7 @@ namespace Rasa.Managers
 
                 var alive = player.State != CharacterState.Dead && player.State != CharacterState.Dying
                     && (!player.Attributes.TryGetValue(Attributes.Health, out var health) || health.Current > 0);
-                var coil = alive ? coils.FirstOrDefault(c => InReach(c, player.Position) && WorldDestructibles.IsUp(map, c.EntityId)) : null;
+                var coil = alive ? coils.FirstOrDefault(c => InReach(c.Foot, player.Position)) : null;
                 var zap = ZapOn(player);
 
                 if (!contacts.TryGetValue(player.EntityId, out var contact))
@@ -120,7 +140,7 @@ namespace Rasa.Managers
                 if (coil != null)
                 {
                     contact.LastTouch = now;
-                    zap ??= Attach(map, player, coil);
+                    zap ??= Attach(map, player, coil.EntityId);
 
                     if (now >= contact.NextJolt)
                     {
@@ -136,14 +156,14 @@ namespace Rasa.Managers
             }
         }
 
-        private static GameEffect Attach(MapChannel map, Manifestation player, WorldDestructibles.Destructible coil)
+        private static GameEffect Attach(MapChannel map, Manifestation player, ulong coilEntityId)
         {
             var effect = new GameEffect
             {
                 TypeId = EffectTypeId,
                 EffectId = GameEffectManager.Instance.NextEffectId(map),
                 EffectLevel = EffectLevel,
-                SourceId = coil.EntityId,
+                SourceId = coilEntityId,
                 IsBuff = false,
                 Environmental = true
             };

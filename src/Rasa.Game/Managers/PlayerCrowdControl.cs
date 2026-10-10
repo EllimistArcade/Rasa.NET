@@ -101,7 +101,7 @@ namespace Rasa.Managers
         /// it: thrown to where the knockback ends, and held there for the flight, the getup and
         /// extraStunMs more. Returns whether it landed.
         /// </summary>
-        public static bool Knockback(MapChannel mapChannel, Manifestation player, Actor source, float distance, int extraStunMs = 0)
+        public static bool Knockback(MapChannel mapChannel, Manifestation player, Actor source, float distance, int extraStunMs = 0, float headingDegrees = 0f)
         {
             if (!CanBeHeld(player) || source == null || distance <= 0f || mapChannel == null)
                 return false;
@@ -112,7 +112,8 @@ namespace Rasa.Managers
                 return false;
             }
 
-            var dir = CrowdControl.AwayFrom(source.Position, player.Position);
+            // Straight away from the source, or turned by the attack's KNOCKBACK_HEADING.
+            var dir = CrowdControl.Turned(CrowdControl.AwayFrom(source.Position, player.Position), headingDegrees);
             var destination = CrowdControl.KnockbackDestination(mapChannel, player.Position, dir, distance);
             var travelled = Vector3.Distance(player.Position, destination);
             var downMs = KnockdownMs(travelled, extraStunMs);
@@ -364,9 +365,12 @@ namespace Rasa.Managers
             // CHANCE_KNOCK_BACK, where the action gives one (Kael rushing blow: 30%), is the
             // chance the knockback lands; one that does not can still stagger. A Tectonic Strike
             // knocks back and stuns, as a player's does: the stun keeps them down after the
-            // getup (the Treeback's stomp: 20 m, then 8 s).
+            // getup (the Treeback's stomp: 20 m, then 8 s). KNOCKBACK_HEADING, which only the
+            // Boargar's knockback gives (105), turns the throw that many degrees from straight away
+            // from the creature: nothing in the client reads it, so the reading - degrees, turned
+            // as CrowdControl.Turned turns - is ours.
             if (knockback > 0 && Stuns.Roll(info.Get(AbilityProperty.ChanceKnockBack, 100)))
-                Knockback(mapChannel, player, attacker, knockback, ExtraDownMs(module, info, ms));
+                Knockback(mapChannel, player, attacker, knockback, ExtraDownMs(module, info, ms), info.Get(AbilityProperty.KnockbackHeading));
             else if (ms > 0 && Stuns.Roll(chance))
                 Stun(mapChannel, player, attacker, ms);
         }

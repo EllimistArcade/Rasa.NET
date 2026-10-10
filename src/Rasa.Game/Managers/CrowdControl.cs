@@ -78,6 +78,21 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A ground-plane direction turned by headingDegrees about the vertical: x' = x cos - z sin,
+        /// z' = x sin + z cos. 0 leaves it as it is.
+        /// </summary>
+        public static Vector3 Turned(Vector3 dir, float headingDegrees)
+        {
+            if (headingDegrees == 0f)
+                return dir;
+
+            var radians = headingDegrees * MathF.PI / 180f;
+            var (sin, cos) = MathF.SinCos(radians);
+
+            return new Vector3(dir.X * cos - dir.Z * sin, 0f, dir.X * sin + dir.Z * cos);
+        }
+
+        /// <summary>
         /// Where a knockback of <paramref name="distance"/> along <paramref name="dir"/> ends: the
         /// straight line, walked in half-metre steps and stopped at the last one still on the
         /// navmesh, so a creature is not driven into a wall or off a cliff. With no navmesh, the

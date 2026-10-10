@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -444,6 +444,50 @@ namespace Rasa.Test.World
                 Assert.AreEqual(MovementType.Normal, moves[0].Type, "An ordinary placement, applied when their run is over.");
                 Assert.AreEqual(reached.X, moves[0].Position.X, 0.01f);
             }
+        }
+
+        [TestMethod]
+        public void AChargeEndsWithThePerformerLeavingTheMap()
+        {
+            using var world = new WorldTestContext();
+            var performer = Watch(world, x: 0);
+            var watcher = Watch(world, x: 10);
+            var target = Spawn(world, "Target", 30);
+            var windupMs = AbilityManager.ChargeWindupMs(30f);
+
+            Pend(world, performer, windupMs);
+            AbilityManager.StartCharge(world.Map, performer, performer.Player, target, ActionId.AaCommandoRushingBlow, windupMs);
+            Drain(performer, watcher);
+
+            Assert.IsTrue(AbilityManager.IsCharging(performer.Player));
+
+            // A map change, a logout, a dropped connection: RemovePlayerCharacter says so.
+            AbilityManager.PlayerLeaving(performer.Player);
+
+            Assert.IsFalse(AbilityManager.IsCharging(performer.Player), "their Moves on the next map are their own again");
+            Assert.AreEqual(0, MovesOf(performer, performer.Player.EntityId).Count, "nothing is sent for a performer who is leaving");
+            Assert.AreEqual(0, MovesOf(watcher, performer.Player.EntityId).Count);
+        }
+
+        [TestMethod]
+        public void TheWorkerDropsAChargeWhosePerformerIsOnAnotherMap()
+        {
+            using var world = new WorldTestContext();
+            var performer = Watch(world, x: 0);
+            var target = Spawn(world, "Target", 30);
+            var windupMs = AbilityManager.ChargeWindupMs(30f);
+
+            Pend(world, performer, windupMs);
+            AbilityManager.StartCharge(world.Map, performer, performer.Player, target, ActionId.AaCommandoRushingBlow, windupMs);
+            Drain(performer);
+
+            // Gone to another map by a route that did not say so.
+            performer.Player.MapChannel = new MapChannel { MapInfo = world.Map.MapInfo, ClientList = new List<Client>() };
+
+            AbilityManager.Instance.ChargeWorker(world.Map);
+
+            Assert.IsFalse(AbilityManager.IsCharging(performer.Player));
+            Assert.AreEqual(0, MovesOf(performer, performer.Player.EntityId).Count, "not told where a charge they are no longer on ended");
         }
 
         [TestMethod]

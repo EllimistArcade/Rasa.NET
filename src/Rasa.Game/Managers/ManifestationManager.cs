@@ -3487,6 +3487,11 @@ namespace Rasa.Managers
             RemoveAutoFire(client);
             ConstantFire.Stop(client, release: false);
 
+            // A Rushing Blow charge ends with the map: left on the old map's list it outlived
+            // the map change, and once that map emptied nothing ended it, so every Move from
+            // the new map was set aside (AbilityManager.IsCharging) until the player relogged.
+            AbilityManager.PlayerLeaving(client?.Player);
+
             // Leaving the map or the world: an open duel challenge is off, a duel is forfeit, and
             // a squad wargame goes on without them.
             Duels.Instance.PlayerLeft(client);

@@ -1114,10 +1114,17 @@ namespace Rasa.Managers
             var fullBead = Accuracy.IsFullBead(client.Player, now);
 
             // How well it was aimed decides how hard it hits: a tenth with no bead, all of it at
-            // a crouched full bead, 82% at the most a standing bead reaches (Accuracy). A
-            // polymorphed player's creature weapon is not beaded.
+            // a crouched full bead, 82% at the most a standing bead reaches (Accuracy). A cone
+            // weapon has no bead and hits as a full one from its stance would. A polymorphed
+            // player's creature weapon is not beaded.
             if (weapon != client.Player.MorphWeapon)
-                damage = Math.Max(1, (int)Math.Round(damage * Accuracy.DamageFactor(client.Player, now)));
+            {
+                var factor = ConeWeapons.IsCone(weapon.ItemTemplate.WeaponInfo, weaponClassInfo)
+                    ? Accuracy.ConeDamageFactor(client.Player)
+                    : Accuracy.DamageFactor(client.Player, now);
+
+                damage = Math.Max(1, (int)Math.Round(damage * factor));
+            }
 
             Accuracy.Recoil(client.Player, weapon.ItemTemplate.WeaponInfo.RecoilAmount, aimRate, now);
 

@@ -346,7 +346,8 @@ namespace Rasa.Test.World
             var shooter = context.Client;
             foreach (var attribute in new[] { Attributes.Armor, Attributes.Power, Attributes.Regen })
                 shooter.Player.Attributes[attribute] = new ActorAttributes(attribute, 100, 100, 100, 0, 0);
-            var victim = Spawn(world, new Vector3(0, 0, -5), TargetCategory.Hostile);
+            // Enough health that six pulses of 574, crits among them, do not kill it.
+            var victim = Spawn(world, new Vector3(0, 0, -5), TargetCategory.Hostile, health: 1_000_000);
             var weaponClass = EntityClassManager.Instance.LoadedEntityClasses[(EntityClasses)6048];
             var previous = weaponClass.WeaponClassInfo;
             weaponClass.WeaponClassInfo = new WeaponClassInfo(new WeaponClassEntry
@@ -371,8 +372,9 @@ namespace Rasa.Test.World
 
                 var left = PropellantPools.Of(shooter.Player).Single();
                 Assert.AreEqual(victim.Position, left.Position);
-                // Fired with no bead the pulse is a tenth of the gun's 700 (Accuracy), and the pool a seventh of that.
-                Assert.AreEqual(PropellantPools.TickDamageOf(70), left.TickDamage, "a seventh of the pulse as fired");
+                // A propellant gun has no bead: fired standing, the pulse is what a standing full
+                // bead does, 82% of the gun's 700 (Accuracy.ConeDamageFactor), and the pool a seventh of that.
+                Assert.AreEqual(PropellantPools.TickDamageOf(574), left.TickDamage, "a seventh of the pulse as fired");
 
                 // Held without the roll: the fifth pulse since that pool feeds it rather than leaving another.
                 PropellantPools.RollPercent = () => Never;
@@ -384,7 +386,10 @@ namespace Rasa.Test.World
                 }
 
                 Assert.HasCount(1, PropellantPools.Of(shooter.Player));
-                Assert.IsEmpty(Sent(shooter).OfType<GameEffectAttachedPacket>().ToArray());
+                // No second pool and no second gun effect. A crit's own effect on the victim may
+                // come with any pulse, at random, and is not what this is about.
+                Assert.IsEmpty(Sent(shooter).OfType<GameEffectAttachedPacket>()
+                    .Where(packet => packet.EffectTypeId == PropellantPools.PoolTypeId || packet.EffectTypeId == ConstantFire.PropellantTypeId).ToArray());
 
                 manager.StopAutoFire(shooter);
                 Assert.HasCount(1, PropellantPools.Of(shooter.Player), "the pool outlasts the trigger");

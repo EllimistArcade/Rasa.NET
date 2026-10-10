@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Rasa.Managers
@@ -60,6 +61,19 @@ namespace Rasa.Managers
         };
 
         public static bool IsMelee(CreatureAction action) => action != null && MeleeActions.Contains(action.ActionId);
+
+        /// <summary>
+        /// ARMOR_PIERCE_PERCENT of the attack's argument: the share of its damage that goes past
+        /// armour, as a weapon's bypass does (MissileManager). The Flaregasher's melee gives 25 at
+        /// every argument; nothing else a creature performs has it. 0 for none.
+        /// </summary>
+        public static int ArmorPierceOf(CreatureAction action)
+        {
+            if (action == null || AbilityManager.Instance == null || !AbilityManager.Instance.TryGetLevel(action.ActionId, action.ActionArgId, out var info))
+                return 0;
+
+            return Math.Clamp(info.Get(AbilityProperty.ArmorPiercePercent), 0, 100);
+        }
 
         /// <summary>The player modules creature actions use whose class is DamageBase: hitdata (rawInfo, onHitData).</summary>
         private static readonly HashSet<string> DamageBaseModules = new HashSet<string>

@@ -1080,7 +1080,7 @@ namespace Rasa.Managers
                     }
 
                     // do damage, of the type the attack's weapon deals
-                    MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, damageType: CreatureAttacks.DamageTypeOf(action),
+                    MissileManager.Instance.MissileLaunch(mapChannel, actionData, dmg, CreatureAttacks.ArmorPierceOf(action), damageType: CreatureAttacks.DamageTypeOf(action),
                         melee: CreatureAttacks.IsMelee(action), splashRadius: Splash.RadiusOf(action), creatureAction: action, landsInMs: landsIn);
 
                     // Feedback on it burns it for acting: this is the hostile action the server has.

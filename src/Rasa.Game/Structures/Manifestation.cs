@@ -34,7 +34,6 @@ namespace Rasa.Structures
         public uint TotalTimePlayed { get; set; }
         public DateTime? TimeSinceLastPlayed { get; set; }
         public uint ClanId { get; set; }
-        public string ClanName { get; set; }
         public int LockboxCredits { get; set; }
         public int LockboxTabs { get; set; }
         public Dictionary<CurencyType, int> Credits = new();

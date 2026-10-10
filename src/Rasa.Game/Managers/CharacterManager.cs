@@ -1181,7 +1181,6 @@ namespace Rasa.Managers
             var newCharacter = new Manifestation(character, appearanceData)
             {
                 ClanId = clan?.Id ?? 0,
-                ClanName = clan?.Name,
                 PlayerFlags = new Dictionary<uint, uint>(unitOfWork.CharacterFlags.Get(character.Id)),
                 GainedWaypoints = unitOfWork.CharacterTeleporters.Get(character.Id)
                     .Where(waypoint => !StartingExperience.IsExitWaypoint(waypoint.WaypointId)).ToList(),

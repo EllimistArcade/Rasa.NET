@@ -1,4 +1,4 @@
-extern alias RasaGame;
+﻿extern alias RasaGame;
 
 using System;
 using System.Collections.Generic;
@@ -214,6 +214,43 @@ namespace Rasa.Test.World
             player.State = CharacterState.Dead;
             EffectCarry.Stash(player);
             Assert.IsEmpty(player.CarriedEffects);
+        }
+
+        [TestMethod]
+        public void AnArmedSelfDestructStaysOnTheMapItWasArmedOn()
+        {
+            using var world = new WorldTestContext();
+            var player = world.CreateClient(x: 120, z: -40).Player;
+
+            // As ArmSelfDestruct makes it: a buff with a duration, no callbacks, its own damage
+            // tick, and the place its holder is sent back to when it goes off.
+            var bomb = new GameEffect
+            {
+                TypeId = 10000032,
+                EffectId = GameEffectManager.Instance.NextEffectId(world.Map),
+                EffectLevel = 1,
+                SourceId = player.EntityId,
+                Source = player,
+                IsBuff = true,
+                AllowDetach = true,
+                TickDamageMin = 100,
+                TickDamageMax = 200,
+                TickRadius = 10,
+                ReturnTo = player.Position,
+                ExpiresTick = Environment.TickCount64 + 30_000
+            };
+
+            GameEffectManager.Instance.Attach(world.Map, player, bomb);
+
+            // Carried, it went off on the next map and put the player at this map's coordinates.
+            Assert.IsFalse(EffectCarry.Carries(player, bomb));
+
+            EffectCarry.Stash(player);
+            Assert.IsEmpty(player.CarriedEffects);
+
+            // The same effect with nowhere to return to is an ordinary buff of theirs.
+            bomb.ReturnTo = null;
+            Assert.IsTrue(EffectCarry.Carries(player, bomb));
         }
 
         /// <summary>RAGE: a buff of a minute, which a map change carries.</summary>

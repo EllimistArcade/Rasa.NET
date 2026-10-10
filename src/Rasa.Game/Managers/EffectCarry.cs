@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 
 namespace Rasa.Managers
@@ -40,7 +40,10 @@ namespace Rasa.Managers
         /// adrenaline while it lasts (Sprint), not one bound to something that stays behind or
         /// ends with the map - the callbacks of a morph, a mind control, a bomb, a storm, a
         /// spotter, a Called Shot - nor a cloak (Detection is per map), nor a crowd control,
-        /// nor a damage tick that credits someone else.
+        /// nor a damage tick that credits someone else, nor one that keeps a place on the map to
+        /// put its holder back at (ReturnTo): the armed Self Destruct, which has no callbacks and
+        /// was carried, and on going off on the next map sent the player to the old map's
+        /// coordinates - inside the terrain, as often as not.
         /// </summary>
         public static bool Carries(Actor holder, GameEffect effect)
         {
@@ -52,6 +55,7 @@ namespace Rasa.Managers
                 && effect.AdrenalineDrainPercentPerSecond <= 0
                 && effect.OnTick == null && effect.OnExpired == null && effect.OnDetached == null && effect.OnDamaged == null
                 && !effect.Hides && !effect.Blinds && !effect.IsStun && !effect.IsRoot && effect.MindControlPump == 0
+                && !effect.ReturnTo.HasValue
                 && (effect.TickDamageMax <= 0 || effect.SourceId == holder.EntityId)
                 && !CritDeathManager.IsCritDeathType(effect.TypeId);
         }

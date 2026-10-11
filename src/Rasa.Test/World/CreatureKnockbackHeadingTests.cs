@@ -11,8 +11,9 @@ namespace Rasa.Test.World
     using Rasa.Structures;
 
     /// <summary>
-    /// KNOCKBACK_HEADING turns a creature's knockback that many degrees from straight away from
-    /// it (PlayerCrowdControl): the Boargar's 105 throws to the side and a little back.
+    /// KNOCKBACK_HEADING turns a creature's knockback off straight away from it, read against the
+    /// client's KNOCKBACK_DEFAULT_HEADING of 180 (CrowdControl.TurnOf): the Boargar's 105 is 75
+    /// degrees off, mostly to the side and still a little away.
     /// </summary>
     [TestClass]
     [DoNotParallelize]
@@ -55,14 +56,30 @@ namespace Rasa.Test.World
             Assert.AreEqual(-1f, side.X, 0.0001f);
             Assert.AreEqual(0f, side.Z, 0.0001f);
 
-            var boargar = CrowdControl.Turned(away, 105);
+            var boargar = CrowdControl.Turned(away, -75);
             Assert.AreEqual(1f, boargar.Length(), 0.0001f);
-            Assert.AreEqual(-0.9659f, boargar.X, 0.0001f);
-            Assert.AreEqual(-0.2588f, boargar.Z, 0.0001f);
+            Assert.AreEqual(0.9659f, boargar.X, 0.0001f);
+            Assert.AreEqual(0.2588f, boargar.Z, 0.0001f);
         }
 
         [TestMethod]
-        public void TheBoargarThrowsItsTenMetresTurnedByItsHeading()
+        public void AHeadingIsReadAgainstTheClientsDefaultOfStraightAway()
+        {
+            var info = new ActionLevelInfo { ActionId = ActionId.CrBoargarKnockback, Level = 1 };
+
+            Assert.AreEqual(0f, CrowdControl.TurnOf(info), "no heading: straight away");
+            Assert.AreEqual(0f, CrowdControl.TurnOf(null));
+
+            info.Properties[AbilityProperty.KnockbackHeading] = 180;
+            Assert.AreEqual(0f, CrowdControl.TurnOf(info), "KNOCKBACK_DEFAULT_HEADING: straight away");
+
+            info.Properties[AbilityProperty.KnockbackHeading] = 105;
+            Assert.AreEqual(-75f, CrowdControl.TurnOf(info), "the Boargar's");
+            Assert.AreEqual(180f, CrowdControl.DefaultKnockbackHeading);
+        }
+
+        [TestMethod]
+        public void TheBoargarThrowsItsTenMetresSeventyFiveDegreesOffStraightAway()
         {
             _seeded = true;
             var actions = Actions();
@@ -105,8 +122,8 @@ namespace Rasa.Test.World
             PlayerCrowdControl.CreatureActionHit(world.Map, _boargar, player, ActionId.CrBoargarKnockback, 1);
 
             Assert.IsTrue(player.ActiveEffects.Values.Any(e => e.TypeId == CrowdControl.KnockbackTypeId), "knocked back");
-            Assert.AreEqual(-9.659f, player.Position.X, 0.05f, "to the side");
-            Assert.AreEqual(5f - 2.588f, player.Position.Z, 0.05f, "and a little back the way it came: 105 is past side-on");
+            Assert.AreEqual(9.659f, player.Position.X, 0.05f, "mostly to the side");
+            Assert.AreEqual(5f + 2.588f, player.Position.Z, 0.05f, "and still a little away: 75 degrees off straight away");
         }
 
         private static Dictionary<ActionId, ActionInfo> Actions() =>

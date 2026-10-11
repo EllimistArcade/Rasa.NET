@@ -42,6 +42,26 @@ namespace Rasa.Managers
         /// <summary>gameconstants.KNOCKBACK_DEFAULT_DISTANCE: a knockback with no distance of its own.</summary>
         public const float DefaultKnockbackDistance = 10f;
 
+        /// <summary>
+        /// gameconstants.KNOCKBACK_DEFAULT_HEADING: the heading of a knockback with none of its own,
+        /// which goes straight away from what threw it. A KNOCKBACK_HEADING is read against it:
+        /// heading - 180 degrees off straight away (TurnOf).
+        /// </summary>
+        public const float DefaultKnockbackHeading = 180f;
+
+        /// <summary>
+        /// How far a knockback turns from straight away, from its action's KNOCKBACK_HEADING:
+        /// heading - DefaultKnockbackHeading, and none for an action without one. The Boargar's 105
+        /// is 75 degrees off. Nothing in the client turns a knockback by a heading, so which way
+        /// the turn goes (CrowdControl.Turned) is ours.
+        /// </summary>
+        public static float TurnOf(ActionLevelInfo info)
+        {
+            return info != null && info.Has(AbilityProperty.KnockbackHeading)
+                ? info.Get(AbilityProperty.KnockbackHeading) - DefaultKnockbackHeading
+                : 0f;
+        }
+
         /// <summary>gameconstants.KNOCKBACK_GETUP_TIME_MSEC: the time on the ground after landing.</summary>
         public const int GetupMs = 2000;
 
@@ -78,15 +98,15 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// A ground-plane direction turned by headingDegrees about the vertical: x' = x cos - z sin,
+        /// A ground-plane direction turned by turnDegrees about the vertical: x' = x cos - z sin,
         /// z' = x sin + z cos. 0 leaves it as it is.
         /// </summary>
-        public static Vector3 Turned(Vector3 dir, float headingDegrees)
+        public static Vector3 Turned(Vector3 dir, float turnDegrees)
         {
-            if (headingDegrees == 0f)
+            if (turnDegrees == 0f)
                 return dir;
 
-            var radians = headingDegrees * MathF.PI / 180f;
+            var radians = turnDegrees * MathF.PI / 180f;
             var (sin, cos) = MathF.SinCos(radians);
 
             return new Vector3(dir.X * cos - dir.Z * sin, 0f, dir.X * sin + dir.Z * cos);

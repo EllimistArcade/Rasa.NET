@@ -59,8 +59,8 @@ namespace Rasa.Test.World
             Assert.AreEqual(0f, PlayerCrowdControl.KnockbackDistanceOf(GroundPulse, Pulse(), origin, new Vector3(25, 0, 0)), "outside already");
 
             // The rock throw: a chance, no distance, no area.
-            Assert.AreEqual(PlayerCrowdControl.DefaultKnockbackDistance, PlayerCrowdControl.KnockbackDistanceOf(RockThrow, Rock(2), origin, new Vector3(30, 0, 0)));
-            Assert.AreEqual(10f, PlayerCrowdControl.DefaultKnockbackDistance);
+            Assert.AreEqual(CrowdControl.DefaultKnockbackDistance, PlayerCrowdControl.KnockbackDistanceOf(RockThrow, Rock(2), origin, new Vector3(30, 0, 0)));
+            Assert.AreEqual(10f, CrowdControl.DefaultKnockbackDistance, "the client's KNOCKBACK_DEFAULT_DISTANCE");
 
             // What the data gives stands: a distance, and an explicit 0 (CR_THRAX_LIGHTNING).
             var pound = new ActionLevelInfo { ActionId = ActionId.CrKaelGroundPound, Level = 1 };

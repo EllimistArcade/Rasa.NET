@@ -101,7 +101,7 @@ namespace Rasa.Managers
         /// it: thrown to where the knockback ends, and held there for the flight, the getup and
         /// extraStunMs more. Returns whether it landed.
         /// </summary>
-        public static bool Knockback(MapChannel mapChannel, Manifestation player, Actor source, float distance, int extraStunMs = 0, float headingDegrees = 0f)
+        public static bool Knockback(MapChannel mapChannel, Manifestation player, Actor source, float distance, int extraStunMs = 0, float turnDegrees = 0f)
         {
             if (!CanBeHeld(player) || source == null || distance <= 0f || mapChannel == null)
                 return false;
@@ -112,8 +112,8 @@ namespace Rasa.Managers
                 return false;
             }
 
-            // Straight away from the source, or turned by the attack's KNOCKBACK_HEADING.
-            var dir = CrowdControl.Turned(CrowdControl.AwayFrom(source.Position, player.Position), headingDegrees);
+            // Straight away from the source, or turned off it by the attack's KNOCKBACK_HEADING (CrowdControl.TurnOf).
+            var dir = CrowdControl.Turned(CrowdControl.AwayFrom(source.Position, player.Position), turnDegrees);
             var destination = CrowdControl.KnockbackDestination(mapChannel, player.Position, dir, distance);
             var travelled = Vector3.Distance(player.Position, destination);
             var downMs = KnockdownMs(travelled, extraStunMs);
@@ -302,20 +302,14 @@ namespace Rasa.Managers
         };
 
         /// <summary>
-        /// How far a knockback throws when the action has a chance of one, or a class that throws,
-        /// and no KNOCKBACK_DISTANCE and no area to throw out of (the Atta Soldier's rock throw).
-        /// Ours, not the client's: the Kael ground pound's and the Thrax kick's KNOCKBACK_DISTANCE.
-        /// </summary>
-        public const float DefaultKnockbackDistance = 10f;
-
-        /// <summary>
         /// How far a creature's attack throws the player it hit, standing where they stand:
         ///  - KNOCKBACK_DISTANCE where the action gives one, and none where it gives 0 (the Thrax
         ///    lightning's knockback class with KNOCKBACK_DISTANCE 0);
         ///  - an action that throws without a distance - a class whose target effect is the
         ///    knockback (the Strider ground pulse), or a CHANCE_KNOCK_BACK - throws out of its
         ///    area: to RADIUS_AROUND_SOURCE from the creature, its edge;
-        ///  - with no area, DefaultKnockbackDistance;
+        ///  - with no area, the client's KNOCKBACK_DEFAULT_DISTANCE (CrowdControl.DefaultKnockbackDistance,
+        ///    10 m: the Atta Soldier's rock throw);
         ///  - otherwise nothing.
         /// </summary>
         public static float KnockbackDistanceOf(string module, ActionLevelInfo info, Vector3 source, Vector3 victim)
@@ -334,7 +328,7 @@ namespace Rasa.Managers
             if (radius > 0)
                 return Math.Max(0f, radius - Vector3.Distance(source, victim));
 
-            return DefaultKnockbackDistance;
+            return CrowdControl.DefaultKnockbackDistance;
         }
 
         /// <summary>
@@ -366,11 +360,10 @@ namespace Rasa.Managers
             // chance the knockback lands; one that does not can still stagger. A Tectonic Strike
             // knocks back and stuns, as a player's does: the stun keeps them down after the
             // getup (the Treeback's stomp: 20 m, then 8 s). KNOCKBACK_HEADING, which only the
-            // Boargar's knockback gives (105), turns the throw that many degrees from straight away
-            // from the creature: nothing in the client reads it, so the reading - degrees, turned
-            // as CrowdControl.Turned turns - is ours.
+            // Boargar's knockback gives (105), is read against the client's default heading of 180,
+            // straight away: 75 degrees off it (CrowdControl.TurnOf).
             if (knockback > 0 && Stuns.Roll(info.Get(AbilityProperty.ChanceKnockBack, 100)))
-                Knockback(mapChannel, player, attacker, knockback, ExtraDownMs(module, info, ms), info.Get(AbilityProperty.KnockbackHeading));
+                Knockback(mapChannel, player, attacker, knockback, ExtraDownMs(module, info, ms), CrowdControl.TurnOf(info));
             else if (ms > 0 && Stuns.Roll(chance))
                 Stun(mapChannel, player, attacker, ms);
         }

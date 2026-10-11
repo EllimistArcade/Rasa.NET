@@ -558,7 +558,8 @@ namespace Rasa.Managers
                 creature.Attributes.Add(Attributes.Body, new ActorAttributes(Attributes.Body, creatureStats.Body, creatureStats.Body, creatureStats.Body, 5, 1000));
                 creature.Attributes.Add(Attributes.Mind, new ActorAttributes(Attributes.Mind, creatureStats.Mind, creatureStats.Mind, creatureStats.Mind, 5, 1000));
                 creature.Attributes.Add(Attributes.Spirit, new ActorAttributes(Attributes.Spirit, creatureStats.Spirit, creatureStats.Spirit, creatureStats.Spirit, 5, 1000));
-                creature.Attributes.Add(Attributes.Health, new ActorAttributes(Attributes.Health, creatureStats.Health, creatureStats.Health, creatureStats.Health, 5, 1000));
+                // Health comes back out of a fight (CreatureHealth): its rate is sent from the start.
+                creature.Attributes.Add(Attributes.Health, CreatureHealth.NewAttribute(creatureStats.Health));
                 creature.Attributes.Add(Attributes.Chi, new ActorAttributes(Attributes.Chi, 0, 0, 0, 0, 0));
                 creature.Attributes.Add(Attributes.Power, new ActorAttributes(Attributes.Power, 0, 0, 0, 0, 0));
                 creature.Attributes.Add(Attributes.Aware, new ActorAttributes(Attributes.Aware, 0, 0, 0, 0, 0));
@@ -572,7 +573,7 @@ namespace Rasa.Managers
                 creature.Attributes.Add(Attributes.Body, new ActorAttributes(Attributes.Body, 15, 15, 15, 5, 1000));
                 creature.Attributes.Add(Attributes.Mind, new ActorAttributes(Attributes.Mind, 15, 15, 15, 5, 1000));
                 creature.Attributes.Add(Attributes.Spirit, new ActorAttributes(Attributes.Spirit, 15, 15, 15, 5, 1000));
-                creature.Attributes.Add(Attributes.Health, new ActorAttributes(Attributes.Health, 100, 100, 100, 10, 1000));
+                creature.Attributes.Add(Attributes.Health, CreatureHealth.NewAttribute(100));
                 creature.Attributes.Add(Attributes.Chi, new ActorAttributes(Attributes.Chi, 0, 0, 0, 0, 0));
                 creature.Attributes.Add(Attributes.Power, new ActorAttributes(Attributes.Power, 0, 0, 0, 0, 0));
                 creature.Attributes.Add(Attributes.Aware, new ActorAttributes(Attributes.Aware, 0, 0, 0, 0, 0));
@@ -756,7 +757,7 @@ namespace Rasa.Managers
             creature.Attributes.Add(Attributes.Body, new ActorAttributes(Attributes.Body, body, body, body, 5, 1000));
             creature.Attributes.Add(Attributes.Mind, new ActorAttributes(Attributes.Mind, body, body, body, 5, 1000));
             creature.Attributes.Add(Attributes.Spirit, new ActorAttributes(Attributes.Spirit, body, body, body, 5, 1000));
-            creature.Attributes.Add(Attributes.Health, new ActorAttributes(Attributes.Health, health, health, health, 10, 1000));
+            creature.Attributes.Add(Attributes.Health, CreatureHealth.NewAttribute(health));
             creature.Attributes.Add(Attributes.Chi, new ActorAttributes(Attributes.Chi, 0, 0, 0, 0, 0));
             creature.Attributes.Add(Attributes.Power, new ActorAttributes(Attributes.Power, 0, 0, 0, 0, 0));
             creature.Attributes.Add(Attributes.Aware, new ActorAttributes(Attributes.Aware, 0, 0, 0, 0, 0));

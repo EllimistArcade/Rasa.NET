@@ -496,7 +496,7 @@ namespace Rasa.Managers
                     Regenerate(player, power, player.RegenSeconds);
             }
 
-            // Creatures' armour.
+            // Creatures' armour, and their health out of a fight (CreatureHealth).
             CreatureArmor.Regenerate(mapChannel);
         }
 

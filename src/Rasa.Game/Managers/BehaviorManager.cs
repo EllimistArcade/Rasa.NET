@@ -921,6 +921,15 @@ namespace Rasa.Managers
                 }
                 creature.LastAgression = 0; // update aggression time if we found our target
 
+                // Free to act, yet for StallEvadeMs it has neither struck nor gained ground - its
+                // target where the navmesh gives no route, or inside the reach of every attack it
+                // has - it gives the fight up and goes home whole (Stalled).
+                if (Stalled(creature, delta))
+                {
+                    Leash(mapChannel, creature);
+                    return;
+                }
+
                 // Brought low, a Fithik blows itself up on whoever is around it (CreatureBombs).
                 var selfDestruct = creature.Actions.FirstOrDefault(CreatureBombs.IsSelfDestruct);
 
@@ -936,13 +945,20 @@ namespace Rasa.Managers
                     return;
 
                 // A Caretaker or a Technician looks after its side first: a heal, a repair or a
-                // revive, when one would do something (CreatureSupport).
+                // revive, when one would do something (CreatureSupport). Its part in the fight
+                // (Stalled).
                 if (CreatureSupport.TryStart(mapChannel, creature))
+                {
+                    MadeProgress(creature);
                     return;
+                }
 
                 // A Xanx brought low eats a dead Xanx it is standing by (CreatureHabits).
                 if (CreatureHabits.TryInFight(mapChannel, creature))
+                {
+                    MadeProgress(creature);
                     return;
+                }
 
                 var needToMove = true;
 
@@ -975,9 +991,13 @@ namespace Rasa.Managers
                     if (action.CooldownTimer > 0)
                     {
                         // An attack cooling down holds its creature at this range only if there
-                        // is nothing closer in it could be using meanwhile.
+                        // is nothing closer in it could be using meanwhile. In range, with the
+                        // attack coming: that is a fight going on (Stalled).
                         if (!ClosesInWhileCooling(creature, action))
+                        {
                             needToMove = false;
+                            MadeProgress(creature);
+                        }
 
                         continue;   // action on cooldown
                     }
@@ -987,6 +1007,7 @@ namespace Rasa.Managers
                     if (!OpensNow(creature))
                     {
                         needToMove = false;
+                        MadeProgress(creature);
                         UpdateEntityMovement(targetDistX, targetDistY, targetDistZ, creature, mapChannel, 0.0f, false, delta);
                         break;
                     }
@@ -1019,6 +1040,7 @@ namespace Rasa.Managers
                         UpdateEntityMovement(targetDistX, targetDistY, targetDistZ, creature, mapChannel, 0.0f, false, delta);
 
                         action.CooldownTimer = NextCooldown(creature, action);
+                        MadeProgress(creature);
                         break;
                     }
 
@@ -1050,6 +1072,7 @@ namespace Rasa.Managers
                         AmoeboidVomit.Perform(mapChannel, creature, action);
 
                         action.CooldownTimer = NextCooldown(creature, action);
+                        MadeProgress(creature);
                         break;
                     }
 
@@ -1063,6 +1086,7 @@ namespace Rasa.Managers
                         AbilityManager.OnCreatureActed(mapChannel, creature, true);
 
                         action.CooldownTimer = NextCooldown(creature, action);
+                        MadeProgress(creature);
                         break;
                     }
 
@@ -1088,6 +1112,7 @@ namespace Rasa.Managers
 
                     // set cooldown, lengthened by whatever slows its attacks (Called Shot: Arm)
                     action.CooldownTimer = NextCooldown(creature, action);
+                    MadeProgress(creature);
 
                     // creature used action, break loop
                     break;
@@ -1183,7 +1208,13 @@ namespace Rasa.Managers
 
                 // follow path; a walked path is dropped so the next think builds one for
                 // wherever the target is now, instead of holding this node for good
+                var before = creature.Position;
                 FollowPath(mapChannel, creature, creature.RunSpeed, delta);
+
+                // Ground gained is a fight going on; a step that went nowhere - no route, a force
+                // field, the end of a path that stops short - is not (Stalled).
+                if (creature.Position != before)
+                    MadeProgress(creature);
             }//---fighting
         }
 
@@ -2414,12 +2445,20 @@ namespace Rasa.Managers
             }
 
             creature.Controller.CurrentAction = BehaviorActionFighting;
+
+            // Its health stops coming back for the fight, and the clients hear so now: the hit
+            // that started it sent its own update first, carrying the resting rate, and left to
+            // the next regeneration second they would predict a bar creeping up (CreatureHealth).
+            if (creature.Attributes.TryGetValue(Attributes.Health, out var health))
+                CreatureHealth.SyncRate(creature.RuntimeMapChannel ?? MapChannelManager.Instance.FindByContextId(creature.MapContextId), creature, health);
+
             // Whatever the creature was walking towards is not where the fight is: without this
             // it chased its last wander node before ever heading for its target.
             creature.Controller.Path.Clear();
             creature.Controller.PathIndex = 0;
             creature.Controller.TimerPathUpdateLock = 0;
             creature.Controller.ActionFighting.TargetEntityId = targetEntityId;
+            creature.Controller.ActionFighting.StalledMs = 0;
             creature.LastAgression = 0;
 
             // Whatever brought it here - the scan, a hit, an assist - the target is on its table.
@@ -2526,6 +2565,59 @@ namespace Rasa.Managers
         {
             creature.Hate.Clear();
             StopFighting(creature);
+        }
+
+        /// <summary>
+        /// How long a creature stands in a fight, free to act, without striking or gaining ground
+        /// before it gives the fight up and goes home whole (<see cref="Stalled"/>). A player
+        /// standing where the navmesh gives no route - a ledge, a rock - or inside the reach of
+        /// every attack the creature has, used to be a free kill: the creature stood there,
+        /// "in the fight" for as long as it was shot at, and never reset nor healed. Long
+        /// enough that a windup (a Bane Hunter's, 4.9 s) or a slow attack's cooldown is not
+        /// taken for it; a creature held still - stunned, rooted, frozen - is not free to act,
+        /// and that time does not count.
+        /// </summary>
+        public const long StallEvadeMs = 15_000;
+
+        /// <summary>
+        /// Whether this creature gives up a fight it cannot press (<see cref="Stalled"/>): one of
+        /// its own, with something to press it with. A minion is its master's to call off; a
+        /// mission's escort or defender holds the place it was given; an emplacement stands
+        /// down on its own terms (Emplacements) and a Shield Drone never leaves its ground
+        /// (ShieldDrone); and a creature with no attack has no fight to be stalled in.
+        /// </summary>
+        internal static bool Evades(Creature creature)
+        {
+            return creature.MasterEntityId == 0
+                && creature.Actions.Count > 0
+                && !IsMissionEscort(creature)
+                && !Game.Missions.World.CreatureGameplayRules.IsDefender(creature)
+                && !Emplacements.Is(creature)
+                && !ShieldDrone.HoldsGround(creature);
+        }
+
+        /// <summary>
+        /// One fighting think's worth on the stall clock, for a creature free to act, and whether
+        /// it has run out (<see cref="StallEvadeMs"/>). The clock is put back by
+        /// <see cref="MadeProgress"/>: an attack used, one in range and coming, a step that gained ground.
+        /// </summary>
+        internal static bool Stalled(Creature creature, long delta)
+        {
+            if (!Evades(creature))
+                return false;
+
+            if (creature.MovementSpeed <= 0 || CrowdControl.IsRooted(creature))
+                return false;
+
+            creature.Controller.ActionFighting.StalledMs += delta;
+
+            return creature.Controller.ActionFighting.StalledMs >= StallEvadeMs;
+        }
+
+        /// <summary>The creature is pressing its fight: the stall clock starts again (<see cref="Stalled"/>).</summary>
+        internal static void MadeProgress(Creature creature)
+        {
+            creature.Controller.ActionFighting.StalledMs = 0;
         }
 
         #region Leash

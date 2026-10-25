@@ -489,6 +489,17 @@ namespace Rasa.Managers
             // The padlock of a locked wagered item went with the rest of their effects.
             InventoryManager.SyncWagerLock(player);
 
+            if (atHospital && mapChannel.MapInfo.MapContextId ==
+                global::Rasa.Missions.Content.Bootcamp.BootcampEntryDefinition.BootcampPrivateMapContextId)
+                try
+                {
+                    MissionApplication.Instance.Scenes.RecoverBootcampEscorts(client);
+                }
+                catch (Exception error) when (GameplayRejectionException.IsExpected(error))
+                {
+                    Logger.WriteLog(LogType.Error, $"Bootcamp escort recovery after revival failed: {error.Message}");
+                }
+
             Logger.WriteLog(LogType.Debug, $"{player.FamilyName} ({player.Id}) is back{(atHospital ? " at a hospital" : $", revived by {reviver?.EntityId}")}.");
         }
 

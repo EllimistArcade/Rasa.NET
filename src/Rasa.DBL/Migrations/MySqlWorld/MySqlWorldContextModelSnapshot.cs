@@ -358,7 +358,7 @@ namespace Rasa.Migrations.MySqlWorld
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("varchar(50)")
+                        .HasColumnType("text")
                         .HasColumnName("description");
 
                     b.Property<uint>("MaxDamage")
@@ -506,7 +506,7 @@ namespace Rasa.Migrations.MySqlWorld
 
                     b.Property<string>("Comment")
                         .IsRequired()
-                        .HasColumnType("varchar(50)")
+                        .HasColumnType("text")
                         .HasColumnName("comment");
 
                     b.Property<uint>("Faction")
@@ -577,6 +577,21 @@ namespace Rasa.Migrations.MySqlWorld
                         .HasName("PK_creature_loot_group");
 
                     b.ToTable("legacy_flat_creature_loot_group");
+                });
+
+            modelBuilder.Entity("Rasa.Structures.World.CreatureScaleEntry", b =>
+                {
+                    b.Property<uint>("Id")
+                        .HasColumnType("int unsigned")
+                        .HasColumnName("id");
+
+                    b.Property<double>("Scale")
+                        .HasColumnType("double")
+                        .HasColumnName("scale");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("creature_scale");
                 });
 
             modelBuilder.Entity("Rasa.Structures.World.CreatureStatEntry", b =>

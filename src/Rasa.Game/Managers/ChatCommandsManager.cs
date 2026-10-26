@@ -313,7 +313,8 @@ namespace Rasa.Managers
             RegisterCommand(".playerinfo", GmLevel.GameMaster, parts => GmSupportCommands.PlayerInfo(_client, parts), "familyName/#characterId");
             RegisterCommand(".goto", GmLevel.GameMaster, parts => GmSupportCommands.Goto(_client, parts), "familyName/#characterId");
             RegisterCommand(".summon", GmLevel.GameMaster, parts => GmSupportCommands.Summon(_client, parts), "familyName/#characterId");
-            RegisterCommand(".unstuck", GmLevel.GameMaster, parts => GmSupportCommands.Unstuck(_client, parts), "familyName/#characterId");
+            // Players too: themselves only, every 5 minutes (GmSupportCommands.PlayerUnstuckCooldown).
+            RegisterCommand(".unstuck", GmLevel.Player, parts => GmSupportCommands.Unstuck(_client, parts), "[familyName/#characterId]");
             RegisterCommand(".revive", GmLevel.GameMaster, parts => GmSupportCommands.Revive(_client, parts), "familyName/#characterId");
             RegisterCommand(".kill", GmLevel.GameMaster, parts => GmSupportCommands.Kill(_client, parts), "#entityId");
             RegisterCommand(".gmbar", GmLevel.GameMaster, parts => GmAbilities.FillBar(_client, parts), "loadout");
@@ -5909,6 +5910,9 @@ namespace Rasa.Managers
             ["killmap"] = new PrivilegedChatCommand(GmLevel.Admin, GmMapCommands.KillMap),
             ["usermissions"] = new PrivilegedChatCommand(GmMissionCommands.Level, GmMissionCommands.ShowUserMissions),
             ["givemission"] = new PrivilegedChatCommand(GmMissionCommands.Level, GmMissionCommands.GiveMission),
+
+            // A player's own: kills their character after asking twice and a countdown (Suicide).
+            ["suicide"] = new PrivilegedChatCommand(GmLevel.Player, Suicide.Run),
 
             // A GM's menu on a player's name in chat: its two GM
             // entries, Teleport to Player and Kick Player, send these with the family name.

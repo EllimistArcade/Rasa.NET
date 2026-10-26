@@ -201,7 +201,11 @@ namespace Rasa.Test.Missions.Wilderness
             AssertUnclaimed(harness, loot, expected.Length, 0);
             LootDispenserManager.Instance.RequestCorpseLooting(harness.Client,
                 new RequestCorpseLootingPacket { EntityId = loot.EntityId });
-            AssertLists(DrainCalls(harness), harness, loot, expected, menu: true);
+            var opened = DrainCalls(harness);
+            if (admitted)
+                AssertLists(opened, harness, loot, expected, menu: true);
+            else
+                AssertCreditOnlyClaim(opened, harness, loot);
             if (admitted)
             {
                 var drop = loot.LootItems.Single();
@@ -228,11 +232,10 @@ namespace Rasa.Test.Missions.Wilderness
             Assert.IsTrue(loot.FullyLooted);
             AssertPersistedCredits(harness, 107);
             Assert.AreEqual(107, harness.Client.Player.Credits[CurencyType.Credits]);
-            var got = DrainCalls(harness).Select(call => call.Packet).OfType<GotLootPacket>().Single();
+            var got = opened.Concat(DrainCalls(harness)).Select(call => call.Packet).OfType<GotLootPacket>().Single();
             Assert.AreEqual(7, got.Credits);
             Assert.AreEqual(admitted ? 1 : 0, got.Entries.Count);
-            if (admitted)
-                AssertDuplicateRefused(harness, loot);
+            AssertDuplicateRefused(harness, loot);
         }
 
         [TestMethod]
@@ -428,7 +431,7 @@ namespace Rasa.Test.Missions.Wilderness
         }
 
         [TestMethod]
-        public void IntentionallyEmptyMigratedProfileStillUsesRealKillMenuAndCreditClaimWithoutFallback()
+        public void IntentionallyEmptyMigratedProfileClaimsCreditsWithoutOpeningMenuOrFallback()
         {
             var rolls = new ScriptedRoll();
             rolls.Add(1, 10, 7);
@@ -449,16 +452,15 @@ namespace Rasa.Test.Missions.Wilderness
             AssertLists(published, harness, loot, empty, menu: false);
             LootDispenserManager.Instance.RequestCorpseLooting(harness.Client,
                 new RequestCorpseLootingPacket { EntityId = loot.EntityId });
-            AssertLists(DrainCalls(harness), harness, loot, empty, menu: true);
-            LootDispenserManager.Instance.RequestLootAllFromCorpse(harness.Client,
-                new RequestLootAllFromCorpsePacket { EntityId = loot.EntityId });
+            var claimed = DrainCalls(harness);
+            AssertCreditOnlyClaim(claimed, harness, loot);
             Assert.IsTrue(loot.FullyLooted);
             Assert.AreEqual(107, harness.Client.Player.Credits[CurencyType.Credits]);
             AssertPersistedCredits(harness, 107);
             using var verify = harness.Context.Open();
             Assert.AreEqual(0, verify.ItemEntries.Count());
             Assert.AreEqual(0, verify.CharacterInventoryEntries.Count());
-            var got = DrainCalls(harness).Select(call => call.Packet).OfType<GotLootPacket>().Single();
+            var got = claimed.Select(call => call.Packet).OfType<GotLootPacket>().Single();
             Assert.AreEqual(0, got.Entries.Count);
             Assert.AreEqual(7, got.Credits);
             AssertDuplicateRefused(harness, loot);
@@ -1014,6 +1016,30 @@ namespace Rasa.Test.Missions.Wilderness
             Assert.AreEqual(expected, ((OverallQualityPacket)call.Packet).OverallQuality);
             CollectionAssert.AreEqual(Encode(writer => { writer.WriteTuple(1); writer.WriteInt((int)expected); }),
                 Encode(call.Packet));
+        }
+
+        private static void AssertCreditOnlyClaim(List<CallMethodMessage> calls,
+            WildernessRuntimeTestHarness harness, LootDispenser loot)
+        {
+            Assert.IsFalse(calls.Any(call => call.Packet is LootCorpsePacket),
+                "An empty corpse must not send the packet that opens the backpack.");
+            Assert.IsTrue(loot.FullyLooted);
+            Assert.AreEqual(0, loot.Credits);
+            Assert.AreEqual(0UL, loot.CurrentLooter);
+            AssertPersistedCredits(harness, 107);
+            var infos = calls.Where(call => call.Packet is LootInfoPacket).ToArray();
+            Assert.IsNotEmpty(infos);
+            foreach (var info in infos)
+            {
+                Assert.AreEqual(loot.EntityId, info.EntityId);
+                CollectionAssert.AreEqual(Encode(writer => {
+                    writer.WriteTuple(1); writer.WriteDictionary(0);
+                }), Encode(info.Packet));
+            }
+            var states = calls.Where(call => call.Packet is CanLootItemsPacket).ToArray();
+            Assert.IsNotEmpty(states);
+            Assert.IsTrue(states.All(call => call.EntityId == loot.EntityId &&
+                !((CanLootItemsPacket)call.Packet).CanLootItems));
         }
 
         private static void AssertLists(List<CallMethodMessage> calls, WildernessRuntimeTestHarness harness,

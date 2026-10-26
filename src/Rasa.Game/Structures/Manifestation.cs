@@ -464,6 +464,8 @@ namespace Rasa.Structures
 
         /// <summary>The state the player was in when they died, to go back to when revived.</summary>
         public CharacterState StateBeforeDeath { get; set; }
+        /// <summary>Changes on death so queued attacks cannot follow this actor into a new life.</summary>
+        internal uint DeathGeneration { get; set; }
 
         /// <summary>The camera script the player's client is running, 0 for none (CameraScripts).</summary>
         public uint CameraScriptId { get; set; }

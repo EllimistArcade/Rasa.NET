@@ -1206,6 +1206,20 @@ namespace Rasa.Managers
 
         public void MissileTrigger(MapChannel mapChannel, Missile missile)
         {
+            // A hospital revive keeps the same actor and map. A blow queued before death
+            // must not resolve against their newly restored health (or move its splash there).
+            if (missile.TargetActor is Manifestation revived && missile.TargetDeathGeneration != revived.DeathGeneration)
+            {
+                missile.DamageA = 0;
+                missile.Args.HitEntities.Clear();
+                missile.Args.HitData.Clear();
+                missile.Args.MisstEntities.Add(missile.TargetEntityId);
+                missile.Args.Missdata.Add(MissTypeMiss);
+                if (missile.Source != null)
+                    CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
+                return;
+            }
+
             var targetType = EntityManager.Instance.GetEntityType(missile.TargetEntityId);
 
             // A destructible prop of the .map (WorldDestructibles) is an object, as it was at the launch.

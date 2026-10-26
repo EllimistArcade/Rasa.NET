@@ -12,6 +12,7 @@ namespace Rasa.Test.World
     using Rasa.Managers;
     using Rasa.Packets.ClientMethod.Server;
     using Rasa.Packets.MapChannel.Server;
+    using Rasa.Packets.MapChannel.Server.PerformRecovery;
     using Rasa.Structures;
     using Rasa.Structures.Char;
     using Rasa.Test.Missions;
@@ -499,6 +500,66 @@ namespace Rasa.Test.World
 
             Assert.AreEqual(CharacterState.Dead, client.Player.State);
             Assert.IsTrue(MissionTestContext.Drain(client).OfType<AnnounceMapDamagePacket>().Single().DeathBlow);
+        }
+
+        [TestMethod]
+        [DataRow(1, true)]
+        [DataRow(4, true)]
+        [DataRow(1, false)]
+        [DataRow(4, false)]
+        public void AttacksQueuedBeforeDeathCannotHitTheRevivedPlayer(int count, bool hospital)
+        {
+            using var world = new WorldTestContext();
+            var client = Player(world, 0, 0);
+            var attacker = Monster(world, 10);
+            var observer = Player(world, 10, 0);
+            var bystander = Player(world, hospital ? -299 : 1, 0);
+            try
+            {
+                for (var i = 0; i < count; i++)
+                    world.Map.QueuedMissiles.Add(new Missile {
+                        Source = attacker, TargetActor = client.Player, TargetEntityId = client.Player.EntityId,
+                        ActionId = ActionId.WeaponAttack, ActionArgId = 1,
+                        DamageA = 1500, TriggerTime = 100, IsMelee = true,
+                        SplashRadius = 5, SplashDamage = 1500
+                    });
+                AtZero(world, client);
+                if (hospital)
+                    PlayerDeath.ReviveMe(client, 6);
+                else
+                    Assert.IsTrue(PlayerDeath.ReviveInPlace(client));
+                Assert.AreNotEqual(CharacterState.Dead, client.Player.State);
+                Assert.AreEqual(hospital ? -300f : 0f, client.Player.Position.X, 0.01f);
+                MissionTestContext.Drain(client);
+                MissionTestContext.Drain(observer);
+
+                MissileManager.Instance.DoWork(world.Map, 100);
+
+                Assert.AreEqual(1000, client.Player.Attributes[Attributes.Health].Current,
+                    "An attack queued against the previous life must not kill them again after revival.");
+                Assert.AreNotEqual(CharacterState.Dead, client.Player.State);
+                Assert.IsEmpty(world.Map.QueuedMissiles);
+                Assert.IsFalse(MissionTestContext.Drain(client).Any(p => p is PlayerDeadPacket or ActorKilledPacket));
+                Assert.AreEqual(1000, bystander.Player.Attributes[Attributes.Health].Current,
+                    "An old target-following splash must not move to the hospital either.");
+                var recoveries = MissionTestContext.Drain(observer).OfType<WeaponAttackRecovery>().ToArray();
+                Assert.HasCount(count, recoveries);
+                foreach (var recovery in recoveries)
+                {
+                    Assert.IsEmpty(recovery.Missile.Args.HitData, "No delayed damage or death blow may reach the client.");
+                    CollectionAssert.Contains(recovery.Missile.Args.MisstEntities, client.Player.EntityId);
+                    Assert.AreEqual(0, recovery.Missile.DamageA);
+                }
+
+                // A fresh attack after revival still works; this is not a blanket immunity period.
+                var fresh = new Missile {
+                    Source = attacker, TargetActor = client.Player, TargetEntityId = client.Player.EntityId,
+                    ActionId = ActionId.WeaponAttack, ActionArgId = 1, DamageA = 100, IsMelee = true
+                };
+                MissileManager.Instance.MissileTrigger(world.Map, fresh);
+                Assert.AreEqual(900, client.Player.Attributes[Attributes.Health].Current);
+            }
+            finally { Unregister(world, attacker); }
         }
 
         private static uint[] Ids(IEnumerable<Hospitals.Hospital> hospitals) => hospitals.Select(h => h.TeleporterId).OrderBy(id => id).ToArray();

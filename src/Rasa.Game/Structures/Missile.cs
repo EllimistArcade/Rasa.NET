@@ -10,7 +10,18 @@
         public uint ActionArgId { get; set; }
         public bool IsAbility { get; set; }         // set to true to use PerformAbility instead of Windup/Recovery
         public ulong TargetEntityId { get; set; }    // the entityId of the destination (it is possible that the object does no more exist on arrival)
-        public Actor TargetActor { get; set; }
+        private Actor _targetActor;
+        public Actor TargetActor
+        {
+            get => _targetActor;
+            set
+            {
+                _targetActor = value;
+                TargetDeathGeneration = (value as Manifestation)?.DeathGeneration ?? 0;
+            }
+        }
+        /// <summary>The player's life this attack was aimed at, captured before it waits in the queue.</summary>
+        internal uint TargetDeathGeneration { get; private set; }
         internal DynamicObject TargetObject { get; set; }
         public Actor Source { get; set; }
         internal Game.Missions.World.ScriptedCombatAuthorization SourceCombatAuthorization { get; set; }

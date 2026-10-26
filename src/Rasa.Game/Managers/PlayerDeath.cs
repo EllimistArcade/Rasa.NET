@@ -165,6 +165,7 @@ namespace Rasa.Managers
 
         private static void Kill(MapChannel mapChannel, Client client, Manifestation victim, Actor source, bool pvp)
         {
+            unchecked { victim.DeathGeneration++; }
             victim.StateBeforeDeath = victim.State;
             victim.State = CharacterState.Dead;
             victim.DiedInPvp = pvp;

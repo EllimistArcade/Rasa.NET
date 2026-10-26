@@ -151,7 +151,7 @@ namespace Rasa.Managers
 
         /// <summary>
         /// A corpse's credits divided among those sharing them: an equal share each, the odd
-        /// credits one apiece from the first on (the looter who emptied the corpse is first).
+        /// credits one apiece from the first on (the killer at death, or an outstanding pot's looter).
         /// Nobody is left out of a share for being last; a pot smaller than the squad gives the
         /// first ones a credit each and the rest nothing.
         /// </summary>
@@ -650,6 +650,12 @@ namespace Rasa.Managers
             AppendMissionLoot(client, loot);
             if (loot.Looters.Contains(client.Player.EntityId) && !shownTo.Contains(client))
                 shownTo.Add(client);
+
+            // Money is the kill reward, independent of item ownership or pickup reach.
+            // Settle it before the initial dispenser publication so empty corpses start empty.
+            lock (loot.Map.LootSyncRoot)
+                if (loot.Credits > 0)
+                    Claim(client, loot, Array.Empty<LootItem>(), null, lootAll: true, quiet: true, killCredits: true);
 
             foreach (var looter in shownTo)
             {
@@ -1237,10 +1243,11 @@ namespace Rasa.Managers
         /// the client's auto-loot (quiet), which it sends again and again while the player stands
         /// in reach.
         ///
-        /// The credits go when the corpse's last item does, split among everyone sharing the kill
-        /// (CreditRecipients); a corpse that is one player's pays them on Loot All too, whether its
-        /// items fit or not. They, and the prestige a rare item is worth, are worked out from what
-        /// was taken, in the same write (Settle).
+        /// Creature credits normally pay at death through killCredits, split among the kill's
+        /// eligible recipients independently of items or pickup reach. A failed credit save leaves
+        /// the pot claimable through the ordinary pickup path. That path also serves containers
+        /// and pays outstanding squad credits when the last item is taken. Prestige remains tied
+        /// to actual item pickup. Both purses use this same atomic claim transaction.
         /// </summary>
         private void Claim(
             Client client,
@@ -1248,8 +1255,28 @@ namespace Rasa.Managers
             IReadOnlyList<LootItem> asked,
             uint? destSlot,
             bool lootAll,
-            bool quiet = false)
+            bool quiet = false,
+            bool killCredits = false)
         {
+            // Only the server's kill path may claim credits without corpse pickup reach or
+            // item ownership (Rotation can give the items to another squad member).
+            bool AdmissionIsCurrent()
+            {
+                if (!killCredits)
+                    return TryGetLoot(client, loot.EntityId, out var found) && ReferenceEquals(found, loot);
+                var player = client.Player;
+                var map = player.MapChannel;
+                var corpse = loot.Corpse;
+                return map != null && ReferenceEquals(map, loot.Map) && client.State == ClientState.Ingame &&
+                    client.PendingTransfer == null && player.MapContextId == map.MapInfo.MapContextId &&
+                    EntityManager.Instance.Players.TryGetValue(player.EntityId, out var registeredPlayer) && ReferenceEquals(player, registeredPlayer) &&
+                    map.LootDispensers.TryGetValue(loot.EntityId, out var current) && ReferenceEquals(current, loot) &&
+                    loot.IsLootable && !loot.FullyLooted && corpse != null &&
+                    corpse.State == CharacterState.Dead && corpse.CorpseLootEntityId == loot.EntityId &&
+                    corpse.DbId == loot.SourceCreatureDbId && loot.AttachedTo == corpse.EntityId &&
+                    MapInstanceScope.TryGetCreature(map, corpse.EntityId, out var registeredCorpse) && ReferenceEquals(corpse, registeredCorpse);
+            }
+
             var currentCredits = client.Player.Credits.GetValueOrDefault(CurencyType.Credits);
             var currentPrestige = client.Player.Credits.GetValueOrDefault(CurencyType.Prestige);
 
@@ -1270,7 +1297,7 @@ namespace Rasa.Managers
 
                 var emptiesItems = loot.LootItems.All(item => item.Taken || taken.Contains(item));
                 includeCredits = loot.Credits > 0 &&
-                    ((lootAll && loot.CreditSharers.Count == 0) || emptiesItems);
+                    (killCredits || (lootAll && loot.CreditSharers.Count == 0) || emptiesItems);
 
                 var recipients = includeCredits ? CreditRecipients(client, loot) : new List<Client> { client };
                 var shares = includeCredits ? SplitCredits(loot.Credits, recipients.Count) : new List<int> { 0 };
@@ -1330,7 +1357,7 @@ namespace Rasa.Managers
                     }
 
                     // What fits the backpack is taken; the rest stays on the corpse.
-                    Settle(grant.PlanAndSave(client, asked, unitOfWork, destSlot));
+                    Settle(killCredits ? Array.Empty<LootItem>() : grant.PlanAndSave(client, asked, unitOfWork, destSlot));
                     if (items.Count == 0 && !creditsGranted && others.Count == 0)
                         throw new NothingFitsException();
 
@@ -1359,7 +1386,7 @@ namespace Rasa.Managers
                     }
 
                     MissionLootPlanner.ValidateClaim(client, loot, items, missionManager, unitOfWork,
-                        () => TryGetLoot(client, loot.EntityId, out var admittedLoot) && ReferenceEquals(admittedLoot, loot));
+                        AdmissionIsCurrent);
                     var events = items.GroupBy(item => item.ItemClassId)
                         .Select(group => MissionProgressEvent.ItemAcquired(
                             group.Key,
@@ -1399,10 +1426,13 @@ namespace Rasa.Managers
                         unitOfWork.Characters.UpdateCharacterCredits(other.Recipient.Player.Id, other.After);
                     }
 
-                    if (!TryGetLoot(client, loot.EntityId, out var current) ||
-                        !ReferenceEquals(current, loot))
-                        throw new GameplayRejectionException(
-                            "Corpse state changed during the claim.");
+                    if (!AdmissionIsCurrent())
+                        throw new GameplayRejectionException("Corpse state changed during the claim.");
+                    if (killCredits)
+                        TransactionValidation.AtCommitBoundary(unitOfWork, () => {
+                            if (!AdmissionIsCurrent())
+                                throw new GameplayRejectionException("Kill credit source changed before commit.");
+                        });
                 });
             }
             catch (NothingFitsException)
@@ -1494,21 +1524,24 @@ namespace Rasa.Managers
             if (!lootersHere.Contains(client))
                 lootersHere.Add(client);
 
-            foreach (var looter in lootersHere)
-            {
-                MissionApplication.TryPublish(
-                    () => looter.CallMethod(
-                        loot.EntityId,
-                        new TakenInfoPacket(
-                            client.Player.EntityId,
-                            Taken(loot))),
-                    $"corpse {loot.EntityId} taken state");
-
-                if (looter == client || !loot.HasLoot)
+            // A kill's initial dispenser publication follows this payout. No item was taken,
+            // and the killer may not be an item looter under Rotation.
+            if (!killCredits)
+                foreach (var looter in lootersHere)
+                {
                     MissionApplication.TryPublish(
-                        () => CanLootItems(looter, loot),
-                        $"corpse {loot.EntityId} lootability");
-            }
+                        () => looter.CallMethod(
+                            loot.EntityId,
+                            new TakenInfoPacket(
+                                client.Player.EntityId,
+                                Taken(loot))),
+                        $"corpse {loot.EntityId} taken state");
+
+                    if (looter == client || !loot.HasLoot)
+                        MissionApplication.TryPublish(
+                            () => CanLootItems(looter, loot),
+                            $"corpse {loot.EntityId} lootability");
+                }
 
             // What the take gave the looter - the items and their share - and each other sharer
             // their share; the rest of the squad hears what was taken and who got the credits.

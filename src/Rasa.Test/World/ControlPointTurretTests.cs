@@ -89,6 +89,10 @@ namespace Rasa.Test.World
             CollectionAssert.AreEquivalent(SpotsByPoint.ToList(),
                 ControlPointTurrets.Spots.GroupBy(spot => spot.Point).ToDictionary(group => group.Key, group => group.Count()).ToList());
 
+            var applied = world.Database.GetAppliedMigrations().ToHashSet();
+            var raised = applied.Contains("20270914000000_Afs_turret_mount_heights");
+            var onBases = applied.Contains("20270919000000_Afs_turret_bases");
+
             foreach (var spot in ControlPointTurrets.Spots)
             {
                 var afs = pools[spot.AfsPool];
@@ -97,7 +101,9 @@ namespace Rasa.Test.World
 
                 Assert.AreEqual(point.MapContextId, afs.MapContextId, $"pool {afs.Id} on its point's map");
                 Assert.AreEqual((afs.PosX, afs.PosZ, afs.Rotation, afs.MapContextId), (bane.PosX, bane.PosZ, bane.Rotation, bane.MapContextId), $"pools {afs.Id} and {bane.Id} on one mount");
-                var heightOffset = world.Database.GetAppliedMigrations().Contains("20270914000000_Afs_turret_mount_heights") && AfsTurretMountHeights.Mounts.Any(m => m.Pool == afs.Id) ? 2.56 : 0;
+                var onBase = AfsTurretBases.Bases.Any(b => b.AfsPool == afs.Id);
+                var heightOffset = onBases ? (onBase ? -AfsTurretBases.BaneOverBase : 0)
+                    : raised && AfsTurretMountHeights.Mounts.Any(m => m.Pool == afs.Id) ? AfsTurretBases.RaisedBy : 0;
                 Assert.AreEqual(bane.PosY + heightOffset, afs.PosY, 0.001, "Each model uses its own mount origin.");
                 Assert.IsLessThan(200.0, Math.Sqrt(Math.Pow(afs.PosX - point.PosX, 2) + Math.Pow(afs.PosZ - point.PosZ, 2)), $"pool {afs.Id} at its point");
 

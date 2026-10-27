@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
@@ -78,6 +79,37 @@ namespace Rasa.Managers
                     target.SceneOwnerCharacterId == player.Id && target.CurrentHitPoints > 0) &&
                 TryGetTarget(map, target?.EntityId ?? 0, out var current) &&
                 ReferenceEquals(current, target);
+        }
+
+        /// <summary>
+        /// The objects a player's weapon can damage within a cone from them (ConeWeapons): those
+        /// <see cref="TryGetTarget"/> finds and <see cref="CanHit"/> lets them hit - a mission's
+        /// destructibles (their own), the server's placed ones, and the .map's (WorldDestructibles,
+        /// which are in no cell) - within range and halfAngleDegrees of the aim on the flat, as a
+        /// creature is (AbilityManager.InCone). A shotgun cannot lock on to anything, so these
+        /// are the only way it hits an object at all.
+        /// </summary>
+        internal static List<DynamicObject> TargetsInCone(MapChannel map, Manifestation player, Vector3 aim, float range, float halfAngleDegrees)
+        {
+            var found = new List<DynamicObject>();
+
+            if (map == null || player?.Cells == null || !(range > 0))
+                return found;
+
+            bool Near(Vector3 position) => new Vector2(position.X - player.Position.X, position.Z - player.Position.Z).Length() <= range;
+
+            var candidates = CellManager.CellsIn(map, player.Cells).SelectMany(cell => cell.DynamicObjectList)
+                .Where(obj => obj != null && Near(obj.Position)).Select(obj => obj.EntityId)
+                .Concat(WorldDestructibles.OnMap(map.MapInfo?.MapContextId ?? 0).Where(d => Near(d.Usable.Position)).Select(d => d.EntityId))
+                .Distinct()
+                .ToList();
+
+            foreach (var entityId in candidates)
+                if (TryGetTarget(map, entityId, out var target) && !found.Contains(target) && CanHit(map, player, target) &&
+                    AbilityManager.InCone(player.Position, aim, target.Position, range, halfAngleDegrees))
+                    found.Add(target);
+
+            return found;
         }
 
         internal static void RecordHit(

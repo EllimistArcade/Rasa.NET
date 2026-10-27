@@ -946,7 +946,8 @@ namespace Rasa.Managers
                 missile.Missed = ToHit.Misses(missile);
 
                 if (missile.Missed == true && missile.HeldForFlight && missile.SplashRadius <= 0
-                    && (missile.ConeTargets == null || missile.ConeTargets.Count == 0))
+                    && (missile.ConeTargets == null || missile.ConeTargets.Count == 0)
+                    && (missile.ConeObjects == null || missile.ConeObjects.Count == 0))
                 {
                     missile.TriggerTime = 0;
                     missile.HeldForFlight = false;
@@ -1070,18 +1071,35 @@ namespace Rasa.Managers
         /// <summary>
         /// A cone weapon's other victims (ConeWeapons): each creature that was in the cone when the
         /// shot was fired and is still there to be hit takes the shot's damage with its own crit
-        /// roll, and the hit carries what the shot carries - a shotgun's knockback chance.
+        /// roll, and the hit carries what the shot carries - a shotgun's knockback chance. Each
+        /// object that was in it and can still be hit takes the damage as a weapon's hit
+        /// (PracticeTargetManager.RecordHit), listed in the recovery with the rest.
         /// </summary>
         private void ConeHits(MapChannel mapChannel, Missile missile)
         {
-            if (missile.ConeTargets == null || missile.ConeDamage <= 0 || !(missile.Source is Manifestation shooter))
+            if (missile.ConeDamage <= 0 || !(missile.Source is Manifestation shooter))
                 return;
 
             // Each at its own distance (RangeFalloff).
-            foreach (var victim in missile.ConeTargets)
+            foreach (var victim in missile.ConeTargets ?? new List<Actor>())
                 if (victim != missile.TargetActor && IsOnMap(mapChannel, victim))
                     ExtraHit(mapChannel, missile, shooter, victim,
                         RangeFalloff.Scale(missile.ConeDamage, missile.OptimalRange, shooter.Position, victim.Position), true);
+
+            foreach (var obj in missile.ConeObjects ?? new List<DynamicObject>())
+            {
+                if (ReferenceEquals(obj, missile.TargetObject) || !PracticeTargetManager.CanHit(mapChannel, shooter, obj))
+                    continue;
+
+                var damage = RangeFalloff.Scale(missile.ConeDamage, missile.OptimalRange, shooter.Position, obj.Position);
+
+                if (damage <= 0)
+                    continue;
+
+                PracticeTargetManager.RecordHit(mapChannel, shooter, obj, missile.ActionId, damage: damage);
+                missile.Args.HitEntities.Add(obj.EntityId);
+                missile.Args.HitData.Add(new HitData { EntityId = obj.EntityId, FinalAmt = damage });
+            }
         }
 
         /// <summary>
@@ -1204,23 +1222,39 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Aims a cone weapon (ConeWeapons) as it is fired: every hostile creature within its reach
-        /// and half-angle of the way the shooter faces. A cone weapon cannot lock a target ("you
-        /// will not be able to lock onto a target while this type of weapon is equipped"), so
-        /// whatever the shooter had selected plays no part: the missile flies at the nearest
-        /// creature in the cone, the rest are its other victims, and an empty cone is a shot at
-        /// nothing.
+        /// and half-angle of the way the shooter faces, and every object a weapon can damage there
+        /// (PracticeTargetManager.TargetsInCone). A cone weapon cannot lock a target ("you will not
+        /// be able to lock onto a target while this type of weapon is equipped"), so whatever the
+        /// shooter had selected plays no part: the missile flies at the nearest creature in the
+        /// cone - or, with none, the nearest object - the rest are its other victims, and an empty
+        /// cone is a shot at nothing. Objects were never looked for: a shotgun could not touch Cache
+        /// of the Day's fuel containers, which a rifle or a pistol, locked on, destroys.
         /// </summary>
         private static void AimCone(MapChannel mapChannel, Manifestation shooter, ActionData action, Missile missile, float halfAngle, int damage)
         {
             var range = ConeWeapons.RangeOf(action.ActionId, action.ActionArgId) + ConeWeapons.RangeSlack;
-            var inCone = AbilityManager.VictimsInCone(mapChannel, shooter, AbilityManager.FacingOf(shooter), range, halfAngle)
+            var aim = AbilityManager.FacingOf(shooter);
+            var inCone = AbilityManager.VictimsInCone(mapChannel, shooter, aim, range, halfAngle)
                 .Where(c => c.State != CharacterState.Dead && c.State != CharacterState.Dying)
                 .OrderBy(c => Vector3.DistanceSquared(c.Position, shooter.Position))
+                .ToList();
+            var objects = PracticeTargetManager.TargetsInCone(mapChannel, shooter, aim, range, halfAngle)
+                .OrderBy(obj => Vector3.DistanceSquared(obj.Position, shooter.Position))
                 .ToList();
 
             var primary = inCone.FirstOrDefault();
 
-            action.TargetId = primary?.EntityId ?? 0;
+            if (primary != null)
+            {
+                action.TargetId = primary.EntityId;
+                missile.ConeObjects = objects;
+            }
+            else
+            {
+                action.TargetId = objects.FirstOrDefault()?.EntityId ?? 0;
+                missile.ConeObjects = objects.Skip(1).ToList();
+            }
+
             missile.ConeTargets = inCone.Skip(1).ToList();
             missile.ConeDamage = damage;
         }

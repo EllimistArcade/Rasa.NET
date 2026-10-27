@@ -995,6 +995,7 @@ namespace Rasa.Managers
                     AllowDetach = effect.AllowDetach,
                     DamageDealtPercent = effect.DamageDealtPercent,
                     ResistModifier = effect.ResistModifier,
+                    ResistGroup = effect.ResistGroup,
                     RegenPercent = effect.RegenPercent,
                     ArmorRegenPercent = effect.ArmorRegenPercent,
                     HealthRegenPercent = effect.HealthRegenPercent,
@@ -1032,13 +1033,32 @@ namespace Rasa.Managers
         }
 
         /// <param name="damageType">The hit's type; an effect limited to one type (Polarity Field) counts only against that type, and not against an untyped hit.</param>
+        /// <remarks>Effects that share a ResistGroup count once, the strongest of them.</remarks>
         public static int ResistModifierOf(Actor actor, DamageType damageType = 0)
         {
             var total = 0;
+            Dictionary<int, int> groups = null;
 
             foreach (var effect in actor.ActiveEffects.Values)
-                if (effect.ResistDamageType == 0 || effect.ResistDamageType == damageType)
+            {
+                if (effect.ResistDamageType != 0 && effect.ResistDamageType != damageType)
+                    continue;
+
+                if (effect.ResistGroup == 0)
+                {
                     total += effect.ResistModifier;
+                    continue;
+                }
+
+                groups ??= new Dictionary<int, int>();
+
+                if (!groups.TryGetValue(effect.ResistGroup, out var strongest) || Math.Abs(effect.ResistModifier) > Math.Abs(strongest))
+                    groups[effect.ResistGroup] = effect.ResistModifier;
+            }
+
+            if (groups != null)
+                foreach (var strongest in groups.Values)
+                    total += strongest;
 
             return total;
         }

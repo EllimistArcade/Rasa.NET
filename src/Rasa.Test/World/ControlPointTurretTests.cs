@@ -84,8 +84,12 @@ namespace Rasa.Test.World
             var actions = world.CreatureActionEntries.AsNoTracking().ToDictionary(row => row.Id);
             var points = world.ControlPointEntries.AsNoTracking().ToDictionary(row => row.Id);
 
-            Assert.HasCount(ControlPointTurrets.Spots.Length * 2, pools);
-            Assert.HasCount(ControlPointTurrets.Spots.Length * 2, links);
+            // Lightning_fields_wreck_turret takes the spot on the platform the map stands a wreck on.
+            var wreckGone = world.Database.GetAppliedMigrations().Contains("20270921000000_Lightning_fields_wreck_turret");
+            var spots = ControlPointTurrets.Spots.Where(spot => !wreckGone || spot.AfsPool != LightningFieldsWreckTurret.AfsPool).ToArray();
+
+            Assert.HasCount(spots.Length * 2, pools);
+            Assert.HasCount(spots.Length * 2, links);
             CollectionAssert.AreEquivalent(SpotsByPoint.ToList(),
                 ControlPointTurrets.Spots.GroupBy(spot => spot.Point).ToDictionary(group => group.Key, group => group.Count()).ToList());
 
@@ -93,7 +97,7 @@ namespace Rasa.Test.World
             var raised = applied.Contains("20270914000000_Afs_turret_mount_heights");
             var onBases = applied.Contains("20270919000000_Afs_turret_bases");
 
-            foreach (var spot in ControlPointTurrets.Spots)
+            foreach (var spot in spots)
             {
                 var afs = pools[spot.AfsPool];
                 var bane = pools[spot.BanePool];

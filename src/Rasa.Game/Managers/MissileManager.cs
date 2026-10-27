@@ -1060,13 +1060,8 @@ namespace Rasa.Managers
         /// points in the clear of the map's collision (Cover), and no intact force field that
         /// stops the shooter in between (ForceFields.Blocks).
         /// </summary>
-        internal static bool InBlast(MapChannel mapChannel, Actor shooter, Vector3 blast, Actor victim)
-        {
-            if (ForceFields.Blocks(mapChannel, shooter, blast, Cover.Middle(victim)))
-                return false;
-
-            return mapChannel?.Cover == null || Cover.Visible(mapChannel.Cover, blast, Cover.SamplePoints(victim, blast)) > 0;
-        }
+        internal static bool InBlast(MapChannel mapChannel, Actor shooter, Vector3 blast, Actor victim) =>
+            Cover.Reaches(mapChannel, shooter, blast, victim);
 
         /// <summary>
         /// A cone weapon's other victims (ConeWeapons): each creature that was in the cone when the
@@ -1162,7 +1157,7 @@ namespace Rasa.Managers
         /// player's hit goes through in DoDamageToPlayer, knockback and stun included - and is
         /// added to the missile's hits so the one recovery shows them all.
         /// </summary>
-        private void CreatureAreaHits(MapChannel mapChannel, Missile missile)
+        private void CreatureAreaHits(MapChannel mapChannel, Missile missile, bool aroundTarget = true)
         {
             if (!(missile.Source is Creature attacker) || attacker.State == CharacterState.Dead || !IsOnMap(mapChannel, attacker))
                 return;
@@ -1179,7 +1174,7 @@ namespace Rasa.Managers
 
             var area = missile.AreaOverride ?? CreatureAreaAttacks.AreaOf(missile.ActionId, missile.ActionArgId);
 
-            if (!area.IsArea)
+            if (!area.IsArea || (!aroundTarget && area.AroundTarget > 0))
                 return;
 
             foreach (var player in CreatureAreaAttacks.PlayersCaught(mapChannel, attacker, area, missile.TargetActor, missile.AreaCentre))
@@ -1316,6 +1311,25 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A creature's shot or ability lands only on a target its shooter can see as it lands
+            // (BehaviorManager.Sees): one who has gone behind something - a hill, a wall, a gate's
+            // field - since it was fired, or while it was wound up or charged, is not hit through
+            // it, and the shot goes wide. It used to land, cover taking all but a tenth of it
+            // (Cover.MinModifier) - a hit through the wall. Nothing goes off round a target it
+            // cannot reach; a cone or a ring round the creature itself still lands on the rest
+            // it reaches (CreatureAreaHits). Melee is not aimed by sight.
+            if ((targetType == EntityType.Character || targetType == EntityType.Creature) && !missile.IsMelee
+                && missile.Source is Creature firer && !BehaviorManager.Sees(mapChannel, firer, missile.TargetActor))
+            {
+                missile.Args.MisstEntities.Add(missile.TargetEntityId);
+                missile.Args.Missdata.Add(MissTypeMiss);
+
+                CreatureAreaHits(mapChannel, missile, aroundTarget: false);
+
+                CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
+                return;
+            }
+
             // A staff drawn may deflect it (Staff, from pump 3): no damage at all, and the clients
             // are told it as a miss of misstype 4 - the staff parry animation and "Deflect". A
             // launcher's round still goes off where it was turned aside.
@@ -1362,20 +1376,6 @@ namespace Rasa.Managers
                 missile.Args.Missdata.Add(MissTypeDodge);
 
                 CreatureAreaHits(mapChannel, missile);
-
-                CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
-                return;
-            }
-
-            // A charged shot (CreatureWindups.IsChargedShot) was aimed at a target its shooter
-            // could see; one who has gone behind something - a hill, a wall - while it charged is
-            // not hit through it, and the shot goes wide.
-            if (targetType == EntityType.Character && missile.AfterWindup && missile.Source is Creature charger
-                && CreatureWindups.IsChargedShot(missile.ActionId, missile.ActionArgId)
-                && !BehaviorManager.Sees(mapChannel, charger, missile.TargetActor))
-            {
-                missile.Args.MisstEntities.Add(missile.TargetEntityId);
-                missile.Args.Missdata.Add(MissTypeMiss);
 
                 CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
                 return;

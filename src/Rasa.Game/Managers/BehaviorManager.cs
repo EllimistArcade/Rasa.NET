@@ -3236,7 +3236,9 @@ namespace Rasa.Managers
             if (cover == null)
                 return true;
 
-            return Cover.Visible(cover, Cover.EyeOf(creature), Cover.SamplePoints(target, creature.Position)) > 0;
+            var eye = Cover.EyeOf(creature);
+
+            return Cover.Visible(cover, eye, Cover.SamplePoints(target, eye)) > 0;
         }
 
         /// <summary>

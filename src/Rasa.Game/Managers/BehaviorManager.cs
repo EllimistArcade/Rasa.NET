@@ -1335,7 +1335,10 @@ namespace Rasa.Managers
         /// its target, at the distance it stands from it, that is Spacing.Distance clear of the
         /// others of its side and where they are making for (Spacing.AroundClear). True while it
         /// is walking there: it neither attacks nor chases meanwhile. Once there, or with nowhere
-        /// clear to go, it is left be for Spacing.SettleMs. One that cannot walk, an emplacement
+        /// clear to go, it is left be for Spacing.SettleMs. With nowhere clear to go it says so
+        /// (ActionFighting.NoRoom), and the other of the pair steps off instead (Spacing.CrowdedBy):
+        /// otherwise the one hemmed in tried again every SettleMs and never moved, the other was
+        /// never asked to, and the pair stood 2 m apart for good. One that cannot walk, an emplacement
         /// on its mount, a Shield Drone holding its ground, one on the move, and one that does not
         /// keep apart (a friendly that is no escort, Spacing.Keeps) are never moved.
         /// </summary>
@@ -1366,8 +1369,14 @@ namespace Rasa.Managers
             }
 
             if (!Spacing.Keeps(creature) || NeverMoves(creature) || Emplacements.Is(creature) || ShieldDrone.HoldsGround(creature)
-                || creature.Controller.LastMovement is { Velocity: > 0 } || Spacing.CrowdedBy(mapChannel, creature) == null)
+                || creature.Controller.LastMovement is { Velocity: > 0 })
                 return false;
+
+            if (Spacing.CrowdedBy(mapChannel, creature) == null)
+            {
+                fighting.NoRoom = false;
+                return false;
+            }
 
             // At the distance it stands from its target, or - right up against it, where there is
             // no room round it for a spacing - out at the edge of its reach (NearEnoughFor).
@@ -1379,7 +1388,10 @@ namespace Rasa.Managers
             fighting.SettleMs = Spacing.SettleMs;
 
             if (spot == null || Spacing.AcrossGround(spot.Value, creature.Position) < 0.5f)
+            {
+                fighting.NoRoom = true;
                 return false;
+            }
 
             creature.Controller.Path.Clear();
             creature.Controller.PathIndex = 0;
@@ -1388,9 +1400,11 @@ namespace Rasa.Managers
             {
                 creature.Controller.Path.Clear();
                 creature.Controller.PathIndex = 0;
+                fighting.NoRoom = true;
                 return false;
             }
 
+            fighting.NoRoom = false;
             fighting.SpreadingTo = spot;
             fighting.SettleMs = 0;
             FollowPath(mapChannel, creature, creature.WalkSpeed >= 0.01f ? creature.WalkSpeed : creature.RunSpeed, delta);
@@ -2809,6 +2823,7 @@ namespace Rasa.Managers
             creature.Controller.ActionFighting.RouteIncomplete = false;
             creature.Controller.ActionFighting.SpreadingTo = null;
             creature.Controller.ActionFighting.SettleMs = 0;
+            creature.Controller.ActionFighting.NoRoom = false;
             creature.LastAgression = 0;
 
             // Whatever brought it here - the scan, a hit, an assist - the target is on its table.

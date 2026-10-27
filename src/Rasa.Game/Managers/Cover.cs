@@ -92,6 +92,9 @@ namespace Rasa.Managers
 
         public static Vector3 EyeOf(Actor actor) => actor.Position + new Vector3(0f, HeightOf(actor) * EyeFactor, 0f);
 
+        /// <summary>Half the actor's height above its feet: where a blast goes out from, or a single ray is cast to.</summary>
+        public static Vector3 Middle(Actor actor) => actor.Position + new Vector3(0f, HeightOf(actor) * 0.5f, 0f);
+
         /// <summary>The points on the target the rays are cast to, facing the attacker at <paramref name="from"/>.</summary>
         public static Vector3[] SamplePoints(Actor target, Vector3 from)
         {

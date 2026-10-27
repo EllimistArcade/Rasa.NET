@@ -1044,9 +1044,27 @@ namespace Rasa.Managers
             // The round flew as far as its target, and the splash is as weak as the round (RangeFalloff).
             var damage = RangeFalloff.Scale(missile.SplashDamage, missile.OptimalRange, shooter.Position, centre);
 
+            // The blast goes out from the middle of the target hit, and a wall or a force field
+            // between it and someone keeps it off them (InBlast): a grenade at a player in the
+            // open hit whoever was within five metres, the far side of a wall or a gate's field.
+            var blast = Cover.Middle(missile.TargetActor);
+
             foreach (var victim in victims)
-                if (victim != missile.TargetActor)
+                if (victim != missile.TargetActor && InBlast(mapChannel, shooter, blast, victim))
                     ExtraHit(mapChannel, missile, shooter, victim, damage, false);
+        }
+
+        /// <summary>
+        /// Whether a splash from <paramref name="blast"/> reaches the victim: any of its sample
+        /// points in the clear of the map's collision (Cover), and no intact force field that
+        /// stops the shooter in between (ForceFields.Blocks).
+        /// </summary>
+        internal static bool InBlast(MapChannel mapChannel, Actor shooter, Vector3 blast, Actor victim)
+        {
+            if (ForceFields.Blocks(mapChannel, shooter, blast, Cover.Middle(victim)))
+                return false;
+
+            return mapChannel?.Cover == null || Cover.Visible(mapChannel.Cover, blast, Cover.SamplePoints(victim, blast)) > 0;
         }
 
         /// <summary>
@@ -1320,7 +1338,7 @@ namespace Rasa.Managers
             // not hit through it, and the shot goes wide.
             if (targetType == EntityType.Character && missile.AfterWindup && missile.Source is Creature charger
                 && CreatureWindups.IsChargedShot(missile.ActionId, missile.ActionArgId)
-                && !BehaviorManager.Sees(mapChannel.Cover, charger, missile.TargetActor))
+                && !BehaviorManager.Sees(mapChannel, charger, missile.TargetActor))
             {
                 missile.Args.MisstEntities.Add(missile.TargetEntityId);
                 missile.Args.Missdata.Add(MissTypeMiss);

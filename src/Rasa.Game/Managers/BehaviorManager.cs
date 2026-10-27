@@ -526,10 +526,17 @@ namespace Rasa.Managers
                             var tCreatureX = tCreature.Position.X - difX;
                             var tCreatureY = tCreature.Position.Y - difY;
                             var tCreatureZ = tCreature.Position.Z - difZ;
+                            var pushed = new Vector3(creatureX, creatureY, creatureZ);
+                            var tPushed = new Vector3(tCreatureX, tCreatureY, tCreatureZ);
 
-                            // push
-                            creature.Position = new Vector3(creatureX, creatureY, creatureZ);
-                            tCreature.Position = new Vector3(tCreatureX, tCreatureY, tCreatureZ);
+                            // push - but not through a force field either of them may not pass
+                            // (ForceFields): a crowd held at a gate pushed its own through it.
+                            if (!ForceFields.Stops(mapChannel, creature, creature.Position, pushed) &&
+                                !ForceFields.Stops(mapChannel, tCreature, tCreature.Position, tPushed))
+                            {
+                                creature.Position = pushed;
+                                tCreature.Position = tPushed;
+                            }
                         }
                     }
                 }
@@ -3143,7 +3150,15 @@ namespace Rasa.Managers
                 // StopMoving, which records the stop: with the run's last step still on record it
                 // went on counting as moving (ToHit.IsMoving), and the next StopIfMoving sent it
                 // another stop.
-                creature.Position = NavMeshManager.SnapToGround(mapChannel, home);
+                //
+                // Not across a force field that stops it, though: it stands where it is. A Bane
+                // whose home is the outpost it is assaulting (a control point's attacker) was held
+                // at the gate's field on its way back there, and put inside when its time ran out.
+                var to = NavMeshManager.SnapToGround(mapChannel, home);
+
+                if (!ForceFields.Stops(mapChannel, creature, creature.Position, to))
+                    creature.Position = to;
+
                 StopMoving(creature);
                 arrived = true;
             }
@@ -3200,7 +3215,7 @@ namespace Rasa.Managers
         /// </summary>
         private static bool HasLineOfSight(MapChannel mapChannel, Creature creature, Actor target)
         {
-            if (target == null || mapChannel?.Cover == null)
+            if (target == null || mapChannel == null)
                 return true;
 
             var fighting = creature.Controller.ActionFighting;
@@ -3210,7 +3225,7 @@ namespace Rasa.Managers
 
             fighting.SightTargetId = target.EntityId;
             fighting.SightRecheckIn = SightRecheckMs;
-            fighting.SightClear = Sees(mapChannel.Cover, creature, target);
+            fighting.SightClear = Sees(mapChannel, creature, target);
 
             return fighting.SightClear;
         }
@@ -3222,6 +3237,22 @@ namespace Rasa.Managers
                 return true;
 
             return Cover.Visible(cover, Cover.EyeOf(creature), Cover.SamplePoints(target, creature.Position)) > 0;
+        }
+
+        /// <summary>
+        /// The same, on the map: and not through an intact force field that stops the creature
+        /// (ForceFields.Blocks), which stops its shots as it stops it. Every sample point is
+        /// behind the field or none is, so the middle of the target is enough to ask about.
+        /// </summary>
+        public static bool Sees(MapChannel mapChannel, Creature creature, Actor target)
+        {
+            if (target == null)
+                return true;
+
+            if (ForceFields.Blocks(mapChannel, creature, Cover.EyeOf(creature), Cover.Middle(target)))
+                return false;
+
+            return Sees(mapChannel?.Cover, creature, target);
         }
 
         #endregion

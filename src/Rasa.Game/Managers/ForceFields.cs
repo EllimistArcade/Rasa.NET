@@ -506,8 +506,13 @@ namespace Rasa.Managers
         /// <summary>
         /// Whether the step from one point to the next passes through the field's sheet: the
         /// segment, taken into the field's own frame, against its box grown by
-        /// <see cref="CreatureRadius"/> across and <see cref="BelowSheet"/> under it. A step that
-        /// starts inside it already is let out.
+        /// <see cref="CreatureRadius"/> across and <see cref="BelowSheet"/> under it.
+        ///
+        /// A step that starts inside the box already is let out, but only back the way it came:
+        /// one that would carry it over the middle of the sheet to the other side is stopped.
+        /// Letting out every step from inside let a creature that had been put within half a
+        /// metre of the sheet - by the crowd pushing it, a knockback's last step - walk on
+        /// through it: Bane at an AFS gate leaked into the outpost behind it.
         /// </summary>
         public static bool Crosses(FieldClass fieldClass, Vector3 position, float yaw, Vector3 from, Vector3 to)
         {
@@ -519,9 +524,62 @@ namespace Rasa.Managers
             var max = fieldClass.Max + new Vector3(CreatureRadius, 0f, CreatureRadius);
 
             if (Inside(a, min, max))
-                return false;
+                return CrossesMiddle(a, b, (fieldClass.Min.Z + fieldClass.Max.Z) / 2f, min, max);
 
             return SegmentHitsBox(a, b, min, max);
+        }
+
+        /// <summary>Whether a step (in the field's frame) goes over the sheet's middle, within its extent across and up.</summary>
+        private static bool CrossesMiddle(Vector3 a, Vector3 b, float middle, Vector3 min, Vector3 max)
+        {
+            var before = a.Z - middle;
+            var after = b.Z - middle;
+
+            if (before == 0f ? after == 0f : before * after > 0f)
+                return false;
+
+            var t = Math.Abs(b.Z - a.Z) < 1e-6f ? 0f : (middle - a.Z) / (b.Z - a.Z);
+            var at = a + (b - a) * t;
+
+            return at.X >= min.X && at.X <= max.X && at.Y >= min.Y && at.Y <= max.Y;
+        }
+
+        /// <summary>
+        /// Whether an intact field that stops this actor stands between two points: a line of
+        /// fire. An AFS field stops the Bane's shots as it stops the Bane, and a Bane field
+        /// players' shots, as it stops them; a field lets through the shots of those it lets
+        /// through. Against the sheet as it is across, not grown as for a body walking into it,
+        /// and down to <see cref="BelowSheet"/> under it, as for one: a field stands to the ground
+        /// it is put on, whatever its mesh's lowest point.
+        /// </summary>
+        public static bool Blocks(MapChannel mapChannel, Actor shooter, Vector3 from, Vector3 to)
+        {
+            if (mapChannel == null || shooter == null)
+                return false;
+
+            foreach (var field in OnMap(mapChannel))
+            {
+                if (field.IsDestroyed)
+                    continue;
+
+                var stops = shooter switch
+                {
+                    Manifestation => StopsPlayers(field.Side),
+                    Creature creature => StopsCategory(field.Side, creature.TargetCategory),
+                    _ => false
+                };
+
+                if (!stops)
+                    continue;
+
+                var inverse = Quaternion.Inverse(Quaternion.CreateFromYawPitchRoll(field.Yaw, 0f, 0f));
+
+                if (SegmentHitsBox(Vector3.Transform(from - field.Position, inverse), Vector3.Transform(to - field.Position, inverse),
+                        field.Class.Min - new Vector3(0f, BelowSheet, 0f), field.Class.Max))
+                    return true;
+            }
+
+            return false;
         }
 
         private static bool Inside(Vector3 p, Vector3 min, Vector3 max) =>

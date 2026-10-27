@@ -155,6 +155,28 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// The share of the points in the clear of the map's collision and of its standing force
+        /// fields (ForceFields.Between), which stop a shot as a wall does.
+        /// </summary>
+        public static double Visible(MapChannel mapChannel, Vector3 eye, Vector3[] points)
+        {
+            if (!ForceFields.AnyStanding(mapChannel))
+                return Visible(mapChannel?.Cover, eye, points);
+
+            if (points.Length == 0)
+                return 1.0;
+
+            var cover = mapChannel.Cover;
+            var clear = 0;
+
+            foreach (var point in points)
+                if ((cover == null || !cover.Blocked(eye, point)) && ForceFields.Between(mapChannel, eye, point) == null)
+                    clear++;
+
+            return clear / (double)points.Length;
+        }
+
+        /// <summary>
         /// The modifier from the share in the clear: the cover's share, scaled by what of it still
         /// counts (Target Painting), taken off 1, floored at <see cref="MinModifier"/>. A target in
         /// the open is 1 whatever else.

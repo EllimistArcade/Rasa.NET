@@ -791,6 +791,18 @@ namespace Rasa.Managers
             Announce(mapChannel, PlayerMessage.PmControlpointClaiming, point, clanId != 0 ? ClanName(clanId) ?? FactionName(Afs) : FactionName(Afs));
         }
 
+        /// <summary>The claiming key the Bane are announced by, no clan's (<see cref="MayAnnounceClaim(Point, uint, long)"/>).</summary>
+        internal const uint BaneClaimant = uint.MaxValue;
+
+        /// <summary>A Bane assault has begun claiming the point (LandingZoneAssaults): "Bane claiming", to everyone on the map.</summary>
+        public void BaneClaiming(MapChannel mapChannel, Point point)
+        {
+            if (point == null || !MayAnnounceClaim(point, BaneClaimant, Now()))
+                return;
+
+            Announce(mapChannel, PlayerMessage.PmControlpointClaiming, point, FactionName(Bane));
+        }
+
         /// <summary>
         /// A player's use of a control point has run its time (DynamicObjectManager): the point
         /// is their clan's, or the AFS's if they are in none, unless it is not the Bane's any

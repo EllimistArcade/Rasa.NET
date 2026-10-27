@@ -143,6 +143,12 @@ namespace Rasa.Structures
         public long LastRestTime { get; internal set; }
         public bool IsInteractable { get; set; } = true;
         internal Func<bool> ScriptedCombatGate { get; set; }
+
+        /// <summary>
+        /// Making for a control point to claim it (LandingZoneAssaults): it looks for no fight and
+        /// turns on nobody who hits it - the harm breaks its claim off instead. Not copied from a template.
+        /// </summary>
+        internal bool OnClaimDuty { get; set; }
         internal Game.Missions.World.ScriptedCombatAuthorization ScriptedCombatAuthorization { get; set; }
 
         /// <summary>

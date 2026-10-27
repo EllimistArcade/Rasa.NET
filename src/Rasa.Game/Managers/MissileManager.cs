@@ -673,6 +673,14 @@ namespace Rasa.Managers
                     continue;
                 }
 
+                // A creature dead or dying since it fired: the shot is dropped, its recovery with
+                // it, so its body is not seen firing after its death - the recovery is what plays
+                // the shot on the clients.
+                if (!missile.AfterWindup && missile.Source is Creature fallen
+                    && (fallen.State == CharacterState.Dead || fallen.State == CharacterState.Dying
+                        || !fallen.Attributes.TryGetValue(Attributes.Health, out var fallenHealth) || fallenHealth.Current <= 0))
+                    continue;
+
                 // A shot held for its flight (ShotFlight) whose shooter has left the map since -
                 // through a waypoint, or out of the game: it lands on nothing. The shooter's
                 // cell is where its recovery is sent, and that is on another map now.
@@ -1307,6 +1315,25 @@ namespace Rasa.Managers
                     missile.Args.Missdata.Add(MissTypeMiss);
                 }
                 Logger.WriteLog(LogType.Debug, $"Retired manual-combat missile from {manual.EntityId} was rejected.");
+                CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
+                return;
+            }
+
+            // A standing force field between them takes the shot, whichever way it is going: in
+            // from outside or out from inside (ForceFields.Stopping) - before the sight check
+            // below, which would only have it go wide. It goes into the field - as
+            // damage, if its shooter is one the field stops and may hurt it (MayShoot) - and is a
+            // miss on what it was aimed at. A melee blow through the sheet is stopped as well.
+            if ((targetType == EntityType.Character || targetType == EntityType.Creature) && missile.Source != null
+                && ForceFields.Stopping(mapChannel, missile.Source, missile.TargetActor) is ForceFields.Field wall)
+            {
+                if (ForceFields.MayShoot(wall, missile.Source))
+                    ForceFields.Damage(wall, missile.DamageA, missile.Source.EntityId);
+
+                missile.DamageA = 0;
+                missile.Args.MisstEntities.Add(missile.TargetEntityId);
+                missile.Args.Missdata.Add(MissTypeMiss);
+
                 CellManager.Instance.CellCallMethod(mapChannel, missile.Source, CreatureAttacks.RecoveryFor(missile));
                 return;
             }

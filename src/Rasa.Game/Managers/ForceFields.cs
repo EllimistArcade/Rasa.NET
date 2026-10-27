@@ -472,6 +472,65 @@ namespace Rasa.Managers
 
         #endregion
 
+        #region Blocking shots
+
+        /// <summary>
+        /// The intact field a shot from one point to the other goes through, or null: any side's,
+        /// for a field stops fire both ways - in from outside and out from inside - whoever it
+        /// lets walk through it. The sheet as its mesh has it, down to <see cref="BelowSheet"/>
+        /// under it, so a shot cannot be slipped under its lower edge (<see cref="CrossesShot"/>).
+        /// <paramref name="except"/> is a field the shot is aimed at, which it reaches.
+        /// </summary>
+        public static Field Between(MapChannel mapChannel, Vector3 from, Vector3 to, ulong except = 0)
+        {
+            if (mapChannel == null)
+                return null;
+
+            foreach (var field in OnMap(mapChannel))
+                if (!field.IsDestroyed && field.Object.EntityId != except && CrossesShot(field.Class, field.Position, field.Yaw, from, to))
+                    return field;
+
+            return null;
+        }
+
+        /// <summary>Whether the map channel has a field standing at all: the cheap test before the line tests.</summary>
+        public static bool AnyStanding(MapChannel mapChannel)
+        {
+            if (mapChannel == null)
+                return false;
+
+            lock (FieldsLock)
+                return Fields.Any(f => f.MapChannel == mapChannel && !f.IsDestroyed);
+        }
+
+        /// <summary>
+        /// The field a shot from the attacker at the target goes into, or null: one standing
+        /// between the attacker's eyes and every point of the target a shot is judged by
+        /// (Cover.SamplePoints). A target only partly behind the edge of a field is still hit.
+        /// </summary>
+        public static Field Stopping(MapChannel mapChannel, Actor attacker, Actor target)
+        {
+            if (attacker == null || target == null || !AnyStanding(mapChannel))
+                return null;
+
+            var eye = Cover.EyeOf(attacker);
+            Field first = null;
+
+            foreach (var point in Cover.SamplePoints(target, eye))
+            {
+                var field = Between(mapChannel, eye, point);
+
+                if (field == null)
+                    return null;
+
+                first ??= field;
+            }
+
+            return first;
+        }
+
+        #endregion
+
         #region Blocking creatures
 
         /// <summary>
@@ -545,41 +604,28 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Whether an intact field that stops this actor stands between two points: a line of
-        /// fire. An AFS field stops the Bane's shots as it stops the Bane, and a Bane field
-        /// players' shots, as it stops them; a field lets through the shots of those it lets
-        /// through. Against the sheet as it is across, not grown as for a body walking into it,
-        /// and down to <see cref="BelowSheet"/> under it, as for one: a field stands to the ground
-        /// it is put on, whatever its mesh's lowest point.
+        /// Whether an intact field stands between two points: a line of fire. Any side's field
+        /// stops fire both ways - the Bane's in at an AFS outpost and its defenders' out of it,
+        /// and the same at a Bane field - whoever it lets walk through it (<see cref="Between"/>).
+        /// <paramref name="shooter"/> is who fires, for the callers' sake; it does not change
+        /// what the field stops.
         /// </summary>
-        public static bool Blocks(MapChannel mapChannel, Actor shooter, Vector3 from, Vector3 to)
+        public static bool Blocks(MapChannel mapChannel, Actor shooter, Vector3 from, Vector3 to) =>
+            shooter != null && Between(mapChannel, from, to) != null;
+
+        /// <summary>
+        /// Whether a shot from one point to the next passes through the field's sheet: its box,
+        /// a few centimetres thick, and <see cref="BelowSheet"/> under it - not grown across as
+        /// it is for a creature's body, nor let out from inside it, so a shooter pressed against
+        /// the sheet does not shoot through it.
+        /// </summary>
+        public static bool CrossesShot(FieldClass fieldClass, Vector3 position, float yaw, Vector3 from, Vector3 to)
         {
-            if (mapChannel == null || shooter == null)
-                return false;
+            var inverse = Quaternion.Inverse(Quaternion.CreateFromYawPitchRoll(yaw, 0f, 0f));
+            var a = Vector3.Transform(from - position, inverse);
+            var b = Vector3.Transform(to - position, inverse);
 
-            foreach (var field in OnMap(mapChannel))
-            {
-                if (field.IsDestroyed)
-                    continue;
-
-                var stops = shooter switch
-                {
-                    Manifestation => StopsPlayers(field.Side),
-                    Creature creature => StopsCategory(field.Side, creature.TargetCategory),
-                    _ => false
-                };
-
-                if (!stops)
-                    continue;
-
-                var inverse = Quaternion.Inverse(Quaternion.CreateFromYawPitchRoll(field.Yaw, 0f, 0f));
-
-                if (SegmentHitsBox(Vector3.Transform(from - field.Position, inverse), Vector3.Transform(to - field.Position, inverse),
-                        field.Class.Min - new Vector3(0f, BelowSheet, 0f), field.Class.Max))
-                    return true;
-            }
-
-            return false;
+            return SegmentHitsBox(a, b, fieldClass.Min - new Vector3(0f, BelowSheet, 0f), fieldClass.Max);
         }
 
         private static bool Inside(Vector3 p, Vector3 min, Vector3 max) =>

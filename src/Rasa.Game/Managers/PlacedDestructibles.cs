@@ -46,7 +46,8 @@ namespace Rasa.Managers
     /// <see cref="MediumHitPoints"/>, <see cref="LargeHitPoints"/> (<see cref="SizeOf"/>); a force
     /// field ForceFields.DefaultHealth. Only players hurt them (PracticeTargetManager.CanHit); a
     /// force field, whoever it stops. Destroyed, one is back <see cref="RespawnMinMs"/> to
-    /// <see cref="RespawnMaxMs"/> later at full hit points. Every map channel has its own.
+    /// <see cref="RespawnMaxMs"/> later at full hit points - a force field <see cref="FieldRespawnMs"/>
+    /// later, and not while an assault on the point it guards goes on. Every map channel has its own.
     ///
     /// A spawner's creature is the row's, or its class's (<see cref="SpawnerDefaults"/>): the
     /// creature of that kind the map's spawn pools use most, or one of the kind if they use none.
@@ -66,6 +67,12 @@ namespace Rasa.Managers
 
         public const long RespawnMinMs = WorldDestructibles.RespawnMinMs;
         public const long RespawnMaxMs = WorldDestructibles.RespawnMaxMs;
+
+        /// <summary>
+        /// How long a force field taken down stays down, on an ordinary map: a gate shot open is
+        /// open for ten minutes, not the minute a barrel takes to come back. Ours.
+        /// </summary>
+        public const long FieldRespawnMs = 600_000;
 
         /// <summary>How near on the ground a living player sets off a creature spawner (61).</summary>
         public const float SpawnerTriggerRadius = 20f;
@@ -859,6 +866,15 @@ namespace Rasa.Managers
             return now + Math.Clamp(Roll(RespawnMinMs, RespawnMaxMs), RespawnMinMs, RespawnMaxMs);
         }
 
+        /// <summary>When a force field taken down now is back: <see cref="FieldRespawnMs"/> on, or a squad instance's own respawn.</summary>
+        public static long FieldRespawnAtFor(MapChannel map, long now)
+        {
+            if (map?.SquadState != null)
+                return RespawnAtFor(map, now);
+
+            return now + FieldRespawnMs;
+        }
+
         /// <summary>Takes it down at once, as if shot down by <paramref name="by"/> (.destructible kill). False if it is down already.</summary>
         public static bool Destroy(Live live, Actor by)
         {
@@ -899,10 +915,11 @@ namespace Rasa.Managers
 
                 if (live.IsDown)
                 {
-                    // A force field ForceFields took down: when it is due back.
+                    // A force field ForceFields took down: when it is due back - not while the
+                    // assault that broke it is still on (LandingZoneAssaults.HoldsDown).
                     if (live.RespawnAt == 0)
-                        live.RespawnAt = RespawnAtFor(map, now);
-                    else if (now >= live.RespawnAt)
+                        live.RespawnAt = live.Field != null ? FieldRespawnAtFor(map, now) : RespawnAtFor(map, now);
+                    else if (now >= live.RespawnAt && !(live.Field != null && LandingZoneAssaults.HoldsDown(map, live.Field)))
                         Respawn(live);
 
                     continue;

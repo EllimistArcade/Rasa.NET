@@ -100,7 +100,7 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
-        public void AnAfsFieldStopsTheBanesFireAndNotThePlayersAndABaneFieldTheOtherWay()
+        public void AFieldStopsFireBothWaysWhoeverItLetsThrough()
         {
             using var world = new WorldTestContext();
             var bane = Spawn(world, 10, -5f);
@@ -111,13 +111,13 @@ namespace Rasa.Test.World
 
             try
             {
-                Assert.IsTrue(ForceFields.Blocks(world.Map, bane, outside, inside), "the Bane's shot");
-                Assert.IsFalse(ForceFields.Blocks(world.Map, player, inside, outside), "the defenders shoot out");
+                Assert.IsTrue(ForceFields.Blocks(world.Map, bane, outside, inside), "the Bane's shot in");
+                Assert.IsTrue(ForceFields.Blocks(world.Map, player, inside, outside), "nor do the defenders shoot out");
                 Assert.IsFalse(ForceFields.Blocks(world.Map, bane, new Vector3(30, 1.5f, -5), new Vector3(30, 1.5f, 5)), "beside it");
                 Assert.IsFalse(ForceFields.Blocks(world.Map, bane, new Vector3(10, 15f, -5), new Vector3(10, 15f, 5)), "over it");
 
                 ForceFields.SetSide(field, ForceFields.Side.B);
-                Assert.IsFalse(ForceFields.Blocks(world.Map, bane, outside, inside));
+                Assert.IsTrue(ForceFields.Blocks(world.Map, bane, outside, inside), "a Bane field the same");
                 Assert.IsTrue(ForceFields.Blocks(world.Map, player, inside, outside));
 
                 field.Health = 0;

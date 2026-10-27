@@ -3242,9 +3242,9 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// The same, on the map: and not through an intact force field that stops the creature
-        /// (ForceFields.Blocks), which stops its shots as it stops it. Every sample point is
-        /// behind the field or none is, so the middle of the target is enough to ask about.
+        /// The same, on the map: and not through an intact force field (ForceFields.Blocks), which
+        /// stops fire both ways. Every sample point is behind the field or none is, so the middle
+        /// of the target is enough to ask about.
         /// </summary>
         public static bool Sees(MapChannel mapChannel, Creature creature, Actor target)
         {
@@ -3397,7 +3397,7 @@ namespace Rasa.Managers
         /// </summary>
         private static bool ScansForEnemies(Creature creature)
         {
-            if (creature.ScriptedCombatGate != null)
+            if (creature.ScriptedCombatGate != null || creature.OnClaimDuty)
                 return false;
 
             var pump = AbilityManager.MindControlPumpOf(creature);

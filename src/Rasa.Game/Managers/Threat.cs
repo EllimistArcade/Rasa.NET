@@ -89,7 +89,8 @@ namespace Rasa.Managers
             victim.Hate.Ensure(attacker.EntityId, NoticedThreat);
             victim.Hate.Add(attacker.EntityId, hate);
 
-            if (victim.Controller != null
+            // One making for a control point to claim it keeps going (LandingZoneAssaults).
+            if (victim.Controller != null && !victim.OnClaimDuty
                 && (victim.Controller.CurrentAction == BehaviorManager.BehaviorActionWander
                     || victim.Controller.CurrentAction == BehaviorManager.BehaviorActionPatrol
                     || victim.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath

@@ -280,6 +280,76 @@ namespace Rasa.Test.World
             }
             finally { LandingZoneAssaults.Now = old; }
         }
+        private Creature Defender(Vector3 at)
+        {
+            var pool = new SpawnPool { RuntimeMapChannel = _world.Map, MapContextId = 1220 };
+            var c = CreatureManager.Instance.CreateCreature(LandingZoneGarrisonContent.Rifleman, pool);
+            CreatureManager.Instance.SetLocation(c, NavMeshManager.NearestWalkable(_world.Map, at) ?? at, 0, 1220);
+            c.IsScripted = true;
+            CellManager.Instance.AddToWorld(_world.Map, c);
+            return c;
+        }
+        private static int Vitality(Creature c) => c.Attributes[Attributes.Health].Current + c.Attributes[Attributes.Armor].Current;
+        private int Volley(Creature from, Creature at)
+        {
+            var before = Vitality(at);
+            for (var i = 0; i < 12; i++)
+            {
+                MissileManager.Instance.MissileLaunch(_world.Map, new ActionData(from, ActionId.WeaponAttack, 79, at.EntityId, 0), 10, landsInMs: 100);
+                MissileManager.Instance.DoWork(_world.Map, 100);
+            }
+            return before - Vitality(at);
+        }
+        [TestMethod]
+        public void TheFieldStopsFireBothWaysAndTakesTheBaneShotsOnlyOnceItMayBeShot()
+        {
+            var bane = Attacker();
+            bane.ImmuneToAllDamage = false;
+            var afs = Defender(new Vector3(198, 164, -50));
+            Assert.IsTrue(ForceFields.Between(_world.Map, Cover.EyeOf(bane), Cover.EyeOf(afs)) == _field);
+            Assert.IsFalse(BehaviorManager.Sees(_world.Map, bane, afs), "the Bane outside cannot see to shoot in");
+            Assert.IsFalse(BehaviorManager.Sees(_world.Map, afs, bane), "nor the AFS inside to shoot out");
+
+            Assert.AreEqual(0, Volley(bane, afs), "in from outside: nothing through");
+            Assert.AreEqual(0, Volley(afs, bane), "out from inside: nothing through");
+            Assert.AreEqual(200, _field.Health, "and the field takes nothing before the frontline falls");
+
+            Deploy(); ClearFront();
+            Assert.AreEqual(0, Volley(bane, afs));
+            Assert.IsTrue(_field.Health < 200, "once it may be shot, a shot at someone behind it goes into it");
+            var field = _field.Health;
+            Assert.AreEqual(0, Volley(afs, bane));
+            Assert.AreEqual(field, _field.Health, "the AFS do not wear down their own field");
+
+            ForceFields.Damage(_field, _field.Health, 0);
+            Assert.IsTrue(BehaviorManager.Sees(_world.Map, bane, afs));
+            Assert.IsTrue(Volley(bane, afs) > 0, "down, it stops nothing");
+            Assert.IsTrue(Volley(afs, bane) > 0);
+        }
+        [TestMethod]
+        public void AShotUnderTheSheetsLowerEdgeIsStoppedAsWell()
+        {
+            var bane = Attacker();
+            var afs = Defender(new Vector3(198, 164, -50));
+            afs.IsCrouching = true;
+            foreach (var point in Cover.SamplePoints(afs, Cover.EyeOf(bane)))
+                Assert.IsNotNull(ForceFields.Between(_world.Map, Cover.EyeOf(bane), point), $"{point}");
+        }
+        [TestMethod]
+        public void ACreatureKilledWithAShotInTheAirFiresNothingMore()
+        {
+            var bane = Attacker();
+            bane.ImmuneToAllDamage = false;
+            var afs = Defender(new Vector3(205, 164, -14));
+            _world.Drain();
+            var before = Vitality(afs);
+            MissileManager.Instance.MissileLaunch(_world.Map, new ActionData(bane, ActionId.WeaponAttack, 79, afs.EntityId, 0), 40, landsInMs: 500);
+            Kill(bane);
+            _world.Drain();
+            MissileManager.Instance.DoWork(_world.Map, 500);
+            Assert.AreEqual(before, Vitality(afs));
+            Assert.AreEqual(0, _world.Drain().OfType<Rasa.Packets.MapChannel.Server.PerformRecovery.WeaponAttackRecovery>().Count(), "its body is not seen to fire");
+        }
         [TestMethod]
         public void MySqlMigrationEmitsTheSameRetirementAndRollbackStatements()
         {

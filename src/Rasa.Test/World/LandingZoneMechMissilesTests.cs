@@ -27,7 +27,7 @@ namespace Rasa.Test.World
     [TestClass, DoNotParallelize]
     public class LandingZoneMechMissilesTests
     {
-        private const string Migration = "20270925000000_Landing_zone_mech_missiles";
+        private const string Migration = "20270926000000_Landing_zone_mech_missiles";
 
         [TestMethod]
         public void UpGivesTheDefenderTheMechsMissilesOnceAndDownTakesThemOff()
@@ -51,6 +51,30 @@ namespace Rasa.Test.World
             migrator.Migrate(previous);
             Assert.AreEqual((13L, 0L), Slots(database, LandingZoneMechMissiles.Defender), "Down takes them off");
             Assert.AreEqual((13L, 15L), Slots(database, 40), "and leaves the world's own Mech alone");
+        }
+
+        [TestMethod]
+        public void AWorldThatRanItUnderTheOldIdKeepsTheMissilesAndOnlyTheNewHistoryRow()
+        {
+            using var database = new OrdinaryLootTestDatabase();
+            var migrator = database.Context.GetService<IMigrator>();
+            var all = database.Context.Database.GetMigrations().ToList();
+            var previous = all[all.IndexOf(Migration) - 1];
+
+            migrator.Migrate(previous);
+            foreach (var sql in LandingZoneMechMissiles.Up())
+                database.Context.Database.ExecuteSqlRaw(sql);
+            database.Context.Database.ExecuteSqlRaw(
+                $"INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('{LandingZoneMechMissiles.OldId}', '9.0.20')");
+
+            CollectionAssert.Contains(database.Context.Database.GetPendingMigrations().ToList(), Migration);
+
+            migrator.Migrate(Migration);
+
+            Assert.AreEqual((13L, 15L), Slots(database, LandingZoneMechMissiles.Defender), "the missiles, once");
+            var history = database.Context.Database.GetAppliedMigrations().ToList();
+            CollectionAssert.Contains(history, Migration);
+            CollectionAssert.DoesNotContain(history, LandingZoneMechMissiles.OldId);
         }
 
         [TestMethod]

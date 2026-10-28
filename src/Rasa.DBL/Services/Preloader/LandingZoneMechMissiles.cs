@@ -18,6 +18,13 @@ namespace Rasa.Services.Preloader
         public const uint Defender = LandingZoneGarrisonContent.Mech;
         public const uint Minigun = 13, Missiles = 15;
 
+        /// <summary>The id the migration first had, 20270925000000, which Gate_field_nooks shares.</summary>
+        public const string OldId = "20270925000000_Landing_zone_mech_missiles";
+
+        /// <summary>The history row a World that ran it under OldId still has.</summary>
+        public static readonly string ForgetOldId =
+            $"DELETE FROM __EFMigrationsHistory WHERE MigrationId = '{OldId}';";
+
         public static IEnumerable<string> Up()
         {
             yield return $"UPDATE creature SET action2 = {Missiles} WHERE id = {Defender} AND action1 = {Minigun} AND action2 = 0 " +

@@ -145,6 +145,13 @@ namespace Rasa.Structures
         internal Func<bool> ScriptedCombatGate { get; set; }
 
         /// <summary>
+        /// Players and their summons may fight it, but no other creature seeks it out or turns on
+        /// it: a public encounter's negotiator left free between runs (Overseer Skeev beside
+        /// Burke), who would otherwise be shot down by the AFS standing round him.
+        /// </summary>
+        internal bool KeptFromCreatures { get; set; }
+
+        /// <summary>
         /// Making for a control point to claim it (LandingZoneAssaults): it looks for no fight and
         /// turns on nobody who hits it - the harm breaks its claim off instead. Not copied from a template.
         /// </summary>

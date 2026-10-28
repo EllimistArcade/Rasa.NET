@@ -249,6 +249,9 @@ namespace Rasa.Managers
                 if (!Game.Missions.World.CreatureGameplayRules.CanParticipateInCombat(tCreature))
                     continue;
 
+                if (tCreature.KeptFromCreatures && creature.MasterEntityId == 0)
+                    continue;
+
                 if (tCreature == creature)
                     continue;
 
@@ -2893,6 +2896,10 @@ namespace Rasa.Managers
             if (EntityManager.Instance.Creatures.TryGetValue(entityId, out var other))
             {
                 if (other == creature || LandingZoneAssaultTargeting.IsServiceTarget(creature, other) || !Game.Missions.World.CreatureGameplayRules.CanParticipateInCombat(other))
+                    return false;
+
+                // A negotiator left free is the players' to fight, not the creatures' round him.
+                if (other.KeptFromCreatures && creature.MasterEntityId == 0)
                     return false;
 
                 if (pump == AbilityManager.MindControlConfusion)

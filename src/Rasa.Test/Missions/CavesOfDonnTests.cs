@@ -279,6 +279,54 @@ namespace Rasa.Test.Missions
         }
 
         [TestMethod]
+        public void LogosKnownBeforeTheReasonWhyIsTakenCountForIt()
+        {
+            using var harness = Create();
+            Know(harness, D.TrapLogos, D.FeelingLogos, D.HealLogos);
+
+            WildernessTwinPillarsTests.Accept(harness, Put(harness, D.Nekala, D.NekalaAtMarFend), D.TheReasonWhy);
+
+            foreach (var objective in DonnKnownLogos.LogosObjectives)
+                Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, D.TheReasonWhy, objective), $"objective {objective}");
+            Assert.AreEqual(MissionObjectiveState.Incomplete, Objective(harness, D.TheReasonWhy, 1), "the ruins are still to be visited");
+        }
+
+        /// <summary>
+        /// Taken before the fix, by a player who had the Logos already: no shrine teaches them
+        /// again, so the objective waited for good. It counts when they next come into the world.
+        /// </summary>
+        [TestMethod]
+        public void AnOpenReasonWhyCountsAKnownLogosWhenThePlayerComesIn()
+        {
+            using var harness = Create();
+            WildernessTwinPillarsTests.Accept(harness, Put(harness, D.Nekala, D.NekalaAtMarFend), D.TheReasonWhy);
+            Know(harness, D.FeelingLogos);
+            Assert.AreEqual(MissionObjectiveState.Incomplete, Objective(harness, D.TheReasonWhy, 12), "known, with nothing to tell the mission so");
+
+            harness.Manager.PublishInitialState(harness.Client);
+            harness.Drain();
+
+            Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, D.TheReasonWhy, 12), "Feeling");
+            Assert.AreEqual(MissionObjectiveState.Incomplete, Objective(harness, D.TheReasonWhy, 11), "not Trap, which they do not know");
+            Assert.AreEqual(MissionObjectiveState.Incomplete, Objective(harness, D.TheReasonWhy, 13), "nor Heal");
+        }
+
+        /// <summary>Each brazier on the walkable floor it is lit from, with none over it: the Eloh Chantry's front right stood in the cave floor under its shrine.</summary>
+        [TestMethod]
+        public void NoBrazierStandsUnderTheFloor()
+        {
+            using var harness = Create();
+
+            foreach (var test in D.Tests)
+                foreach (var brazier in test.Braziers)
+                {
+                    var from = harness.Map.NavMesh.GroundHeight(brazier + new Vector3(0, 2.5f, 0));
+                    Assert.IsNotNull(from, $"{test.Name} {brazier}");
+                    Assert.IsTrue(Math.Abs(from.Value - brazier.Y) < 0.5f, $"{test.Name} {brazier}: the floor over it is at {from}");
+                }
+        }
+
+        [TestMethod]
         public void TheGateOpensForTheThreeLogosAndTheChamberIsBehindIt()
         {
             using var harness = Create();
@@ -505,6 +553,20 @@ namespace Rasa.Test.Missions
             var lethal = creature.Attributes[Attributes.Health].Current + Math.Max(0, creature.Attributes[Attributes.Armor].Current);
             ActorManager.Instance.Damage(harness.Map, creature, lethal, harness.Client.Player);
             harness.Drain();
+        }
+
+        /// <summary>Logos the character has had since before: in the database and on the player, with nothing learned now.</summary>
+        private static void Know(WildernessRuntimeTestHarness harness, params uint[] logoses)
+        {
+            using (var context = harness.Context.Open())
+            {
+                foreach (var logos in logoses)
+                    context.CharacterLogosEntries.Add(new CharacterLogosEntry(harness.Client.Player.Id, logos));
+                context.SaveChanges();
+            }
+
+            foreach (var logos in logoses)
+                harness.Client.Player.Logos.Add(logos);
         }
 
         /// <summary>A Logos learned, as a shrine teaches it.</summary>

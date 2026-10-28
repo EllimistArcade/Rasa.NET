@@ -123,12 +123,14 @@ namespace Rasa.Test.Database
         // So does the published 20270923000000 pair: Control_point_teleporter_links writes
         // control_point_link rows; Daghdas_urn_building_regions changes three map_region rows'
         // region ids. They share no table, and both are applied on development, so both ids stay.
+        // And the published 20270924000000 pair: Donn_known_logos swaps The Reason Why's
+        // mission_scene_binding; Landing_zone_gate_field writes a control_point_link row. The same.
         // A new pair is a mistake: EF runs both, ordered by the rest of the id, whatever was meant.
         [TestMethod]
         public void NoNewMigrationSharesATimestamp()
         {
             var known = new[] { "20260927000000", "20260930000000", "20261012000000", "20261104000000", "20261111000000", "20261203000000",
-                "20261230000000", "20261231000000", "20270109000000", "20270111000000", "20270114000000", "20270115000000", "20270116000000", "20270117000000", "20270120000000", "20270125000000", "20270315000000", "20270923000000" };
+                "20261230000000", "20261231000000", "20270109000000", "20270111000000", "20270114000000", "20270115000000", "20270116000000", "20270117000000", "20270120000000", "20270125000000", "20270315000000", "20270923000000", "20270924000000" };
 
             using var database = new OrdinaryLootTestDatabase();
             var ids = database.Context.Database.GetMigrations().ToArray();
@@ -155,7 +157,7 @@ namespace Rasa.Test.Database
             var known = new System.Collections.Generic.Dictionary<string, string[]>
             {
                 ["World"] = new[] { "20260927000000", "20260930000000", "20261012000000", "20261104000000", "20261111000000", "20261203000000",
-                    "20261230000000", "20261231000000", "20270109000000", "20270111000000", "20270114000000", "20270115000000", "20270116000000", "20270117000000", "20270120000000", "20270125000000", "20270315000000", "20270923000000" },
+                    "20261230000000", "20261231000000", "20270109000000", "20270111000000", "20270114000000", "20270115000000", "20270116000000", "20270117000000", "20270120000000", "20270125000000", "20270315000000", "20270923000000", "20270924000000" },
                 ["Char"] = new[] { "20261110000000", "20261215000000" },
                 ["Auth"] = new string[0]
             };

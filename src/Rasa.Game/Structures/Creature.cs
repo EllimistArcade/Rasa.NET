@@ -164,6 +164,9 @@ namespace Rasa.Structures
         /// <summary>Whether it has its weapon out (CreatureWeaponDraw): TOOL_READY on the clients.</summary>
         public bool WeaponDrawn { get; set; }
 
+        /// <summary>How long the last attack it started has left to play on the clients, in ms (CreatureActing); counted down with its cooldowns.</summary>
+        public long ActingMs { get; set; }
+
         /// <summary>
         /// The beat it walks when it has nothing else to do (Patrols): its pool's, given as the
         /// pool makes it; null for a creature with none. Where it is on it is in its Controller's

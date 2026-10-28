@@ -1060,6 +1060,16 @@ namespace Rasa.Managers
                         continue;
                     }
 
+                    // Its last attack still playing on the clients (CreatureActing): none starts
+                    // until it has - the client plays one action at a time and queues what comes
+                    // meanwhile - and it holds where it is, as for an attack cooling down.
+                    if (CreatureActing.IsActing(creature))
+                    {
+                        needToMove = false;
+                        MadeProgress(creature);
+                        break;
+                    }
+
                     if (action.CooldownTimer > 0)
                     {
                         // An attack cooling down holds its creature at this range only if there
@@ -1112,6 +1122,8 @@ namespace Rasa.Managers
                         UpdateEntityMovement(targetDistX, targetDistY, targetDistZ, creature, mapChannel, 0.0f, false, delta);
 
                         action.CooldownTimer = NextCooldown(creature, action);
+
+                        CreatureActing.Began(creature, action);
                         MadeProgress(creature);
                         break;
                     }
@@ -1144,6 +1156,8 @@ namespace Rasa.Managers
                         AmoeboidVomit.Perform(mapChannel, creature, action);
 
                         action.CooldownTimer = NextCooldown(creature, action);
+
+                        CreatureActing.Began(creature, action);
                         MadeProgress(creature);
                         break;
                     }
@@ -1158,6 +1172,8 @@ namespace Rasa.Managers
                         AbilityManager.OnCreatureActed(mapChannel, creature, true);
 
                         action.CooldownTimer = NextCooldown(creature, action);
+
+                        CreatureActing.Began(creature, action);
                         MadeProgress(creature);
                         break;
                     }
@@ -1184,6 +1200,7 @@ namespace Rasa.Managers
 
                     // set cooldown, lengthened by whatever slows its attacks (Called Shot: Arm)
                     action.CooldownTimer = NextCooldown(creature, action);
+                    CreatureActing.Began(creature, action);
                     MadeProgress(creature);
 
                     // creature used action, break loop
@@ -3433,6 +3450,10 @@ namespace Rasa.Managers
             // update cooldown timer of all actions
             foreach (var action in creature.Actions)
                 action.CooldownTimer -= delta;
+
+            // and the time its last attack has left to play on the clients (CreatureActing)
+            if (creature.ActingMs > 0)
+                creature.ActingMs = Math.Max(0, creature.ActingMs - delta);
         }
         
         /// <summary>

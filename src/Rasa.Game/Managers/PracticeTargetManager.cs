@@ -192,6 +192,53 @@ namespace Rasa.Managers
             return hits;
         }
 
+        /// <summary>The entries a packet lists the hits on objects as: the amount and type, nothing an actor's.</summary>
+        internal static IEnumerable<TickEntry> Entries(IEnumerable<(DynamicObject Target, int Damage)> hits, DamageType damageType) =>
+            hits.Where(hit => hit.Damage > 0)
+                .Select(hit => new TickEntry { EntityId = hit.Target.EntityId, Amount = hit.Damage, DamageType = damageType });
+
+        /// <summary>ABILITY_DAMAGE_EFFECT: a plain BaseGameEffect on the client, nothing of its own on attach or detach.</summary>
+        internal const int AnnouncerTypeId = 436;
+
+        /// <summary>
+        /// Floats the damage of hits on objects that the packet of what hit them cannot list: Vortex
+        /// flails each target it lists (VortexAction.OnAbility, TransitionTo, an actor's), and a
+        /// creature attack's rawInfo class is an actor's too. An ABILITY_DAMAGE_EFFECT is put on
+        /// the source for the moment it takes, asked to announce the hits
+        /// (BaseGameEffect.Recv_AnnounceDamage, Usable.AnnounceDamage, the number over each), and
+        /// taken off again.
+        /// </summary>
+        internal static void Announce(MapChannel map, Actor source, IEnumerable<(DynamicObject Target, int Damage)> hits, DamageType damageType)
+        {
+            var entries = Entries(hits, damageType).ToList();
+
+            if (map == null || source == null || entries.Count == 0)
+                return;
+
+            var effectId = GameEffectManager.Instance.NextEffectId(map);
+
+            CellManager.Instance.CellCallMethod(map, source, new GameEffectAttachedPacket
+            {
+                EffectTypeId = AnnouncerTypeId,
+                EffectId = effectId,
+                EffectLevel = 1,
+                SourceId = source.EntityId,
+                Announced = false,
+                Duration = null,
+                DamageType = (int)damageType,
+                AttrId = 1,
+                IsActive = true,
+                Extras = new Dictionary<string, object>(),
+                Args = new List<object>()
+            });
+
+            var announce = new GameEffectAnnounceDamagePacket(effectId);
+            announce.Hits.AddRange(entries);
+            CellManager.Instance.CellCallMethod(map, source, announce);
+
+            CellManager.Instance.CellCallMethod(map, source, new GameEffectDetachedPacket { EffectId = effectId });
+        }
+
         internal static void RecordHit(
             MapChannel map, Actor source, DynamicObject target, ActionId actionId,
             MissionApplication missions = null, int damage = 1)

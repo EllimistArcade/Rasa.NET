@@ -7,6 +7,7 @@ using Rasa.Data;
 using Rasa.Game;
 using Rasa.Managers;
 using Rasa.Packets.MapChannel.Client;
+using Rasa.Packets.MapChannel.Server;
 using Rasa.Structures;
 using Rasa.Structures.World;
 using Rasa.Test.Missions;
@@ -250,6 +251,82 @@ namespace Rasa.Test.Missions.Wilderness
 
         #endregion
 
+        #region What the client is shown
+
+        /// <summary>
+        /// Vortex flails each target its recovery lists (VortexAction.OnAbility, TransitionTo, an
+        /// actor's), so the containers it caught are not listed there: their damage is floated
+        /// through an ABILITY_DAMAGE_EFFECT put on the performer for the moment it takes.
+        /// </summary>
+        [TestMethod]
+        public void VortexsContainersAreShownTheirDamageOutsideTheRecovery()
+        {
+            using var harness = Create();
+            var fuel = Fuel(harness);
+
+            var sent = Perform(harness, ActionId.AaGuardianVortex, 1, new Vector3(-267f, Ground, 74f));
+
+            var caught = new[] { fuel["fuel-1"], fuel["fuel-2"] };
+
+            foreach (var obj in caught)
+                Assert.IsTrue(obj.CurrentHitPoints < 100, obj.SceneActorRole);
+
+            var recovery = sent.OfType<AbilityRecoveryPacket>().Single();
+            Assert.IsFalse(recovery.Hits.Any(hit => caught.Any(obj => obj.EntityId == hit.EntityId)), "not in the recovery");
+
+            var attached = sent.OfType<GameEffectAttachedPacket>().Single(packet => packet.EffectTypeId == PracticeTargetManager.AnnouncerTypeId);
+            var announced = sent.OfType<GameEffectAnnounceDamagePacket>().Single(packet => packet.EffectId == attached.EffectId);
+            var detached = sent.OfType<GameEffectDetachedPacket>().Single(packet => packet.EffectId == attached.EffectId);
+
+            Assert.AreEqual(harness.Client.Player.EntityId, attached.SourceId);
+            Assert.IsFalse(attached.Announced, "nothing floated for the effect itself");
+            CollectionAssert.AreEquivalent(caught.Select(obj => obj.EntityId).ToList(), announced.Hits.Select(hit => hit.EntityId).ToList());
+
+            foreach (var hit in announced.Hits)
+                Assert.AreEqual(100 - (int)caught.Single(obj => obj.EntityId == hit.EntityId).CurrentHitPoints, Math.Min(100, hit.Amount), "what it took");
+
+            Assert.IsTrue(sent.IndexOf(attached) < sent.IndexOf(announced) && sent.IndexOf(announced) < sent.IndexOf(detached), "on, announced, off");
+        }
+
+        /// <summary>A bolt at a creature arcs (P2: ARC_RADIUS 12, ARC_DAMAGE 210) to the nearest of what is around it - here a container 1.6 m off.</summary>
+        [TestMethod]
+        public void LightningArcsFromACreatureToTheNearestContainer()
+        {
+            using var harness = Create();
+            var fuel = Fuel(harness);
+            var creature = Spawn(harness, new Vector3(-269.5f, Ground, 74.5f));
+            var other = Spawn(harness, new Vector3(-269.5f, Ground, 70f));
+
+            var sent = Perform(harness, ActionId.AaRecruitLightning, 2, Stand, targetId: creature.EntityId);
+
+            var hit = sent.OfType<AbilityRecoveryPacket>().Single().Hits.Single(entry => entry.EntityId == creature.EntityId);
+            Assert.AreEqual(fuel["fuel-1"].EntityId, hit.Arcs.Single(arc => arc.DamageType == DamageType.Electrical).EntityId, "drawn and floated on it");
+            Assert.AreEqual(UseObjectState.StateDestroyed, fuel["fuel-1"].StateId);
+            Assert.AreEqual(1U, Counter(harness));
+            Assert.AreEqual(5000, (int)other.Attributes[Attributes.Health].Current, "one arc, to the nearest");
+        }
+
+        /// <summary>A bolt at a container arcs to the container beside it when that is nearest.</summary>
+        [TestMethod]
+        public void LightningArcsFromAContainerToTheNextContainer()
+        {
+            using var harness = Create();
+            var fuel = Fuel(harness);
+
+            var sent = Perform(harness, ActionId.AaRecruitLightning, 2, Stand, targetId: fuel["fuel-9"].EntityId);
+
+            // fuel-9 (-267, 81): fuel-1 and fuel-2 5.4 m off, fuel-10 8 m.
+            var hit = sent.OfType<AbilityRecoveryPacket>().Single().Hits.Single(entry => entry.EntityId == fuel["fuel-9"].EntityId);
+            var arcedTo = hit.Arcs.Single().EntityId;
+
+            CollectionAssert.Contains(new[] { fuel["fuel-1"].EntityId, fuel["fuel-2"].EntityId }, arcedTo);
+            Assert.AreEqual(UseObjectState.StateDestroyed, fuel["fuel-9"].StateId);
+            Assert.AreEqual(UseObjectState.StateDestroyed, fuel.Values.Single(obj => obj.EntityId == arcedTo).StateId);
+            Assert.AreEqual(2U, Counter(harness));
+        }
+
+        #endregion
+
         #region The blast
 
         /// <summary>
@@ -321,7 +398,7 @@ namespace Rasa.Test.Missions.Wilderness
         /// recovery resolved: learned, with its logos, the power to pay for it, and - for a
         /// grenade - one in the bag.
         /// </summary>
-        private static void Perform(WildernessRuntimeTestHarness harness, ActionId actionId, uint level, Vector3 at,
+        private static List<Rasa.Packets.PythonPacket> Perform(WildernessRuntimeTestHarness harness, ActionId actionId, uint level, Vector3 at,
             ulong targetId = 0, bool grenade = false, uint reagent = 0)
         {
             var abilities = harness.LoadAbilities();
@@ -371,7 +448,11 @@ namespace Rasa.Test.Missions.Wilderness
                         .Select(message => message.Packet).OfType<Rasa.Packets.MapChannel.Server.UserActionFailedPacket>().Select(failed => failed.MsgId?.ToString() ?? "none")));
                 harness.Map.PerformRecovery.Remove(pending);
 
+                // What the recovery sends the performer, and no more.
+                Rasa.Test.World.WorldTestContext.Drain(harness.Client);
                 abilities.PerformRecovery(harness.Map, pending);
+                return Rasa.Test.World.WorldTestContext.Drain(harness.Client).Select(packet => packet.Message)
+                    .OfType<Rasa.Packets.Protocol.CallMethodMessage>().Select(message => message.Packet).ToList();
             }
             finally
             {

@@ -160,9 +160,10 @@ namespace Rasa.Managers
                         CritEffects.OnCritical(mapChannel, victim, player, bomb.TickDamageType, amount);
             }
 
-            // And the objects in it a weapon can damage (PracticeTargetManager.Blast), unlisted.
+            // And the objects in it a weapon can damage (PracticeTargetManager.Blast), listed with the rest.
             var objects = PracticeTargetManager.Blast(mapChannel, player, player.Position, bomb.TickRadius,
                 () => GameEffectManager.ApplyDamageDealt(player, Scale(bomb.SourceLevel, BombRandom.Next(bomb.TickDamageMin, bomb.TickDamageMax + 1), bomb.TickScaleType)));
+            blast.Hits.AddRange(PracticeTargetManager.Entries(objects, bomb.TickDamageType));
 
             // The blast plays where the holder stands, before they are sent home.
             CellManager.Instance.CellCallMethod(mapChannel, player, blast);
@@ -277,10 +278,13 @@ namespace Rasa.Managers
                             CritEffects.OnCritical(mapChannel, victim, player, damageType, amount);
                 }
 
-                // And the objects in it a weapon can damage (PracticeTargetManager.Blast), unlisted.
-                if (PracticeTargetManager.Blast(mapChannel, player, bomb.Position, reach,
-                        () => GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, BombRandom.Next(min, max + 1), scaleType)),
-                        missions: _missionManager).Count > 0)
+                // And the objects in it a weapon can damage (PracticeTargetManager.Blast), listed with the rest.
+                var objects = PracticeTargetManager.Blast(mapChannel, player, bomb.Position, reach,
+                    () => GameEffectManager.ApplyDamageDealt(player, Scale(player.Level, BombRandom.Next(min, max + 1), scaleType)),
+                    missions: _missionManager);
+                blast.Hits.AddRange(PracticeTargetManager.Entries(objects, damageType));
+
+                if (objects.Count > 0)
                     hitAny = true;
 
                 CellManager.Instance.CellCallMethod(bomb, blast);

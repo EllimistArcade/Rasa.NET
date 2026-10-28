@@ -183,10 +183,10 @@ namespace Rasa.Managers
                 blast.Hits.Add(DealDamage(mapChannel, player, victim, rolled, DamageType.Physical));
             }
 
-            // And the objects in it a weapon can damage (PracticeTargetManager.Blast), unlisted.
-            PracticeTargetManager.Blast(mapChannel, player, target.Position, ion.TickRadius,
+            // And the objects in it a weapon can damage (PracticeTargetManager.Blast), listed with the rest.
+            blast.Hits.AddRange(PracticeTargetManager.Entries(PracticeTargetManager.Blast(mapChannel, player, target.Position, ion.TickRadius,
                 () => GameEffectManager.ApplyDamageDealt(player, Scale(ion.SourceLevel, BombRandom.Next(min, max + 1), scaleType)),
-                missions: _missionManager);
+                missions: _missionManager), DamageType.Physical));
 
             CellManager.Instance.CellCallMethod(mapChannel, target, blast);
             GameEffectManager.Instance.DettachEffect(mapChannel, target, ion);
@@ -260,8 +260,9 @@ namespace Rasa.Managers
                     foreach (var victim in VictimsWithin(mapChannel, player, strike.Beacon.Position, strike.Radius))
                         blast.Hits.Add(StrikeHit(strike, victim, DamageType.Physical));
 
-                    // And the objects in it a weapon can damage (PracticeTargetManager.Blast), unlisted.
-                    PracticeTargetManager.Blast(mapChannel, player, strike.Beacon.Position, strike.Radius, () => StrikeRoll(strike), missions: _missionManager);
+                    // And the objects in it a weapon can damage (PracticeTargetManager.Blast), listed with the rest.
+                    blast.Hits.AddRange(PracticeTargetManager.Entries(PracticeTargetManager.Blast(mapChannel, player, strike.Beacon.Position, strike.Radius,
+                        () => StrikeRoll(strike), missions: _missionManager), DamageType.Physical));
 
                     CellManager.Instance.CellCallMethod(strike.Beacon, blast);
                     strike.RemoveAt = now + BeaconLingerMs;
@@ -294,16 +295,18 @@ namespace Rasa.Managers
 
             var victims = VictimsWithin(mapChannel, player, strike.Beacon.Position, strike.Radius);
 
-            // The napalm burns the objects in it a weapon can damage too (PracticeTargetManager.Blast), unlisted.
-            PracticeTargetManager.Blast(mapChannel, player, strike.Beacon.Position, strike.Radius, () => StrikeRoll(strike), missions: _missionManager);
+            // The napalm burns the objects in it a weapon can damage too (PracticeTargetManager.Blast), listed with the rest.
+            var objects = PracticeTargetManager.Blast(mapChannel, player, strike.Beacon.Position, strike.Radius, () => StrikeRoll(strike), missions: _missionManager);
 
-            if (victims.Count == 0)
+            if (victims.Count == 0 && objects.Count == 0)
                 return;
 
             var tick = new GameEffectTickPacket(strike.EffectId, GameEffectTickPacket.TickKind.Damage);
 
             foreach (var victim in victims)
                 tick.Entries.Add(StrikeHit(strike, victim, DamageType.Fire));
+
+            tick.Entries.AddRange(PracticeTargetManager.Entries(objects, DamageType.Fire));
 
             CellManager.Instance.CellCallMethod(strike.Beacon, tick);
         }

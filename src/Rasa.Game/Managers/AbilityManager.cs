@@ -1533,6 +1533,10 @@ namespace Rasa.Managers
 
             var critChance = CriticalHits.AttackerChance(player, false);
             var stun = Stuns.OfAbility(actionInfo.Module, info);
+
+            // The objects hit - those lightning arcs to on the way, then those aimed at or caught -
+            // landed once the recovery is out.
+            var objectHits = new List<(DynamicObject Target, int Damage)>();
             var knockback = info.Get(AbilityProperty.KnockbackDistance);
 
             foreach (var target in targets)
@@ -1593,7 +1597,7 @@ namespace Rasa.Managers
 
                     // Lightning's arc, extra sonic damage and storm.
                     if (recovery.ArcData)
-                        ResolveLightningExtras(mapChannel, player, info, enemy, rolled, hit);
+                        ResolveLightningExtras(mapChannel, player, info, enemy, rolled, hit, objectHits);
 
                     continue;
                 }
@@ -1624,16 +1628,15 @@ namespace Rasa.Managers
 
                 // Lightning's arc, extra sonic damage and storm (AbilityManager.Lightning.cs).
                 if (recovery.ArcData)
-                    ResolveLightningExtras(mapChannel, player, info, creature, rolled, hit);
+                    ResolveLightningExtras(mapChannel, player, info, creature, rolled, hit, objectHits);
             }
 
             // The object it was aimed at, and those the area caught, take the hit as a weapon's
             // shot would: each its own roll, no crit or resistance, those being an actor's
             // (ConstantFire.PulseAtObject, MissileManager). The client announces a hit on an
             // object as on a creature (DamageBase.DoAbility, Usable.AnnounceDamage); Vortex's
-            // flail and a creature attack's rawInfo are an actor's, and their objects are hit
-            // unlisted.
-            var objectHits = new List<(DynamicObject Target, int Amount)>();
+            // flail and a creature attack's rawInfo are an actor's, so theirs are announced on
+            // their own (PracticeTargetManager.Announce).
             var listObjects = actionInfo.Module != VortexModule && !RawInfoModules.Contains(actionInfo.Module);
 
             foreach (var obj in (struckObject != null ? new[] { struckObject } : Array.Empty<DynamicObject>()).Concat(areaObjects))
@@ -1651,14 +1654,17 @@ namespace Rasa.Managers
 
                 var objectHit = new AbilityHit { EntityId = obj.EntityId, Amount = amount, DamageType = damageType };
 
-                // Lightning's arc jumps from the object to the nearest hostile, as from a creature.
+                // Lightning's arc jumps from the object to the nearest hostile or object, as from a creature.
                 if (recovery.ArcData && ReferenceEquals(obj, struckObject))
-                    ResolveLightningArc(mapChannel, player, info, obj.Position, null, objectHit);
+                    ResolveLightningArc(mapChannel, player, info, obj.Position, null, obj, objectHit, objectHits);
 
                 recovery.Hits.Insert(ReferenceEquals(obj, struckObject) ? 0 : recovery.Hits.Count, objectHit);
             }
 
             CellManager.Instance.CellCallMethod(mapChannel, player, recovery);
+
+            if (!listObjects)
+                PracticeTargetManager.Announce(mapChannel, player, objectHits, damageType);
 
             foreach (var (obj, amount) in objectHits)
                 if (amount > 0)

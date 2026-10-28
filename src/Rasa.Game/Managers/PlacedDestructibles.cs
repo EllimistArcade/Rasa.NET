@@ -712,6 +712,20 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A placed force field changes hands (ForceFields.SetSide), and the placement keeps the
+        /// object it is now. False if it is no field or is that side's already.
+        /// </summary>
+        public static bool SetSide(Live live, ForceFields.Side side)
+        {
+            if (live?.Field == null || live.Field.Side == side)
+                return false;
+
+            ForceFields.SetSide(live.Field, side);
+            live.Object = live.Field.Object;
+            return true;
+        }
+
+        /// <summary>
         /// A map channel going away (MapChannelManager.CleanupPrivateMapChannel): everything placed
         /// on it out of the world, its force fields out of ForceFields, and the channel forgotten.
         /// Returns how many went.

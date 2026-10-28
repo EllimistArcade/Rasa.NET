@@ -923,6 +923,12 @@ namespace Rasa.Managers
                 });
             }
 
+            // A player's Scourge reaches the objects around them a weapon can damage too
+            // (PracticeTargetManager.Blast), unlisted.
+            if (effect.TickRadius > 0 && actor is Manifestation scourged)
+                PracticeTargetManager.Blast(mapChannel, scourged, actor.Position, effect.TickRadius,
+                    () => AbilityManager.Scale(effect.SourceLevel, _random.Next(effect.TickDamageMin, effect.TickDamageMax + 1), effect.TickScaleType));
+
             if (effect.TickRadius > 0 && !effect.TickRadiusAsTick)
             {
                 // The holder is not the one hurt, so the effect announces the damage on their

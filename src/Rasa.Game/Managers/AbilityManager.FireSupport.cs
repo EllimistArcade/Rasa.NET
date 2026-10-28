@@ -183,6 +183,11 @@ namespace Rasa.Managers
                 blast.Hits.Add(DealDamage(mapChannel, player, victim, rolled, DamageType.Physical));
             }
 
+            // And the objects in it a weapon can damage (PracticeTargetManager.Blast), unlisted.
+            PracticeTargetManager.Blast(mapChannel, player, target.Position, ion.TickRadius,
+                () => GameEffectManager.ApplyDamageDealt(player, Scale(ion.SourceLevel, BombRandom.Next(min, max + 1), scaleType)),
+                missions: _missionManager);
+
             CellManager.Instance.CellCallMethod(mapChannel, target, blast);
             GameEffectManager.Instance.DettachEffect(mapChannel, target, ion);
 
@@ -255,6 +260,9 @@ namespace Rasa.Managers
                     foreach (var victim in VictimsWithin(mapChannel, player, strike.Beacon.Position, strike.Radius))
                         blast.Hits.Add(StrikeHit(strike, victim, DamageType.Physical));
 
+                    // And the objects in it a weapon can damage (PracticeTargetManager.Blast), unlisted.
+                    PracticeTargetManager.Blast(mapChannel, player, strike.Beacon.Position, strike.Radius, () => StrikeRoll(strike), missions: _missionManager);
+
                     CellManager.Instance.CellCallMethod(strike.Beacon, blast);
                     strike.RemoveAt = now + BeaconLingerMs;
                     return;
@@ -286,6 +294,9 @@ namespace Rasa.Managers
 
             var victims = VictimsWithin(mapChannel, player, strike.Beacon.Position, strike.Radius);
 
+            // The napalm burns the objects in it a weapon can damage too (PracticeTargetManager.Blast), unlisted.
+            PracticeTargetManager.Blast(mapChannel, player, strike.Beacon.Position, strike.Radius, () => StrikeRoll(strike), missions: _missionManager);
+
             if (victims.Count == 0)
                 return;
 
@@ -297,12 +308,11 @@ namespace Rasa.Managers
             CellManager.Instance.CellCallMethod(strike.Beacon, tick);
         }
 
-        private TickEntry StrikeHit(Strike strike, Actor victim, DamageType damageType)
-        {
-            var rolled = GameEffectManager.ApplyDamageDealt(strike.Player, Scale(strike.Player.Level, BombRandom.Next(strike.DamageMin, strike.DamageMax + 1), strike.ScaleType));
+        private TickEntry StrikeHit(Strike strike, Actor victim, DamageType damageType) =>
+            DealDamage(strike.MapChannel, strike.Player, victim, StrikeRoll(strike), damageType);
 
-            return DealDamage(strike.MapChannel, strike.Player, victim, rolled, damageType);
-        }
+        private static int StrikeRoll(Strike strike) =>
+            GameEffectManager.ApplyDamageDealt(strike.Player, Scale(strike.Player.Level, BombRandom.Next(strike.DamageMin, strike.DamageMax + 1), strike.ScaleType));
 
         private static void RemoveStrike(Strike strike)
         {

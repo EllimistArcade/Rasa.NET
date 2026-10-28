@@ -1034,18 +1034,39 @@ namespace Rasa.Managers
         /// SplashRadius of where it landed takes SplashDamage as a hit of its own, and is added
         /// to the missile's hits so the one recovery shows them all. A creature's splashes
         /// whatever it may fight there, players and creatures (CreatureAreaAttacks.FoesAround).
+        /// A player's also splashes the objects there their weapon can damage, and lands as well
+        /// on an object as on a creature.
         /// </summary>
         private void SplashAround(MapChannel mapChannel, Missile missile)
         {
-            if (missile.SplashRadius <= 0 || missile.SplashDamage <= 0 || !(missile.Source is Actor shooter)
-                || missile.TargetActor == null || !IsOnMap(mapChannel, missile.TargetActor))
+            if (missile.SplashRadius <= 0 || missile.SplashDamage <= 0 || !(missile.Source is Actor shooter))
                 return;
 
-            var centre = missile.TargetActor.Position;
+            // Where it landed: on the creature or player it hit, or on the object (a fuel
+            // container, a placed or a .map destructible) - which used to splash nothing at all.
+            Vector3 centre, blast;
+
+            if (missile.TargetActor != null && IsOnMap(mapChannel, missile.TargetActor))
+            {
+                centre = missile.TargetActor.Position;
+
+                // The blast goes out from the middle of the target hit, and a wall or a force field
+                // between it and someone keeps it off them (InBlast): a grenade at a player in the
+                // open hit whoever was within five metres, the far side of a wall or a gate's field.
+                blast = Cover.Middle(missile.TargetActor);
+            }
+            else if (missile.TargetActor == null && missile.TargetObject != null)
+            {
+                centre = missile.TargetObject.Position;
+                blast = Cover.BlastFrom(centre);
+            }
+            else
+                return;
+
             var victims = shooter switch
             {
                 Manifestation player => AbilityManager.VictimsWithin(mapChannel, player, centre, missile.SplashRadius),
-                Creature creature when creature.State != CharacterState.Dead && IsOnMap(mapChannel, creature)
+                Creature creature when creature.State != CharacterState.Dead && IsOnMap(mapChannel, creature) && missile.TargetActor != null
                     => CreatureAreaAttacks.FoesAround(mapChannel, creature, centre, missile.SplashRadius, missile.TargetActor),
                 _ => new List<Actor>()
             };
@@ -1053,14 +1074,19 @@ namespace Rasa.Managers
             // The round flew as far as its target, and the splash is as weak as the round (RangeFalloff).
             var damage = RangeFalloff.Scale(missile.SplashDamage, missile.OptimalRange, shooter.Position, centre);
 
-            // The blast goes out from the middle of the target hit, and a wall or a force field
-            // between it and someone keeps it off them (InBlast): a grenade at a player in the
-            // open hit whoever was within five metres, the far side of a wall or a gate's field.
-            var blast = Cover.Middle(missile.TargetActor);
-
             foreach (var victim in victims)
                 if (victim != missile.TargetActor && InBlast(mapChannel, shooter, blast, victim))
                     ExtraHit(mapChannel, missile, shooter, victim, damage, false);
+
+            // And the objects around it a player's weapon can damage, the one it hit aside (its own
+            // hit is the missile's), each listed with the rest (PracticeTargetManager.Blast).
+            if (damage > 0)
+                foreach (var (obj, amount) in PracticeTargetManager.Blast(mapChannel, shooter, centre, missile.SplashRadius,
+                             () => damage, except: missile.TargetObject))
+                {
+                    missile.Args.HitEntities.Add(obj.EntityId);
+                    missile.Args.HitData.Add(new HitData { EntityId = obj.EntityId, FinalAmt = amount });
+                }
         }
 
         /// <summary>

@@ -112,6 +112,86 @@ namespace Rasa.Managers
             return found;
         }
 
+        /// <summary>
+        /// Whether the object is a plain practice target - the Bootcamp's Practice Dummy, or any
+        /// other PracticeDummy-type object no mission has the player destroy - rather than one a
+        /// weapon destroys: a mission's destructible, one the server put down, or the .map's. A
+        /// plain one counts what was aimed at it (MissionProgressEvent.ObjectHit), so no blast or
+        /// area reaches it (TargetsWithin) and only the abilities that were always aimed at it may be.
+        /// </summary>
+        internal static bool IsDummy(DynamicObject target) =>
+            target != null && target.MissionDestruction == null &&
+            !WorldDestructibles.IsOne(target) && !PlacedDestructibles.IsOne(target);
+
+        /// <summary>
+        /// The objects a player's blast or area can damage within radius metres of a point: those
+        /// <see cref="TryGetTarget"/> finds and <see cref="CanHit"/> lets them hit, found as
+        /// <see cref="TargetsInCone"/> finds them - in the cells around the player, and the .map's -
+        /// and within radius of it as a creature is (AbilityManager.HostilesWithin). No plain
+        /// practice target (<see cref="IsDummy"/>).
+        /// </summary>
+        internal static List<DynamicObject> TargetsWithin(MapChannel map, Manifestation player, Vector3 centre, float radius)
+        {
+            var found = new List<DynamicObject>();
+
+            if (map == null || player?.Cells == null || !(radius > 0) || !IsFinite(centre))
+                return found;
+
+            bool Near(Vector3 position) => Vector3.Distance(centre, position) <= radius;
+
+            var candidates = CellManager.CellsIn(map, player.Cells).SelectMany(cell => cell.DynamicObjectList)
+                .Where(obj => obj != null && Near(obj.Position)).Select(obj => obj.EntityId)
+                .Concat(WorldDestructibles.OnMap(map.MapInfo?.MapContextId ?? 0).Where(d => Near(d.Usable.Position)).Select(d => d.EntityId))
+                .Distinct()
+                .ToList();
+
+            foreach (var entityId in candidates)
+                if (TryGetTarget(map, entityId, out var target) && !found.Contains(target) && !IsDummy(target) &&
+                    CanHit(map, player, target) && Near(target.Position))
+                    found.Add(target);
+
+            return found;
+        }
+
+        /// <summary>
+        /// A blast or an area of a player's at a point: each object within radius of it they can
+        /// damage (<see cref="TargetsWithin"/>) but <paramref name="except"/> - the one it was aimed
+        /// at, which takes its own hit - takes <paramref name="damage"/>'s roll as a weapon's hit
+        /// (<see cref="RecordHit"/>), unless a standing force field is between it and the blast
+        /// (ForceFields.Blocks), as it would be between the blast and a creature. A rocket's splash,
+        /// a grenade, an explosion, a burning pool all destroyed the creatures around a fuel
+        /// container and left the container standing. What was hit, and for how much.
+        /// </summary>
+        internal static List<(DynamicObject Target, int Damage)> Blast(
+            MapChannel map, Actor source, Vector3 centre, float radius, Func<int> damage,
+            DynamicObject except = null, MissionApplication missions = null)
+        {
+            var hits = new List<(DynamicObject Target, int Damage)>();
+
+            if (!(source is Manifestation player) || damage == null)
+                return hits;
+
+            var from = Cover.BlastFrom(centre);
+
+            foreach (var target in TargetsWithin(map, player, centre, radius))
+            {
+                if (ReferenceEquals(target, except) ||
+                    ForceFields.Blocks(map, player, from, target.Position + new Vector3(0f, Cover.BlastHeight, 0f)))
+                    continue;
+
+                var amount = damage();
+
+                if (amount <= 0)
+                    continue;
+
+                // The action counts for a plain practice target alone, and a blast reaches none.
+                RecordHit(map, player, target, default, missions, amount);
+                hits.Add((target, amount));
+            }
+
+            return hits;
+        }
+
         internal static void RecordHit(
             MapChannel map, Actor source, DynamicObject target, ActionId actionId,
             MissionApplication missions = null, int damage = 1)

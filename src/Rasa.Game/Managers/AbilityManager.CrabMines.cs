@@ -377,6 +377,13 @@ namespace Rasa.Managers
                         CritEffects.OnCritical(mapChannel, victim, owner, mine.DamageType, amount);
             }
 
+            // And the objects in it a weapon can damage (PracticeTargetManager.Blast), unlisted: the
+            // mine's death is a creature attack's rawInfo, an actor's.
+            if (PracticeTargetManager.Blast(mapChannel, owner, creature.Position, mine.Radius,
+                    () => GameEffectManager.ApplyDamageDealt(owner, Scale(owner.Level, BombRandom.Next(mine.DamageMin, mine.DamageMax + 1), mine.ScaleType), mine.BonusPercent),
+                    missions: _missionManager).Count > 0)
+                hitAny = true;
+
             CellManager.Instance.CellCallMethod(creature, blast);
 
             if (hitAny)

@@ -357,6 +357,9 @@ namespace Rasa.Managers
         {
             var victims = AbilityManager.VictimsWithin(pool.MapChannel, pool.Shooter, pool.Proxy.Position, Radius);
 
+            // And the objects in it a weapon can damage (PracticeTargetManager.Blast), unlisted.
+            PracticeTargetManager.Blast(pool.MapChannel, pool.Shooter, pool.Proxy.Position, Radius, () => pool.TickDamage);
+
             if (victims.Count == 0)
                 return;
 

@@ -42,9 +42,8 @@ namespace Rasa.Services.Preloader
     ///   the Bane tower in Purgas Valley that the link to Purgas Station is at the end of
     ///   (arch_bane_industrial_chunnel_* and _tunnel_*), x -892 to -849, z -912 to -869.
     ///
-    /// Not placed: regions 11, 16 and 32 (human interiors with room tones) and 15, 17 and 19
-    /// (room tone and guild hall ambience alone), which could be any of the base's other
-    /// buildings; 31 (the human underground sky with outpost ambience); 28 (Eloh ruins ambience
+    /// Not placed: regions 11, 16, 19 and 32, which Concordia_divide_rooms gives the base's other
+    /// buildings, and 15 and 17 (the heavy room tone alone); 31 (the human underground sky with outpost ambience); 28 (Eloh ruins ambience
     /// and music); and the outdoor 2, 3, 4, 5, 6 and 7, which the map's area labels (Northwestern
     /// Highlands, Benefactor Valley, Purgas Valley, The Front Lines) may belong to but nothing
     /// bounds.

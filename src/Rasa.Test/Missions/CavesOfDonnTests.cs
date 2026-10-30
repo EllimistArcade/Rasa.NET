@@ -398,6 +398,55 @@ namespace Rasa.Test.Missions
             Assert.IsTrue(Vector3.Distance(nekala.Position, D.NekalaAtEntrance) < 1, $"Nekala waits by the entrance, at {nekala.Position}");
         }
 
+        /// <summary>
+        /// Nekala's bombs are given once, with The Reason Why, and a copy's cave-ins are back in a
+        /// new copy: one with none left could not get past the Fairway to the Vitiated Shrine. She
+        /// has two more for a member on it who comes to her with none, while a cave-in it needs stands.
+        /// </summary>
+        [TestMethod]
+        public void NekalaHasMoreBombsForOneOnTheReasonWhyWhoHasNone()
+        {
+            using var harness = Create();
+            var nekala = Put(harness, D.Nekala, D.NekalaAtMarFend);
+            var bombs = (Rasa.Data.EntityClasses)29777;
+
+            // Not on it: nothing.
+            harness.MoveTo(D.NekalaAtMarFend + new Vector3(3, 0, 0));
+            Work(harness);
+            Assert.AreEqual(0, WildernessTwinPillarsTests.Held(harness, D.BombTemplate), "nobody on the mission");
+
+            WildernessTwinPillarsTests.Accept(harness, nekala, D.TheReasonWhy);
+            Assert.AreEqual(CavesOfDonn.NekalaBombs, (uint)WildernessTwinPillarsTests.Held(harness, D.BombTemplate));
+
+            // Spent: on another copy's cave-ins, say.
+            InventoryManager.Instance.RemoveItemsByClass(harness.Client, bombs, CavesOfDonn.NekalaBombs);
+            harness.Drain();
+
+            // At the Fairway's cave-in with none: refused, and she has more.
+            var fairway = CaveIn(harness, 2);
+            Use(harness, fairway);
+            Assert.IsFalse(CavesOfDonn.IsBlown(harness.Map, 2));
+            Work(harness);
+            Assert.AreEqual(0, WildernessTwinPillarsTests.Held(harness, D.BombTemplate), "far from Nekala");
+
+            harness.MoveTo(nekala.Position + new Vector3(4, 0, 0));
+            Work(harness);
+            Assert.AreEqual(CavesOfDonn.NekalaBombs, (uint)WildernessTwinPillarsTests.Held(harness, D.BombTemplate), "two more from Nekala");
+            Work(harness);
+            Assert.AreEqual(CavesOfDonn.NekalaBombs, (uint)WildernessTwinPillarsTests.Held(harness, D.BombTemplate), "not more while they have them");
+
+            Use(harness, fairway);
+            Assert.IsTrue(CavesOfDonn.IsBlown(harness.Map, 2), "the way to the Vitiated Shrine is open");
+            Use(harness, CaveIn(harness, 1));
+            Assert.IsTrue(CavesOfDonn.IsBlown(harness.Map, 1));
+            Assert.AreEqual(0, WildernessTwinPillarsTests.Held(harness, D.BombTemplate));
+
+            // Both down: none needed.
+            harness.MoveTo(nekala.Position + new Vector3(4, 0, 0));
+            Work(harness);
+            Assert.AreEqual(0, WildernessTwinPillarsTests.Held(harness, D.BombTemplate), "no cave-in left for them");
+        }
+
         [TestMethod]
         public void EachEggClusterCountsOnceForBuggedToDeath()
         {

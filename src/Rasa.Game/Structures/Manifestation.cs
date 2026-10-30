@@ -200,6 +200,11 @@ namespace Rasa.Structures
         public Vector3? ArrivalPosition { get; set; }
         public uint ArrivalMapContextId { get; set; }
 
+        /// <summary>Where Managers.SafetyFloor last put the player back after a fall out of the world, on which map, and when; null once they have walked off it.</summary>
+        public Vector3? RescuedTo { get; set; }
+        public uint RescuedToMapContextId { get; set; }
+        public long RescuedAtTick { get; set; }
+
         /// <summary>The descent under way, if any, for falling damage (Managers.FallDamage).</summary>
         public FallTracker Fall { get; } = new FallTracker();
 

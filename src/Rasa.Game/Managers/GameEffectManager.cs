@@ -1434,11 +1434,13 @@ namespace Rasa.Managers
             if (client == null)
                 return;
 
+            // Their own client too while they are still arriving on a map: Graviton, Bio and the
+            // rest go back on then (TellAround).
             if (actor.Attributes.TryGetValue(Attributes.Health, out var health))
-                CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateHealthPacket(WithRegen(actor, health), 0));
+                TellAround(mapChannel, actor, new UpdateHealthPacket(WithRegen(actor, health), 0));
 
             if (actor.Attributes.TryGetValue(Attributes.Armor, out var armor))
-                CellManager.Instance.CellCallMethod(mapChannel, actor, new UpdateArmorPacket(WithRegen(actor, armor), 0));
+                TellAround(mapChannel, actor, new UpdateArmorPacket(WithRegen(actor, armor), 0));
 
             if (actor.Attributes.TryGetValue(Attributes.Power, out var power))
                 client.CallMethod(actor.EntityId, new UpdatePowerPacket(WithRegen(actor, power), 0));
@@ -1594,8 +1596,30 @@ namespace Rasa.Managers
             // to a player's own client each time they arrive on a map - so it has to say the same
             // thing as the change everyone present is told about now.
             actor.MovementSpeed = movementMod;
-            CellManager.Instance.CellCallMethod(mapChannel, actor, new MovementModChangePacket(movementMod));
+            TellAround(mapChannel, actor, new MovementModChangePacket(movementMod));
         }
+
+        /// <summary>
+        /// Tells the clients round the actor, and a player's own client as well where they are not
+        /// among them. On a map change the standing effects go back on (ManifestationManager.
+        /// SyncSkillPassives, from AssignPlayer) while the client is still Teleporting, and a cell
+        /// broadcast only reaches clients in the game: the Motor Assist effect was put back and
+        /// shown, its speed never reached the player, and they ran at base speed until something
+        /// changed it again - a sprint, an armour piece off and on.
+        /// </summary>
+        internal static void TellAround(MapChannel mapChannel, Actor actor, PythonPacket packet)
+        {
+            CellManager.Instance.CellCallMethod(mapChannel, actor, packet);
+
+            if (actor is Manifestation && ClientOf(mapChannel, actor) is { } own && own.Player?.Disconected == false &&
+                !InCellBroadcast(mapChannel, actor, own))
+                own.CallMethod(actor.EntityId, packet);
+        }
+
+        /// <summary>Whether a cell broadcast round the actor reaches this client (CellManager.CollectClients).</summary>
+        private static bool InCellBroadcast(MapChannel mapChannel, Actor actor, Client client) =>
+            client.State == ClientState.Ingame && client.Player?.MapChannel == mapChannel &&
+            CellManager.CellsIn(mapChannel, actor.Cells).Any(cell => cell.ClientList.Contains(client));
 
         #endregion
     }

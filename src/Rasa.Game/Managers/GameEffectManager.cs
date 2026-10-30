@@ -353,7 +353,8 @@ namespace Rasa.Managers
         /// pump costs the same share of the bar at every level. This takes the same. It ends when
         /// the duration is up, the bar is empty, the player right-clicks the buff away (a detach
         /// request), or the player presses sprint again - AbilityManager turns a second request
-        /// into ending the first. There is no cost to start or stop it; the drain is the cost.
+        /// into ending the first. There is no cost to start or stop it; the drain is the cost, and
+        /// the owner's client is told so for the press that stops it (WaiveCostWhileOn).
         /// </summary>
         public GameEffect AttachSprint(MapChannel mapChannel, Actor actor, ActionLevelInfo level)
         {
@@ -383,7 +384,53 @@ namespace Rasa.Managers
 
             Attach(mapChannel, actor, effect, beadModifier);
 
+            if (actor.ActiveEffects.ContainsKey(effect.EffectId))
+                WaiveCostWhileOn(mapChannel, actor, effect);
+
             return effect;
+        }
+
+        /// <summary>MODULE_POWER_COST_MOD: ModulePowerCostMod, the client's per-action cost change.</summary>
+        public const int PowerCostModTypeId = 407;
+
+        /// <summary>
+        /// While sprint is on, its press costs nothing on the player's own client. SprintAction is
+        /// no isToggle ability, so the client judges the press that would end it as one that
+        /// starts it - BaseActorAbility.CheckConsumables against the action_cost row (30 adrenaline
+        /// at P1) - and once the drain had taken the bar below that it refused the press itself:
+        /// "not enough adrenaline", no request, and sprint ran on until the bar was empty. A
+        /// MODULE_POWER_COST_MOD for the action is what CheckConsumables and the drawer
+        /// (gameuiutil.CanUseAbility) take off the cost: amount -1 makes it nothing
+        /// (cost *= 1 + amount), the press goes through, and RequestPerformAbility turns it into
+        /// ending sprint. Told to the holder's client alone, with no icon (gameeffectdata.icon
+        /// has none for it) and nothing of its own to show; it comes off with sprint.
+        /// </summary>
+        private void WaiveCostWhileOn(MapChannel mapChannel, Actor actor, GameEffect sustained)
+        {
+            if (!(actor is Manifestation))
+                return;
+
+            var waiver = new GameEffect
+            {
+                TypeId = PowerCostModTypeId,
+                EffectId = NextEffectId(mapChannel),
+                EffectLevel = 1,
+                SourceId = actor.EntityId,
+                Source = actor,
+                ExpiresTick = long.MaxValue,
+                IsBuff = true,
+                OwnerOnly = true
+            };
+
+            // ModulePowerCostMod.OnAnnounceAttach(effectTarget, amount, actionId, actionArgId):
+            // every pump of the action (actionArgId None).
+            Attach(mapChannel, actor, waiver, -1.0, (int)sustained.ActionId, null);
+
+            sustained.OnDetached = (map, holder, _) =>
+            {
+                if (map != null && holder != null)
+                    DettachEffect(map, holder, waiver);
+            };
         }
 
         /// <summary>

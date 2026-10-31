@@ -112,7 +112,7 @@ namespace Rasa.Test.World
             migrator.Migrate(Migration);
             var after = Volumes(database);
             Assert.AreEqual(1, after.Count(v => v.Enabled && v.RegionId == 38), "the moved housing box stays the GM's");
-            Assert.AreEqual(1, after.Count(v => v.RegionId == DaghdasUrnBuildingRegions.HospitalRegion));
+            Assert.AreEqual(1, after.Count(v => v.RegionId == DaghdasUrnBuildingRegions.HospitalRegion && v.Comment.Contains("Daghda's Urn Village")), "the hospital's box");
         }
 
         [TestMethod]

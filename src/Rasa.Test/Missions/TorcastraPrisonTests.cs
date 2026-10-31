@@ -332,6 +332,85 @@ namespace Rasa.Test.Missions
             WildernessTwinPillarsTests.Reward(harness, ferme, M.InTerror, 0, 13197, 17000, 2550);
         }
 
+        [TestMethod]
+        public void TheGatekeepersKeyAsTheMissionDropsItOpensTheGateAndStaysWithItsMission()
+        {
+            using var harness = Create();
+            var state = Enter(harness);
+            var slot = PlacedUsables.LiveOf(harness.Map, T.GateKeySlot);
+
+            // Securing Torcastra's drop: the mission's item, which nothing but its mission takes.
+            var key = ItemManager.Instance.CreateFromTemplateId(T.GateKeyTemplate, 1);
+            Assert.IsNotNull(InventoryManager.Instance.GrantItemToInventory(harness.Client, key));
+            key.MissionOwnership = new MissionItemOwnership(harness.Client.Player.Id, M.Securing, "assignment", 1, "torcastra-gate-key");
+            harness.Drain();
+
+            var refusals = UseAndHearRefusals(harness, slot.Object);
+
+            CollectionAssert.DoesNotContain(refusals, PlayerMessage.PmMissingReqItem, "it was refused for want of the key it holds");
+            Assert.IsTrue(state.GateOpen);
+            Assert.AreEqual(1L, WildernessTwinPillarsTests.Held(harness, T.GateKeyTemplate), "the mission's key stays with the mission");
+        }
+
+        /// <summary>
+        /// Information Sabotage's worm console, and then its two terminals. The report: the console
+        /// could be used but said "You are missing the required item(s) for that action". The
+        /// console's row takes 0 items and was read as 1, of the datapad class - and the worm Ferme
+        /// gives is the mission's item, which an acceptor did not count. The terminals were the same.
+        /// </summary>
+        [TestMethod]
+        public void TheWormIsUploadedOnceTheStorageIsDownAndTheTerminalsAreReadAfterFerme()
+        {
+            using var harness = Create();
+            var state = Enter(harness);
+            var ferme = Spawn(harness, T.FermePool, T.Ferme);
+
+            WildernessTwinPillarsTests.Accept(harness, ferme, M.Sabotage);
+            Assert.AreEqual(1L, WildernessTwinPillarsTests.Held(harness, T.DatapadTemplate), "Ferme's worm");
+
+            var console = PlacedUsables.LiveOf(harness.Map, T.WormConsole);
+            UseAndHearRefusals(harness, console.Object);
+            Assert.AreEqual(MissionObjectiveState.Incomplete, Objective(harness, M.Sabotage, 3), "not before the storage is down");
+
+            foreach (var id in new[] { T.StorageUnitA, T.StorageUnitB, T.StoragePanelA, T.StoragePanelB })
+                Assert.IsTrue(PlacedDestructibles.Destroy(PlacedDestructibles.LiveOf(harness.Map, id), harness.Client.Player));
+            PlacedDestructibles.Worker(harness.Map);
+            Work(harness, 1100);
+            Work(harness, 1100);
+            Assert.IsTrue(state.Storage.All(down => down));
+            Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, M.Sabotage, 2));
+            Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, M.Sabotage, 9));
+
+            var refusals = UseAndHearRefusals(harness, console.Object);
+            Assert.IsEmpty(refusals, string.Join(", ", refusals));
+            Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, M.Sabotage, 3), "the worm uploaded");
+            Assert.AreEqual(0L, WildernessTwinPillarsTests.Held(harness, T.DatapadTemplate), "the mission took its worm");
+
+            WildernessTwinPillarsTests.Talk(harness, ferme, M.Sabotage, 8);
+
+            foreach (var (terminal, objective) in new[] { (T.PrimaryTerminal, 6u), (T.SecondaryTerminal, 7u) })
+            {
+                refusals = UseAndHearRefusals(harness, PlacedUsables.LiveOf(harness.Map, terminal).Object);
+                Assert.IsEmpty(refusals, $"terminal {terminal}: {string.Join(", ", refusals)}");
+                Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, M.Sabotage, objective), $"terminal {terminal} read");
+            }
+        }
+
+        /// <summary>A use, as Use makes it, and the messages it was refused with.</summary>
+        private static List<PlayerMessage> UseAndHearRefusals(WildernessRuntimeTestHarness harness, DynamicObject obj)
+        {
+            harness.MoveTo(obj.Position + new Vector3(1, 0, 0));
+            harness.Drain();
+            harness.Objects.RequestUseObjectPacket(harness.Client, new RequestUseObjectPacket
+            {
+                EntityId = obj.EntityId,
+                ActionId = ActionId.UseObject,
+                ActionArgId = DynamicObjectManager.FootlockerUseArgId
+            });
+            ActorActionManager.Instance.DoWork(harness.Map, 10000);
+            return harness.Drain().OfType<Rasa.Packets.MapChannel.Server.UserActionFailedPacket>().Where(failed => failed.MsgId.HasValue).Select(failed => failed.MsgId.Value).ToList();
+        }
+
         #endregion
 
         #region The cell blocks and Prison Riot

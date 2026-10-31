@@ -638,7 +638,7 @@ namespace Rasa.Managers
                 case Kind.Acceptor:
                     if (live.State != UseObjectState.IaStateActive || live.Placement.ItemClassId == 0)
                         return PlayerMessage.PmUseObjectNotUsable;
-                    if (InventoryManager.Instance.CountItemsByClass(client, (EntityClasses)live.Placement.ItemClassId) < live.Placement.ItemCount)
+                    if (InventoryManager.Instance.CountItemsByClass(client, (EntityClasses)live.Placement.ItemClassId, includeMissionItems: true) < ItemsTaken(live))
                         return PlayerMessage.PmMissingReqItem;
                     break;
 
@@ -652,6 +652,40 @@ namespace Rasa.Managers
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// How many items of its class an acceptor takes: its row's count, or none for one whose
+        /// place takes nothing (TorcastraPrison.TakesNothing: Torcastra's worm console and data
+        /// terminals, whose mission consumes the worm itself, ConsumeMissionItem, once the upload
+        /// counts).
+        /// </summary>
+        private static uint ItemsTaken(Live live) => TorcastraPrison.TakesNothing(live) ? 0 : live.Placement.ItemCount;
+
+        /// <summary>
+        /// An acceptor takes its items (ItemsTaken), of which the player has to hold that many. A
+        /// mission's item of the class counts - the Gatekeeper's key at Torcastra's gate is the
+        /// Securing mission's drop - but stays where it is, since only its mission may take it
+        /// (MissionItemProtection): the acceptor takes what ordinary items there are, and the
+        /// mission's items make up the rest. Both used to be counted as none, so an acceptor
+        /// refused the player holding the very item it wanted ("You are missing the required
+        /// item(s) for that action").
+        /// </summary>
+        private static bool Accept(Client client, Live live)
+        {
+            var count = ItemsTaken(live);
+
+            if (count == 0)
+                return true;
+
+            var itemClass = (EntityClasses)live.Placement.ItemClassId;
+
+            if (InventoryManager.Instance.CountItemsByClass(client, itemClass, includeMissionItems: true) < count)
+                return false;
+
+            var take = Math.Min(count, InventoryManager.Instance.CountItemsByClass(client, itemClass));
+
+            return take == 0 || InventoryManager.Instance.RemoveItemsByClass(client, itemClass, take) == 0;
         }
 
         /// <summary>Whether a use-object action is a use of one of these.</summary>
@@ -692,7 +726,7 @@ namespace Rasa.Managers
                     break;
 
                 case Kind.Acceptor:
-                    if (InventoryManager.Instance.RemoveItemsByClass(client, (EntityClasses)placement.ItemClassId, placement.ItemCount) != 0)
+                    if (!Accept(client, live))
                         return null;
 
                     next = UseObjectState.IaStateAccepted;

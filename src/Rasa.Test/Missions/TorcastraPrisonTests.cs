@@ -20,6 +20,7 @@ namespace Rasa.Test.Missions
     using T = Rasa.Services.Preloader.TorcastraPrisonContent;
     using M = Rasa.Services.Preloader.Missions.Torcastra.TorcastraMissionsV1;
     using P = Rasa.Managers.TorcastraPrison;
+    using K = Rasa.Services.Preloader.TorcastraKeymasterComputer;
 
     /// <summary>
     /// Torcastra Prison as the wiki's walkthrough tells it (Torcastra_prison: TorcastraPrisonContent,
@@ -460,6 +461,39 @@ namespace Rasa.Test.Missions
 
             WildernessTwinPillarsTests.Talk(harness, cisco, M.Keymaster, 9);
             Assert.AreEqual(MissionObjectiveState.Incomplete, Objective(harness, M.Keymaster, 13));
+        }
+
+        /// <summary>
+        /// The computer banks stand in the alcove of the service room's west wall, in front of the
+        /// pipe across its back, on the floor a player walks to from the room - not on the Bane
+        /// console behind the pipe (Torcastra_keymaster_computer). Their marker is with them.
+        /// </summary>
+        [TestMethod]
+        public void TheComputerBanksStandInFrontOfThePipe()
+        {
+            using var harness = Create();
+            Enter(harness);
+            Completed(harness, M.Securing);
+            Pool(harness, T.CiscoGatePool).Woken = true;
+            WildernessTwinPillarsTests.Accept(harness, Spawn(harness, T.CiscoGatePool, T.CiscoAtGate), M.Keymaster);
+
+            var banks = harness.Map.DynamicObjects.Single(obj => obj.SceneMissionId == M.Keymaster && obj.SceneActorRole == "computer-banks");
+            var at = new Vector3(K.Now.X, K.Now.Y, K.Now.Z);
+            Assert.IsLessThan(0.01f, Vector3.Distance(at, banks.Position), $"at {banks.Position}");
+
+            // Over the alcove's floor, a metre up, and that floor is the room's.
+            var nav = harness.Map.NavMesh;
+            var floor = nav.Nearest(at - new Vector3(0, 1f, 0)).Value;
+            Assert.IsLessThan(0.5f, Vector2.Distance(new Vector2(at.X, at.Z), new Vector2(floor.X, floor.Z)), $"floor under them: {floor}");
+            Assert.IsTrue(at.Y - floor.Y is > 0.5f and < 1.5f, $"{at.Y - floor.Y} m over it");
+            Assert.AreEqual(true, nav.Reachable(floor, new Vector3(-120f, 101.2f, -456f)), "the alcove's floor is the service room's");
+            Assert.IsGreaterThan(3f, Vector3.Distance(at, new Vector3(-129.94f, 100.2f, -455.97f)), "off the Bane console behind the pipe");
+
+            var marker = harness.World.MissionIndicatorEntries.AsNoTracking()
+                .Single(row => row.MissionId == M.Keymaster && row.ContentRevision == M.Revision && row.ObjectiveId == 4);
+            Assert.AreEqual(at.X, marker.PosX, 0.01);
+            Assert.AreEqual(at.Y, marker.PosY, 0.01);
+            Assert.AreEqual(at.Z, marker.PosZ, 0.01);
         }
 
         /// <summary>Securing Torcastra done, Keymaster taken from Cisco at the gate, the computer banks read and Hamilton released.</summary>

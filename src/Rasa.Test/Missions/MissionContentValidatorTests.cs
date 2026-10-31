@@ -85,6 +85,55 @@ namespace Rasa.Test.Missions
             Assert.AreEqual(count == 3, mission.Dialogue.Single().Choices.ContainsKey(3));
         }
 
+        /// <summary>
+        /// A choice may keep its objective open (a menu's page) only when it does nothing that must happen once: its
+        /// transition with CompleteObjective and the like is the "nonterminal" row above.
+        /// </summary>
+        [TestMethod]
+        public void DialogueValidationAcceptsAStayOpenChoiceWithNoOneTimeAction()
+        {
+            var fixture = MissionContentFixture.CreateValid();
+            fixture.Transitions[0].ToState = (byte)MissionObjectiveState.Incomplete;
+            fixture.Actions.RemoveAll(action => action.TransitionId == fixture.Transitions[0].TransitionId);
+            var original = new MissionContentLoader().Load(fixture.CreateRepository()).Definitions[321].Mission;
+            var topic = new MissionDialogueTopicDefinition(10, 77, 11, MissionDialogueKind.Choice,
+                choices: new Dictionary<int, uint> { [1] = 20, [2] = 20 });
+
+            var mission = original.WithDialogue(new[] { topic });
+
+            Assert.IsTrue(mission.IsOperational, mission.OperationalDiagnostic);
+        }
+
+        /// <summary>
+        /// A menu object (SceneObjectConversation.Menu) shows, of its objective's and package's topics, the first the
+        /// character is eligible for, its own first: a terminal whose page the character's flags choose. Without the
+        /// character (content validation), or as no menu, it shows its own topic only.
+        /// </summary>
+        [TestMethod]
+        public void AMenuObjectShowsTheFirstPageTheCharacterIsEligibleForItsOwnFirst()
+        {
+            var fixture = MissionContentFixture.CreateValid();
+            var original = new MissionContentLoader().Load(fixture.CreateRepository()).Definitions[321].Mission;
+            var choices = new Dictionary<int, uint> { [1] = 20, [2] = 20 };
+            var mission = original.WithDialogue(new[]
+            {
+                new MissionDialogueTopicDefinition(10, 77, 12, MissionDialogueKind.Choice, choices: choices),
+                new MissionDialogueTopicDefinition(10, 77, 11, MissionDialogueKind.Choice, choices: choices),
+                new MissionDialogueTopicDefinition(10, 78, 13, MissionDialogueKind.Choice, choices: choices)
+            });
+            var menu = new SceneObjectConversation(321, 10, 77, 10, 11, MissionDialogueKind.Choice, Menu: true);
+
+            uint? Page(SceneObjectConversation binding, Func<MissionDialogueTopicDefinition, bool> eligible) =>
+                Rasa.Game.Missions.Protocol.MissionConversationProjection.ForObject(mission, binding, eligible)?.Definition.PlayerFlagId;
+
+            Assert.AreEqual(11U, Page(menu, _ => true), "its own page first");
+            Assert.AreEqual(12U, Page(menu, topic => topic.PlayerFlagId != 11), "the next page it is eligible for");
+            Assert.IsNull(Page(menu, topic => topic.PlayerFlagId == 13), "never another package's page");
+            Assert.IsNull(Page(menu, _ => false), "no page");
+            Assert.AreEqual(11U, Page(menu, null), "content validation: its own");
+            Assert.AreEqual(11U, Page(menu with { Menu = false }, topic => topic.PlayerFlagId != 11), "no menu: its own");
+        }
+
         [TestMethod]
         public void TypedDialogueMetadataRoundTripsWithoutChangingHistoricalSceneShapes()
         {
@@ -350,6 +399,33 @@ namespace Rasa.Test.Missions
                 report.Diagnostics.Select(diagnostic => diagnostic.Code).ToArray(),
                 expectedCode);
             Assert.IsTrue(report.BlocksReadiness);
+        }
+
+        /// <summary>
+        /// A World unit of work with no spawn pool repository (as a test's own unit of work) cannot see the pools: a
+        /// cleared-pool rule is not checked, so it reports no missing pool and does not block readiness.
+        /// </summary>
+        [TestMethod]
+        public void ValidatorDoesNotCallAPoolMissingWhenItCannotReadThePools()
+        {
+            var fixture = MissionContentFixture.CreateValid();
+            ConfigurePureProgressObjective(fixture);
+            fixture.Triggers[0].EventKind = (byte)MissionProgressEventKind.SpawnPoolCleared;
+            fixture.Triggers[0].SubjectId = 531225;
+            fixture.Triggers[0].CounterId = null;
+            fixture.Triggers[0].InitialValue = null;
+            fixture.Triggers[0].TargetValue = null;
+            fixture.Triggers[0].SourceSpawnResolved = null;
+            fixture.NoSpawnPoolRepository = true;
+            var snapshot = new MissionContentLoader().Load(fixture.CreateRepository());
+            var report = new MissionContentValidator().Validate(
+                snapshot,
+                fixture.CreateWorldUnitOfWork());
+
+            CollectionAssert.DoesNotContain(
+                report.Diagnostics.Select(diagnostic => diagnostic.Code).ToArray(),
+                "missing-spawn-pool");
+            Assert.IsFalse(report.BlocksReadiness);
         }
 
         [TestMethod]
@@ -713,6 +789,42 @@ namespace Rasa.Test.Missions
                 fixture.Triggers[0].SourceSpawnResolved = true;
                 fixture.ItemTemplateClasses.Clear();
             }, "missing-item-template");
+
+            yield return Case("missing cleared spawn pool", fixture =>
+            {
+                ConfigurePureProgressObjective(fixture);
+                fixture.Triggers[0].EventKind = (byte)MissionProgressEventKind.SpawnPoolCleared;
+                fixture.Triggers[0].SubjectId = 531225;
+                fixture.Triggers[0].CounterId = null;
+                fixture.Triggers[0].InitialValue = null;
+                fixture.Triggers[0].TargetValue = null;
+                fixture.Triggers[0].SourceSpawnResolved = null;
+                fixture.SpawnPools.Add(new SpawnPoolEntry { Id = 531226, MapContextId = 2136 });
+            }, "missing-spawn-pool");
+
+            yield return Case("cleared spawn pool that is not automatic", fixture =>
+            {
+                ConfigurePureProgressObjective(fixture);
+                fixture.Triggers[0].EventKind = (byte)MissionProgressEventKind.SpawnPoolCleared;
+                fixture.Triggers[0].SubjectId = 531225;
+                fixture.Triggers[0].CounterId = null;
+                fixture.Triggers[0].InitialValue = null;
+                fixture.Triggers[0].TargetValue = null;
+                fixture.Triggers[0].SourceSpawnResolved = null;
+                fixture.SpawnPools.Add(new SpawnPoolEntry { Id = 531225, Mode = 1, MapContextId = 2136 });
+            }, "spawn-pool-not-automatic");
+
+            yield return Case("cleared spawn pool off a squad instance", fixture =>
+            {
+                ConfigurePureProgressObjective(fixture);
+                fixture.Triggers[0].EventKind = (byte)MissionProgressEventKind.SpawnPoolCleared;
+                fixture.Triggers[0].SubjectId = 531225;
+                fixture.Triggers[0].CounterId = null;
+                fixture.Triggers[0].InitialValue = null;
+                fixture.Triggers[0].TargetValue = null;
+                fixture.Triggers[0].SourceSpawnResolved = null;
+                fixture.SpawnPools.Add(new SpawnPoolEntry { Id = 531225, MapContextId = 1497 });
+            }, "spawn-pool-not-in-squad-instance");
 
             yield return Case("missing ability target creature", fixture =>
             {

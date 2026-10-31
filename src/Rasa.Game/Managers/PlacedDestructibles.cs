@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Rasa.Managers
 {
@@ -38,9 +39,15 @@ namespace Rasa.Managers
     ///    back as a sprout that grows (ForceState POWER_DOWN, Use POWER_UP), as the client has no
     ///    way from destroyed.
     ///  - a force field (62, 79, 84): ForceFields, on the row's side (the Bane's by default, which
-    ///    players can shoot), repaired when it is due back.
+    ///    players can shoot), repaired when it is due back. A sealed row's (world_destructible.sealed)
+    ///    takes nothing from shots (ForceFields.Field.Sealed) in every copy of the map; a mission
+    ///    takes it down for good in one copy (<see cref="TakeDown"/>, MissionActionKind.TakeDownField).
     ///  - a Shrine (13) or a StatelessSwitch (8) has destroyed content and is no destroyable to the
     ///    client: it is put down as scenery in its one state, and nothing hurts it.
+    ///  - a class with no augmentation at all - a plain model, as the .map's own pieces - is left
+    ///    out, unless <see cref="PlainScenery"/> names it: then it is put down as scenery with no
+    ///    state, as the Pools' Eloh obelisk at the western fort, which the live servers had and the
+    ///    1.16.5 .map has not (PoolsObeliskV1).
     ///
     /// Hit points (ours, by size, unless the row gives some): <see cref="SmallHitPoints"/>,
     /// <see cref="MediumHitPoints"/>, <see cref="LargeHitPoints"/> (<see cref="SizeOf"/>); a force
@@ -87,8 +94,20 @@ namespace Rasa.Managers
         /// <summary>A spawner goes again no sooner than this after it last spawned, and only once what came out is dead.</summary>
         public const long SpawnerRearmMs = 60_000;
 
+        /// <summary>How often a copy looks at who is in it for sealed fields their missions took down (<see cref="CatchUp"/>).</summary>
+        public const long CatchUpMs = 1000;
+
         /// <summary>The Practice Dummy has its own ways (PracticeTargetManager) and is no row's.</summary>
         public const uint PracticeDummyClass = PracticeTargetManager.EntityClassId;
+
+        /// <summary>
+        /// The plain models (no augmentation) a row may put down, as scenery with no state. Any other
+        /// is a row's mistake and is left out: a destructible table is not for the .map's pieces.
+        /// </summary>
+        public static readonly IReadOnlySet<uint> PlainScenery = new HashSet<uint>
+        {
+            10259,  // ArchElohObeliskV01: the Pools' obelisk at the western Bane fort (PoolsObeliskV1)
+        };
 
         public enum Kind
         {
@@ -277,6 +296,10 @@ namespace Rasa.Managers
             public uint CreatureId { get; init; }
             public uint CreatureCount { get; init; }
             public uint Side { get; init; }
+
+            /// <summary>A force field shots do not take down: only <see cref="TakeDown"/> does.</summary>
+            public bool Sealed { get; init; }
+
             public string Comment { get; init; }
 
             /// <summary>Put down by a GM: no row, gone with its map channel.</summary>
@@ -331,6 +354,7 @@ namespace Rasa.Managers
 
         private static List<Placement> _placements = new List<Placement>();
         private static readonly ConditionalWeakTable<MapChannel, List<Live>> Channels = new();
+        private static readonly ConditionalWeakTable<MapChannel, StrongBox<long>> NextCatchUps = new();
 
         /// <summary>The rows that were kept.</summary>
         public static IReadOnlyList<Placement> All => _placements;
@@ -354,6 +378,7 @@ namespace Rasa.Managers
             Now = () => Environment.TickCount64;
             Roll = (min, max) => Random.Shared.NextInt64(min, max + 1);
             Hatch = FithikEggClusters.Hatch;
+            MissionsOf = () => MissionApplication.Instance;
         }
 
         #region Loading and placing
@@ -399,6 +424,9 @@ namespace Rasa.Managers
                     continue;
                 }
 
+                if (row.Sealed && kind != Kind.ForceField)
+                    Logger.WriteLog(LogType.Error, $"world_destructible {row.Id}: sealed, and it is no force field; sealed is left out");
+
                 placements.Add(new Placement
                 {
                     Id = row.Id,
@@ -411,6 +439,7 @@ namespace Rasa.Managers
                     CreatureId = row.CreatureId,
                     CreatureCount = row.CreatureCount,
                     Side = row.Side,
+                    Sealed = row.Sealed && kind == Kind.ForceField,
                     Comment = row.Comment ?? ""
                 });
             }
@@ -450,6 +479,9 @@ namespace Rasa.Managers
 
             if (augmentations == null)
                 return null;
+
+            if (augmentations.Count == 0)
+                return PlainScenery.Contains(classInfo.ClassId) ? Kind.Scenery : null;
 
             if (augmentations.Contains(AugmentationType.ForceField) || augmentations.Contains(AugmentationType.ClanForceField) ||
                 augmentations.Contains(AugmentationType.OwnableForceField))
@@ -503,9 +535,13 @@ namespace Rasa.Managers
             Kind.Spawner => UseObjectState.CsStateIdle,
             Kind.TeslaCoil => UseObjectState.StatePowerDown,
             Kind.Switch => UseObjectState.StatePowerUp,
-            _ => EntityClassManager.Instance.GetClassInfo(classId)?.Augmentations?.Contains(AugmentationType.Shrine) == true
-                ? UseObjectState.ShrineState0
-                : UseObjectState.SsState0
+            _ => EntityClassManager.Instance.GetClassInfo(classId)?.Augmentations switch
+            {
+                { } list when list.Contains(AugmentationType.Shrine) => UseObjectState.ShrineState0,
+                { Count: > 0 } => UseObjectState.SsState0,
+                // A plain model has no usable to take a state: none is sent (DynamicObjectManager's scenery).
+                _ => 0
+            }
         };
 
         /// <summary>
@@ -590,7 +626,7 @@ namespace Rasa.Managers
         /// look at one (.destructible). Null if the class cannot be placed.
         /// </summary>
         public static Live PutDown(MapChannel mapChannel, EntityClasses classId, Vector3 position, double rotation,
-            uint hitPoints = 0, uint creatureId = 0, uint creatureCount = 0, uint side = WorldDestructibleEntry.SideDefault)
+            uint hitPoints = 0, uint creatureId = 0, uint creatureCount = 0, uint side = WorldDestructibleEntry.SideDefault, bool @sealed = false)
         {
             if (mapChannel?.MapInfo == null || WhyNot(classId, out var kind) != null)
                 return null;
@@ -606,6 +642,7 @@ namespace Rasa.Managers
                 CreatureId = creatureId,
                 CreatureCount = creatureCount,
                 Side = side,
+                Sealed = @sealed && kind == Kind.ForceField,
                 Comment = "put down by a GM",
                 IsPutDown = true
             });
@@ -642,6 +679,7 @@ namespace Rasa.Managers
                 var side = placement.Side == WorldDestructibleEntry.SideAfs ? ForceFields.Side.A : ForceFields.Side.B;
 
                 live.Field = ForceFields.Place(map, fieldClass, side, placement.Position, (float)placement.Rotation, (int)live.MaxHitPoints);
+                live.Field.Sealed = placement.Sealed;
                 live.Object = live.Field.Object;
             }
             else
@@ -738,7 +776,10 @@ namespace Rasa.Managers
                 TakeAway(live);
 
             if (mapChannel != null)
+            {
                 Channels.Remove(mapChannel);
+                NextCatchUps.Remove(mapChannel);
+            }
 
             return all.Count;
         }
@@ -903,6 +944,51 @@ namespace Rasa.Managers
 
         private static bool HasHealthStates(Kind kind) => kind is Kind.Inert or Kind.DestroyedSpawner;
 
+        /// <summary>
+        /// A row's force field down for good in one copy of its map (MapChannel.IsCopy: a squad's,
+        /// a private or a shared instance), the others keeping theirs, as TorcastraPrison opens its
+        /// gate: unsealed, its hit points to none, and never due back while the copy stands (a
+        /// copy made again has it up again, until <see cref="CatchUp"/> takes it down). A
+        /// mission's MissionActionKind.TakeDownField. False where nothing is taken down: on a
+        /// channel that is no copy (logged: the open world's stay up for everyone); on another
+        /// map than the row's - the player moved on before the transition ran, and CatchUp has it
+        /// when they are back (Debug); where the channel has no force field of the row (logged).
+        /// </summary>
+        public static bool TakeDown(MapChannel map, uint rowId, ulong byEntityId)
+        {
+            if (map != null && !map.IsCopy)
+            {
+                Logger.WriteLog(LogType.Error,
+                    $"world_destructible {rowId}: warning, map {map.MapInfo?.MapContextId.ToString() ?? "none"} is no copy; a sealed field is taken down only in a squad's copy, so nothing is.");
+                return false;
+            }
+
+            if (map?.MapInfo != null && _placements.FirstOrDefault(placement => placement.Id == rowId) is { } row &&
+                row.MapContextId != map.MapInfo.MapContextId)
+            {
+                Logger.WriteLog(LogType.Debug,
+                    $"world_destructible {rowId}: on map {row.MapContextId}, not {map.MapInfo.MapContextId}; taken down when a player who has been through it is in a copy of its map.");
+                return false;
+            }
+
+            var live = LiveOf(map, rowId);
+
+            if (live?.Field is not { } field)
+            {
+                Logger.WriteLog(LogType.Error,
+                    $"world_destructible {rowId}: no force field of it on map {map?.MapInfo?.MapContextId.ToString() ?? "none"} to take down{(live == null ? "" : $" ({live.Placement.Kind})")}.");
+                return false;
+            }
+
+            field.Sealed = false;
+
+            if (!field.IsDestroyed)
+                ForceFields.Damage(field, field.Health, byEntityId);
+
+            live.RespawnAt = long.MaxValue;
+            return true;
+        }
+
         #endregion
 
         #region Coming back, and spawning
@@ -919,6 +1005,8 @@ namespace Rasa.Managers
                 return;
 
             var now = Now();
+
+            CatchUp(map, lives, now);
 
             foreach (var live in lives)
             {
@@ -944,6 +1032,145 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// A copy made again has its sealed fields up, as every copy does: a squad that has taken
+        /// one down before has it down again as soon as one of them is in, as TorcastraPrison
+        /// opens its gate again (CatchUp). Once every <see cref="CatchUpMs"/>, on a copy with a
+        /// sealed field standing, for each player in it: a field whose row a TakeDownField action
+        /// of their missions names, on a transition they have been through, goes down
+        /// (<see cref="TakeDown"/>). The open world's are left alone.
+        /// </summary>
+        internal static void CatchUp(MapChannel map, List<Live> lives, long now)
+        {
+            if (map?.IsCopy != true)
+                return;
+
+            var next = NextCatchUps.GetOrCreateValue(map);
+
+            if (now < next.Value)
+                return;
+
+            next.Value = now + CatchUpMs;
+
+            var standing = lives.Where(live => live.Field != null && live.Placement.Sealed && !live.Placement.IsPutDown && !live.IsDown).ToList();
+
+            if (standing.Count == 0)
+                return;
+
+            var missions = Missions?.LoadedMissions;
+
+            if (missions == null)
+                return;
+
+            foreach (var client in map.ClientList.ToList())
+            {
+                var player = client?.Player;
+
+                if (player == null || client.State != ClientState.Ingame || !ReferenceEquals(player.MapChannel, map))
+                    continue;
+
+                foreach (var live in standing.Where(live => !live.IsDown))
+                    if (HasTakenDown(player, missions, live.Placement.Id))
+                    {
+                        Logger.WriteLog(LogType.Debug,
+                            $"{live.Placement} on map {live.Placement.MapContextId}: down again, {player.FamilyName}'s mission has taken it down.");
+                        TakeDown(map, live.Placement.Id, player.EntityId);
+                    }
+            }
+        }
+
+        /// <summary>
+        /// Whether one of the player's missions, active or done, has a transition with a
+        /// TakeDownField action for the row that the player has been through: its objective is in
+        /// the transition's state (completed, if it names none), or the mission is done and the
+        /// transition completes its objective.
+        /// </summary>
+        public static bool HasTakenDown(Manifestation player, IReadOnlyDictionary<uint, Mission> missions, uint rowId)
+        {
+            if (player == null || missions == null || !TakeDownsOf(missions).TryGetValue(rowId, out var transitions))
+                return false;
+
+            foreach (var (missionId, objectiveId, to) in transitions)
+                if ((player.Missions.ContainsKey(missionId) || player.MissionHistory.ContainsKey(missionId)) &&
+                    HasBeenThrough(player, missionId, objectiveId, to))
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>The transitions that take a row's field down, by row: built once for each set of loaded missions.</summary>
+        private sealed class TakeDownIndex
+        {
+            public TakeDownIndex(IReadOnlyDictionary<uint, Mission> missions, IReadOnlyDictionary<uint, List<(uint, uint, MissionObjectiveState)>> rows)
+            {
+                Missions = missions;
+                Rows = rows;
+            }
+
+            public IReadOnlyDictionary<uint, Mission> Missions { get; }
+            public IReadOnlyDictionary<uint, List<(uint MissionId, uint ObjectiveId, MissionObjectiveState To)>> Rows { get; }
+        }
+
+        private static volatile TakeDownIndex _takeDowns;
+
+        /// <summary>How many times the index was built; a test's to read.</summary>
+        internal static int TakeDownIndexBuilds;
+
+        /// <summary>
+        /// Each row a TakeDownField action names, with the mission, objective and objective state of
+        /// each transition that carries one (completed, where the transition names none). Built the
+        /// first time it is asked for a set of loaded missions, and again for another set.
+        /// </summary>
+        internal static IReadOnlyDictionary<uint, List<(uint MissionId, uint ObjectiveId, MissionObjectiveState To)>> TakeDownsOf(
+            IReadOnlyDictionary<uint, Mission> missions)
+        {
+            if (_takeDowns is { } built && ReferenceEquals(built.Missions, missions))
+                return built.Rows;
+
+            var rows = new Dictionary<uint, List<(uint, uint, MissionObjectiveState)>>();
+
+            foreach (var mission in missions.Values.Where(mission => mission != null))
+                foreach (var objective in mission.Objectives.Values)
+                    foreach (var transition in objective.GetExecutableTransitionsOrLegacyDefault())
+                        foreach (var action in transition.Actions)
+                            if (action.Kind == MissionActionKind.TakeDownField &&
+                                action.ItemIntent is global::Rasa.Missions.Scenes.TakeDownFieldIntent takeDown)
+                            {
+                                if (!rows.TryGetValue(takeDown.DestructibleId, out var list))
+                                    rows[takeDown.DestructibleId] = list = new List<(uint, uint, MissionObjectiveState)>();
+
+                                list.Add((mission.MissionId, objective.ObjectiveId, transition.ToState ?? MissionObjectiveState.Completed));
+                            }
+
+            Interlocked.Increment(ref TakeDownIndexBuilds);
+            var index = new TakeDownIndex(missions, rows.ToDictionary(entry => entry.Key, entry => entry.Value));
+            _takeDowns = index;
+            return index.Rows;
+        }
+
+        private static bool HasBeenThrough(Manifestation player, uint missionId, uint objectiveId, MissionObjectiveState to)
+        {
+            if (player.Missions.TryGetValue(missionId, out var log))
+            {
+                if (log.Objectives.TryGetValue(objectiveId, out var objective) && Reached(objective.State, to))
+                    return true;
+
+                return to == MissionObjectiveState.Completed && log.State is MissionState.Completed or MissionState.Success;
+            }
+
+            return to == MissionObjectiveState.Completed &&
+                player.MissionHistory.TryGetValue(missionId, out var state) && state is MissionState.Completed or MissionState.Success;
+        }
+
+        /// <summary>An objective's state is the transition's, or later: revealed, then active, then completed or failed.</summary>
+        private static bool Reached(MissionObjectiveState state, MissionObjectiveState to) => to switch
+        {
+            MissionObjectiveState.NotAssigned => state is MissionObjectiveState.NotAssigned or MissionObjectiveState.Incomplete or
+                MissionObjectiveState.Completed or MissionObjectiveState.Failed,
+            MissionObjectiveState.Incomplete => state is MissionObjectiveState.Incomplete or MissionObjectiveState.Completed or MissionObjectiveState.Failed,
+            _ => state == to
+        };
+
         /// <summary>Back at full hit points, in the state it stands in.</summary>
         public static void Respawn(Live live)
         {
@@ -956,6 +1183,9 @@ namespace Rasa.Managers
 
             if (live.Field != null)
             {
+                if (live.Placement.Sealed)
+                    live.Field.Sealed = true;
+
                 ForceFields.Repair(live.Field, 0);
                 return;
             }

@@ -11,7 +11,9 @@ using Rasa.Context.World;
 using Rasa.Missions.Content;
 using Rasa.Services.Preloader;
 using Rasa.Services.Preloader.Missions;
+using Rasa.Services.Preloader.Missions.Plateau;
 using Rasa.Services.Preloader.Missions.Wilderness;
+using Rasa.Test.Missions.Plateau;
 using Rasa.Test.Database;
 
 namespace Rasa.Test.Missions.Wilderness
@@ -27,12 +29,15 @@ namespace Rasa.Test.Missions.Wilderness
         private const string WreckCreatures = "20261104000000_Add_wreck_creatures";
 
         /// <summary>
-        /// The battlefields' Targets of Opportunity (TargetsOfOpportunitySeed, revision targets_1),
-        /// enabled by Add_targets_of_opportunity after the Wilderness migrations: fourteen, the
-        /// fifteenth being the Wilderness missions' own 1449.
+        /// The battlefields' missions, enabled by migrations dated after the Wilderness ones: their
+        /// Targets of Opportunity (TargetsOfOpportunitySeed, revision targets_1), fourteen, the
+        /// fifteenth being the Wilderness missions' own 1449; the Plateau missions
+        /// (PlateauMissionDataV1, revision plateau_1_16_5) and the Valverde Pools missions (PoolsMissionDataV1,
+        /// revision pools_1_16_5).
         /// </summary>
         private static readonly uint[] BattlefieldMissions =
-            TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId).ToArray();
+            TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId).Concat(PlateauMissionTests.MissionIds)
+                .Concat(Rasa.Test.Missions.Pools.PoolsMissionTests.MissionIds).ToArray();
 
         /// <summary>
         /// Every mission enabled by a migration dated after the Wilderness ones: the
@@ -117,8 +122,11 @@ namespace Rasa.Test.Missions.Wilderness
             var expectedEntities = latest.GetEntityTypes().Select(entity => entity.Name).ToArray();
             var expectedProperties = latest.GetEntityTypes().SelectMany(entity =>
                 entity.GetProperties().Select(property => entity.Name + "." + property.Name)).ToArray();
-            var finalConstraint = snapshot.FindEntityType("Rasa.Structures.World.MissionActionEntry")
+            // The action kinds the Wilderness migrations end with (1..13); a kind let in by a later
+            // migration (TakeDownField, 14) is in the snapshot's constraint and not in theirs.
+            var finalConstraint = latest.FindEntityType("Rasa.Structures.World.MissionActionEntry")
                 .FindCheckConstraint("CK_mission_action_kind_parameter_set").Sql;
+            StringAssert.Contains(finalConstraint, "(kind IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))");
             var migrations = assembly.Migrations.Where(entry =>
                 entry.Key.StartsWith("20261104", StringComparison.Ordinal) && entry.Key != WreckCreatures)
                 .OrderBy(entry => entry.Key).ToArray();
@@ -597,8 +605,8 @@ namespace Rasa.Test.Missions.Wilderness
 
         /// <summary>
         /// The evidence of Bootcamp and the Wilderness missions. The battlefields' missions, the
-        /// Ojasa hive's, the Caves of Donn's, the Devil's Den's, Pravus Research's, Torcastra's and
-        /// Minos Caverns' have theirs from migrations dated after these, which come and go with a
+        /// Ojasa hive's, the Caves of Donn's, the Devil's Den's, Pravus Research's, Torcastra's,
+        /// Minos Caverns' and the Plateau's have theirs from migrations dated after these, which come and go with a
         /// rollback to one of them.
         /// </summary>
         private static string[] EvidenceRows(WildernessRuntimeTestHarness harness) =>
@@ -607,7 +615,9 @@ namespace Rasa.Test.Missions.Wilderness
                     entry.ContentRevision != OjasaHiveContent.Revision && entry.ContentRevision != CavesOfDonnContent.Revision &&
                     entry.ContentRevision != DevilsDenContent.Revision && entry.ContentRevision != PravusResearchContent.Revision &&
                     entry.ContentRevision != Rasa.Services.Preloader.Missions.Torcastra.TorcastraMissionsV1.Revision &&
-                    entry.ContentRevision != MinosCavernsMissions.Revision)
+                    entry.ContentRevision != MinosCavernsMissions.Revision &&
+                    entry.ContentRevision != PlateauMissionDataV1.Revision &&
+                    entry.ContentRevision != Rasa.Services.Preloader.Missions.Pools.PoolsMissionDataV1.Revision)
                 // Wilderness_reward_consumables and Wilderness_reward_modules, dated after the
                 // Wilderness migrations, add their own.
                 .Where(entry => entry.SourceUri != "repository:WildernessRewardConsumables" &&
@@ -634,12 +644,16 @@ namespace Rasa.Test.Missions.Wilderness
                     row.ContentRevision != MinosCavernsMissions.Revision).ToArray();
             var bootcamp = rows.Where(row => row.ContentRevision == "deployment_11").ToArray();
             var wilderness = rows.Where(row => row.ContentRevision == WildernessMissionDataV1.Revision).ToArray();
+            var plateau = rows.Where(row => row.ContentRevision == PlateauMissionDataV1.Revision).ToArray();
+            var pools = rows.Where(row => row.ContentRevision == Rasa.Services.Preloader.Missions.Pools.PoolsMissionDataV1.Revision).ToArray();
 
             Assert.AreEqual(12, bootcamp.Length);
             // 97 from the Wilderness migrations, and Kill Proctor Fulgor's (427/6) from
             // Wilderness_fulgor_indicator, dated after them.
             Assert.AreEqual(98, wilderness.Length);
-            Assert.AreEqual(rows.Length, bootcamp.Length + wilderness.Length);
+            Assert.AreEqual(PlateauMissionTests.Indicators, plateau.Length);
+            Assert.AreEqual(Rasa.Test.Missions.Pools.PoolsMissionTests.Indicators, pools.Length);
+            Assert.AreEqual(rows.Length, bootcamp.Length + wilderness.Length + plateau.Length + pools.Length);
             // Bootcamp's keys are missionobjectiveindicatorlanguage ids: 430 "Eloh Approach" to 439
             // "Cave-in Location".
             foreach (var row in bootcamp)
@@ -648,7 +662,8 @@ namespace Rasa.Test.Missions.Wilderness
             // The Wilderness rows were keyed 1, 2, 3.. within a mission; as client ids those are other
             // missions' names (1 "Bane Base", 3 "Possible Food Crate Location"). A Wilderness
             // indicator that is to carry a client name is keyed by that name's id, below UnnamedFrom.
-            foreach (var row in wilderness)
+            // The client has no names for the Plateau missions' indicators either.
+            foreach (var row in wilderness.Concat(plateau).Concat(pools))
                 Assert.IsTrue(row.IndicatorId > Rasa.Structures.MissionIndicator.UnnamedFrom,
                     $"mission {row.MissionId} objective {row.ObjectiveId} indicator {row.IndicatorId}");
 

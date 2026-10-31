@@ -123,8 +123,7 @@ namespace Rasa.Managers
                         foreach (var credit in document.Credit.Where(entry => entry.Value.Mode != MissionCreditMode.Personal))
                             if (Missions[binding.MissionId].Objectives[credit.Key].GetExecutableTransitionsOrLegacyDefault()
                                 .Any(transition => transition.ProgressRule == null ||
-                                    !MissionProgressRule.IsKill(transition.ProgressRule.Kind) &&
-                                    transition.ProgressRule.Kind != Data.MissionProgressEventKind.ScenarioEvent))
+                                    !MissionProgressRule.IsShared(transition.ProgressRule.Kind)))
                                 throw new MissionRuleException($"Mission {binding.MissionId}: objective {credit.Key} cannot share personal actions.");
                         MissionMarkerProjection.Validate(Missions[binding.MissionId], document);
                         SceneBindings.Add(binding.MissionId, document);

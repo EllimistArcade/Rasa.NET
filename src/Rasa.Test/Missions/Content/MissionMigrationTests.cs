@@ -94,8 +94,11 @@ namespace Rasa.Test.Missions.Content
             using var harness = BootcampRuntimeTestHarness.Create(useWorldContent: true);
             // Bootcamp's five, the Wilderness outdoor release, the battlefields' Targets of
             // Opportunity, the Ojasa Atta Hive's five, the Caves of Donn's six, the Devil's Den's
-            // eight, Pravus Research's six, Torcastra Prison's five and Minos Caverns' four.
-            var targets = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId).ToArray();
+            // eight, Pravus Research's six, Torcastra Prison's five, Minos Caverns' four, the
+            // Plateau missions and the Valverde Pools missions.
+            var targets = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
+                .Concat(Rasa.Test.Missions.Plateau.PlateauMissionTests.MissionIds)
+                .Concat(Rasa.Test.Missions.Pools.PoolsMissionTests.MissionIds).ToArray();
             var expected = WildernessMissionCases.ProtectedBootcampMissionIds.Concat(
                 WildernessMissionCases.All.Where(entry => entry.Disposition == WildernessDisposition.OutdoorRelease)
                     .Select(entry => entry.MissionId)).ToArray();
@@ -114,7 +117,7 @@ namespace Rasa.Test.Missions.Content
                     .Select(entry => entry.MissionId).ToArray());
             Assert.AreEqual(5, harness.WorldContext.Set<MissionSceneBindingEntry>()
                 .Count(entry => entry.ContentRevision == "deployment_11"));
-            Assert.AreEqual(targets.Length, harness.WorldContext.Set<MissionSceneBindingEntry>()
+            Assert.AreEqual(Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Length, harness.WorldContext.Set<MissionSceneBindingEntry>()
                 .Count(entry => entry.ContentRevision == Rasa.Services.Preloader.TargetsOfOpportunitySeed.Revision));
             Assert.AreEqual(1, harness.WorldContext.Set<MissionExperienceBindingEntry>().Count(entry => entry.Enabled));
             harness.WorldContext.Database.OpenConnection();

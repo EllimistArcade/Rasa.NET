@@ -34,6 +34,8 @@ namespace Rasa.Missions.Definitions
                 return "Character-owned costs cannot have automatic cleanup.";
             if (binding.Drop != null && binding.Scope != MissionItemScope.CharacterOwned)
                 return "Corpse drops require CharacterOwned scope; assignment-issued items use mission item intents.";
+            if (binding.CounterObjectiveId != 0 && binding.Scope != MissionItemScope.AssignmentIssued)
+                return "An item counter objective requires AssignmentIssued scope.";
             return null;
         }
 
@@ -70,6 +72,7 @@ namespace Rasa.Missions.Definitions
             MissionActionKind.ConsumeMissionItem => action.ItemIntent is ConsumeMissionItemIntent,
             MissionActionKind.RemoveMissionItems => action.ItemIntent is RemoveMissionItemsIntent,
             MissionActionKind.FailRelatedMission => action.ItemIntent is FailRelatedMissionIntent,
+            MissionActionKind.TakeDownField => action.ItemIntent is TakeDownFieldIntent,
             _ => action.ItemIntent == null
         };
 
@@ -85,6 +88,8 @@ namespace Rasa.Missions.Definitions
                          transition.ProgressRule?.Kind == MissionProgressEventKind.ItemAcquired &&
                          transition.ItemCounters.Count > 0)))
                     yield return $"Mission item {binding.ItemKey} drop must name an item-acquisition objective.";
+                if (binding != null && binding.CounterObjectiveId != 0 && !mission.Objectives.ContainsKey(binding.CounterObjectiveId))
+                    yield return $"Mission item {binding.ItemKey} counter names a missing objective {binding.CounterObjectiveId}.";
             }
             var actions = mission.Objectives.Values.SelectMany(objective => objective.GetExecutableTransitionsOrLegacyDefault())
                 .SelectMany(transition => transition.Actions).ToArray();
@@ -96,6 +101,10 @@ namespace Rasa.Missions.Definitions
                     (failure.MissionId == 0 || failure.MissionId == mission.MissionId ||
                      string.IsNullOrWhiteSpace(failure.OperationKey) || failure.OperationKey.Length > 160))
                     yield return $"Related failure action {action.ActionId} must name another mission and a stable operation key.";
+                if (action.ItemIntent is TakeDownFieldIntent takeDown &&
+                    (takeDown.DestructibleId == 0 ||
+                     string.IsNullOrWhiteSpace(takeDown.OperationKey) || takeDown.OperationKey.Length > 160))
+                    yield return $"Take down field action {action.ActionId} must name a world_destructible row and a stable operation key.";
             }
             var keys = new HashSet<string>(StringComparer.Ordinal);
             var turnInKeys = mission.Items.Values.Where(binding => binding.TurnInQuantity > 0)

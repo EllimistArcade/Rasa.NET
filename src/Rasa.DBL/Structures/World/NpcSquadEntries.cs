@@ -43,6 +43,23 @@ namespace Rasa.Structures.World
         [Column("engage_range")]
         [Required]
         public double EngageRange { get; set; }
+
+        /// <summary>
+        /// How far from its leader a member goes in a fight, in metres; 0 for no tether, the member
+        /// leashed from its place as any creature is from its home.
+        /// </summary>
+        [Column("tether")]
+        [Required]
+        public double Tether { get; set; }
+
+        /// <summary>
+        /// 1 when the squad's leader, as it is sent, is a bystander its members guard: he takes up no fight - not
+        /// his squad's, not one a hit or anything else would start - and stands while they fight, so they fight by
+        /// him; the next leader, when he falls, fights as any. 0, the default, for none.
+        /// </summary>
+        [Column("leader_bystander")]
+        [Required]
+        public byte LeaderBystander { get; set; }
     }
 
     /// <summary>

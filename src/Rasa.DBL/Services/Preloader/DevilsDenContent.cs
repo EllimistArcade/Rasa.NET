@@ -92,7 +92,10 @@ namespace Rasa.Services.Preloader
         public const uint HakariBandClass = 7070, LuroronBandClass = 7071, ArtifactClass = 7084, DetonatorClass = 21870;
         public const uint HakariBandTemplate = 459, LuroronBandTemplate = 460, ArtifactTemplate = 463, DetonatorTemplate = 44858;
 
-        public const uint HakariCorpseClass = 7074, LuroronCorpseClass = 7075, ArtifactStoneClass = 11093, ConsoleClass = 7468, BombClass = 10122;
+        public const uint HakariCorpseClass = 7074, LuroronCorpseClass = 7075, ArtifactStoneClass = 11093, ConsoleClass = 7468;
+
+        /// <summary>UsableBombHumV01, the AFS charge's acceptor; UsableBombForeanV01 has no model to click (BombSitesWithAModel).</summary>
+        public const uint BombClass = BombSitesWithAModel.BombClass;
         public const uint DetonatorCrateClass = 7894;
         public const uint EggClusterClass = 10180, EggClass = 20758, MachineryClass = 10287, FuelDepotClass = 12981;
         public const uint LaserDoorClass = 9572, GeneratorClass = 3857, BaneTeleporterClass = 10603;

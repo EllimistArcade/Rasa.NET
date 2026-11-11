@@ -111,7 +111,13 @@ namespace Rasa.Services.Preloader
         public const uint GeneratorClass = 3857;        // UsableInertDestBaneOutpostGenerator
         public const uint JammerClass = 10282;          // UsableInertDestBaneSonicTowerV01: the large transmitter
         public const uint TeleporterClass = 10603;      // UsableInertDestBaneTeleporterV01DELETEDUPE
-        public const uint BombClass = 10122;            // UsableBombForeanV01
+        /// <summary>
+        /// UsableBombHumV01: the AFS charge's acceptor (prop_hum_bomb_acceptor_v01) a detonator is
+        /// set on. It was UsableBombForeanV01 (BombSitesWithAModel.ForeanBombClass), whose class
+        /// has no model of its own (mesh 776, default.geo): nothing showed at either generator to
+        /// set a detonator on.
+        /// </summary>
+        public const uint BombClass = BombSitesWithAModel.BombClass;
         public const uint TerminalClass = 7123;         // UsableNPCCormanComputerV01
         public const uint KeyboardClass = 10519;        // UsableNPCBaneKeyboard
         public const uint CacheClass = 7894;            // UsableTreasureDispBaneCrateV01: the weapons cache

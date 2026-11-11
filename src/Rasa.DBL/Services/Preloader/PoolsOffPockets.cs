@@ -85,6 +85,13 @@ namespace Rasa.Services.Preloader
 
         public const short Scripted = 2;
 
+        /// <summary>The id the migration first had, 20271023000000, which Crater_lake_pen_generator shares.</summary>
+        public const string OldId = "20271023000000_Pools_off_pockets";
+
+        /// <summary>The history row a World that ran it under OldId still has.</summary>
+        public static readonly string ForgetOldId =
+            $"DELETE FROM __EFMigrationsHistory WHERE MigrationId = '{OldId}';";
+
         public static IEnumerable<string> Up()
         {
             foreach (var m in Moves)

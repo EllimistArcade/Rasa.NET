@@ -23,8 +23,8 @@ namespace Rasa.Test.World
     [DoNotParallelize]
     public class PoolsOffPocketsTests
     {
-        private const string Migration = "20271023000000_Pools_off_pockets";
-        private const string Previous = "20271022000000_Attacks_on_their_models";
+        private const string Migration = "20271024000000_Pools_off_pockets";
+        private const string Previous = "20271023000000_Crater_lake_pen_generator";
 
         private static readonly Dictionary<uint, string> Maps = new()
         {
@@ -142,6 +142,31 @@ namespace Rasa.Test.World
                 Assert.IsGreaterThanOrEqualTo(SpawnPoolManager.TurretScan, gap, $"turret {turret}: {gap} m from the pack's area");
             }
         }
+
+        // It was 20271023000000, Crater_lake_pen_generator's timestamp: a World that ran it under that id
+        // runs it again under this one, changing nothing, and loses the old id's history row.
+        [TestMethod]
+        public void AWorldThatRanItUnderItsOldIdRunsItAgainAsItIsAndForgetsTheOldId()
+        {
+            using var database = new OrdinaryLootTestDatabase();
+            var migrator = database.Context.GetService<IMigrator>();
+            migrator.Migrate(Previous);
+
+            foreach (var sql in PoolsOffPockets.Up())
+                database.Context.Database.ExecuteSqlRaw(sql);
+            database.Context.Database.ExecuteSqlRaw(
+                $"INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('{PoolsOffPockets.OldId}', '10.0.0');");
+            var ran = Rows(database).ToDictionary(pair => pair.Key, pair => Key(pair.Value));
+
+            migrator.Migrate(Migration);
+
+            CollectionAssert.AreEquivalent(ran.ToList(), Rows(database).ToDictionary(pair => pair.Key, pair => Key(pair.Value)).ToList());
+            Assert.AreEqual(0, History(database, PoolsOffPockets.OldId));
+            Assert.AreEqual(1, History(database, Migration));
+        }
+
+        private static int History(OrdinaryLootTestDatabase database, string id) => database.Context.Database
+                .SqlQueryRaw<int>($"SELECT COUNT(*) AS Value FROM __EFMigrationsHistory WHERE MigrationId = '{id}'").AsEnumerable().Single();
 
         [TestMethod]
         public void OnMySqlTheMovesGoInAndComeOut()

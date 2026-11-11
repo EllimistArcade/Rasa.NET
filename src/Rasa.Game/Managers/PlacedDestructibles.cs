@@ -107,6 +107,7 @@ namespace Rasa.Managers
         public static readonly IReadOnlySet<uint> PlainScenery = new HashSet<uint>
         {
             10259,  // ArchElohObeliskV01: the Pools' obelisk at the western Bane fort (PoolsObeliskV1)
+            10260,  // ArchElohObeliskV02: the Divide hilltop obelisk under the We/Us and Remember signs (DivideRememberObelisk)
         };
 
         public enum Kind

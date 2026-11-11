@@ -55,6 +55,7 @@ namespace Rasa.Test.World
         private const EntityClasses Dummy = (EntityClasses)29365;          // the Practice Dummy
         private const EntityClasses Rock = (EntityClasses)4321;            // no augmentation at all
         private const EntityClasses Obelisk = (EntityClasses)10259;        // ArchElohObeliskV01: none either, but listed
+        private const EntityClasses ObeliskV02 = (EntityClasses)10260;     // ArchElohObeliskV02: the same
 
         private const uint AttaGrubClass = 29089;
         private const uint WarnetSoldierClass = 6262;
@@ -98,6 +99,7 @@ namespace Rasa.Test.World
             AddClass(Dummy, "UsableStatelessHumPracticeDummyV01", true, AugmentationType.InertDestroyable);
             AddClass(Rock, "PropRock", false);
             AddClass(Obelisk, "ArchElohObeliskV01", false);
+            AddClass(ObeliskV02, "ArchElohObeliskV02", false);
 
             // The kinds of creature the spawners are named for: two grubs, a soldier on the map.
             AddCreature(531081, AttaGrubClass);
@@ -617,28 +619,35 @@ namespace Rasa.Test.World
         }
 
         /// <summary>
-        /// A plain model the server lists (PlainScenery: the Pools' obelisk) is put down as scenery with no state and no
-        /// target; any other plain model (the rock) stays left out.
+        /// A plain model the server lists (PlainScenery: the Pools' and the Divide hilltop's obelisks) is put down as
+        /// scenery with no state and no target; any other plain model (the rock) stays left out.
         /// </summary>
         [TestMethod]
         public void AListedPlainModelIsSceneryWithNoStateAndAnUnlistedOneIsLeftOut()
         {
             using var world = new WorldTestContext();
             var client = Stand(world, new Vector3(14, 2, 20));
-            using var placed = Put(world, Row(1, Obelisk, 10, 20));
+            using var placed = Put(world, Row(1, Obelisk, 10, 20), Row(2, ObeliskV02, 18, 20));
             var obelisk = ObjectOf(world, 1);
 
             Assert.IsNull(PlacedDestructibles.WhyNot(Obelisk, out var kind));
             Assert.AreEqual(PlacedDestructibles.Kind.Scenery, kind);
             Assert.AreEqual(DynamicObjectType.Scenery, obelisk.DynamicObjectType);
-            var made = Sent(client).Select(entry => entry.Packet).OfType<CreatePhysicalEntityPacket>().Single(packet => packet.EntityId == obelisk.EntityId);
+            var created = Sent(client).Select(entry => entry.Packet).OfType<CreatePhysicalEntityPacket>().ToList();
+            var made = created.Single(packet => packet.EntityId == obelisk.EntityId);
             Assert.AreEqual(Obelisk, made.ClassId);
             Assert.IsEmpty(made.EntityData.OfType<UsableInfoPacket>(), "a plain model has no usable state");
             Assert.IsFalse(PracticeTargetManager.TryGetTarget(world.Map, obelisk.EntityId, out _), "no target");
             Assert.IsFalse(PlacedDestructibles.LiveOf(world.Map, 1).IsDown);
 
+            var hilltop = ObjectOf(world, 2);
+            Assert.IsNull(PlacedDestructibles.WhyNot(ObeliskV02, out kind));
+            Assert.AreEqual(PlacedDestructibles.Kind.Scenery, kind);
+            Assert.AreEqual(DynamicObjectType.Scenery, hilltop.DynamicObjectType);
+            Assert.AreEqual(ObeliskV02, created.Single(packet => packet.EntityId == hilltop.EntityId).ClassId);
+
             StringAssert.Contains(PlacedDestructibles.WhyNot(Rock, out _), "no destroyed state");
-            CollectionAssert.AreEquivalent(new uint[] { 10259 }, PlacedDestructibles.PlainScenery.ToArray());
+            CollectionAssert.AreEquivalent(new uint[] { 10259, 10260 }, PlacedDestructibles.PlainScenery.ToArray());
         }
 
         [TestMethod]

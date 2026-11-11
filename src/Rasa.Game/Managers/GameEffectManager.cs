@@ -1272,16 +1272,6 @@ namespace Rasa.Managers
             return false;
         }
 
-        /// <summary>Whether an EMP crit is suppressing the actor's armour.</summary>
-        public static bool ArmorSuppressed(Actor actor)
-        {
-            foreach (var effect in actor.ActiveEffects.Values)
-                if (effect.SuppressesArmor && !effect.IsExpired)
-                    return true;
-
-            return false;
-        }
-
         /// <summary>The actor's ranged damage after the effects on it (Laser crit): amount x (100 + sum of RangedDamagePercent) / 100, never below 0.</summary>
         public static int ApplyRangedDamage(Actor actor, int amount)
         {
@@ -1395,11 +1385,11 @@ namespace Rasa.Managers
         /// Damage a victim takes, after the resistance the effects on them add up to (Rage,
         /// Resistance, Sacrifice, Base Wave) and, for damage of a known type, a player's own
         /// resistance to that type (armour and Hazmat Armor, Manifestation.ResistanceData), or a
-        /// creature's RESIST_ and VULNERABLE_ flags for it (CreatureResistances: +50, -50), and
-        /// EMP's factor for the creature's kind (EmpDamage: none to the biological, half to a
-        /// Machina); resisted is what came off, negative when a vulnerability added to the hit. A creature's
+        /// creature's RESIST_ and VULNERABLE_ flags for it (CreatureResistances: +50, -50);
+        /// resisted is what came off, negative when a vulnerability added to the hit. A creature's
         /// attack carries the type of the weapon it plays (Managers.CreatureAttacks), so a
-        /// player's own resistances meet it as well.
+        /// player's own resistances meet it as well. EMP's factor for a creature's kind is not
+        /// here: it is on what gets past the shields and armour to health (EmpDamage.ToHealth).
         /// </summary>
         public static int ApplyResist(Actor target, int amount, out int resisted, DamageType damageType = 0)
         {
@@ -1417,13 +1407,10 @@ namespace Rasa.Managers
 
             resist += CreatureResistances.ResistOf(target, damageType);
 
-            // EMP by the creature's kind: none to the biological, half to a Machina (EmpDamage).
-            var kind = EmpDamage.FactorFor(target, damageType);
-
-            if (resist == 0 && kind == 1.0)
+            if (resist == 0)
                 return amount;
 
-            var taken = (int)Math.Round(amount * kind * ResistMultiplier(resist));
+            var taken = (int)Math.Round(amount * ResistMultiplier(resist));
             resisted = amount - taken;
 
             return taken;
@@ -1433,7 +1420,8 @@ namespace Rasa.Managers
         /// What an attribute regenerates per period with the effects on its owner: health and
         /// power take RegenPercent (Regeneration Wave) and their own HealthRegenPercent (Bio
         /// Armor) or PowerRegenPercent (Mech Armor), armour takes ArmorRegenPercent (Base Wave,
-        /// Graviton Armor); 400 is five times the base.
+        /// Graviton Armor); 400 is five times the base. An EMP crit's Armor Suppression stops
+        /// armour regenerating at all while it is on (CritEffects.SuppressArmor).
         /// </summary>
         public static int RegenAmount(Actor actor, ActorAttributes attribute)
         {
@@ -1441,6 +1429,9 @@ namespace Rasa.Managers
 
             foreach (var effect in actor.ActiveEffects.Values)
             {
+                if (attribute.AttributeId == Attributes.Armor && effect.StopsArmorRegen && !effect.IsExpired)
+                    return 0;
+
                 switch (attribute.AttributeId)
                 {
                     case Attributes.Health:

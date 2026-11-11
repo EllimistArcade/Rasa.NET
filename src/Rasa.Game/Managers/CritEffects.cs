@@ -16,8 +16,8 @@ namespace Rasa.Managers
     ///  - Virulent: CRIT_VIRULENT 10000018, "Crippled: %(snareMod)s%% Movement" (CrowdControl).
     ///  - Fire: CRIT_FIRE 2, a DamageOverTime, "Fire Damage: %(dmgAmt)s every %(interval)s sec." -
     ///    FireDotPercent of the crit's damage as fire, every FireDotIntervalMs for FireDotMs.
-    ///  - EMP: CRIT_EMP 417, "Armor Suppression" - for EmpSuppressMs the creature's armour stops
-    ///    nothing: every hit goes straight to its health (GameEffect.SuppressesArmor).
+    ///  - EMP: CRIT_EMP 417, "Armor Suppression" - for EmpSuppressMs the target's armour does not
+    ///    regenerate (GameEffect.StopsArmorRegen).
     ///  - Laser: CRIT_LIGHT 6, "Ranged Damage: %(dmgMod)s%%" - the creature's ranged attacks do
     ///    LaserRangedDamagePercent less for LaserMs.
     ///  - Electric: CRIT_ELECTRIC 418. Up to ElectricArcTargets other hostile creatures within
@@ -163,12 +163,16 @@ namespace Rasa.Managers
             GameEffectManager.Instance.Attach(mapChannel, target, burn);
         }
 
-        /// <summary>EMP: for EmpSuppressMs every hit on the creature ignores its armour.</summary>
+        /// <summary>
+        /// EMP: for EmpSuppressMs the target's armour does not regenerate. The clients are told the
+        /// stopped rate as it goes on and the rate back as it comes off (GameEffectManager.SyncRegen).
+        /// A second crit puts on a fresh one.
+        /// </summary>
         public static void SuppressArmor(MapChannel mapChannel, Actor target, Actor source)
         {
             var suppression = NewDebuff(mapChannel, source, CritEmpTypeId, EmpSuppressMs);
 
-            suppression.SuppressesArmor = true;
+            suppression.StopsArmorRegen = true;
 
             GameEffectManager.Instance.Attach(mapChannel, target, suppression);
         }

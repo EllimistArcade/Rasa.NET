@@ -167,9 +167,22 @@ namespace Rasa.Managers
             missile.DamageA = ShieldDrone.Mitigate(mapChannel, creature, missile.Source, missile.DamageA, missile.DamageType);
 
             // decrease armor first - all of it but what bypasses armour
-            // all of it to health while an EMP crit suppresses its armour
-            var armorDecrease = GameEffectManager.ArmorSuppressed(creature) ? 0 : Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
+            var armorDecrease = Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
             creature.Attributes[Attributes.Armor].Current -= armorDecrease;
+
+            // EMP past the armour reaches its health by its kind: none of a biological creature's,
+            // half a Machina's (EmpDamage). What it spares was not dealt, and the hit says so.
+            var toHealth = EmpDamage.ToHealth(creature, missile.DamageType, missile.DamageA - armorDecrease);
+
+            if (toHealth < missile.DamageA - armorDecrease)
+            {
+                missile.DamageA = armorDecrease + toHealth;
+
+                foreach (var hit in missile.Args.HitData)
+                    if (hit.EntityId == creature.EntityId)
+                        hit.FinalAmt = missile.DamageA;
+            }
+
             // With the rate the effects make, or a painted creature's bar would start regenerating again on the clients.
             CellManager.Instance.CellCallMethod(mapChannel, creature, new UpdateArmorPacket(GameEffectManager.WithRegen(creature, creature.Attributes[Attributes.Armor]), creature.EntityId));
 
@@ -468,9 +481,8 @@ namespace Rasa.Managers
                         hit.FinalAmt = missile.DamageA;
                     }
 
-            // decrease armor first - all of it but what bypasses armour, and none while an EMP crit
-            // suppresses it
-            var armorDecrease = GameEffectManager.ArmorSuppressed(actor) ? 0 : Math.Min(ArmorShare(missile), actor.Attributes[Attributes.Armor].Current);
+            // decrease armor first - all of it but what bypasses armour
+            var armorDecrease = Math.Min(ArmorShare(missile), actor.Attributes[Attributes.Armor].Current);
 
             // Whose doing it is, to the clients: a creature's shot is shown landing after its
             // flight, and the bars move with it rather than as it is fired (StagedBy).

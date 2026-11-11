@@ -421,8 +421,8 @@ namespace Rasa.Managers
 
             var armorTaken = 0;
 
-            // Armour first - unless an EMP crit is suppressing it, when it all goes to health.
-            if (target.Attributes.TryGetValue(Attributes.Armor, out var armor) && armor.Current > 0 && !GameEffectManager.ArmorSuppressed(target))
+            // Armour first.
+            if (target.Attributes.TryGetValue(Attributes.Armor, out var armor) && armor.Current > 0)
             {
                 // Target Painting: that share of the hit goes past the armour.
                 // And the attacker's own piercing, the two added and at most all of it.
@@ -435,7 +435,14 @@ namespace Rasa.Managers
                     : new UpdateArmorPacket(armor, 0));
             }
 
-            var healthTaken = Math.Min(amount - armorTaken, health.Current);
+            // EMP past the armour reaches a creature's health by its kind: none of a biological
+            // creature's, half a Machina's (EmpDamage). What it spares was not dealt.
+            var toHealth = EmpDamage.ToHealth(target, damageType, amount - armorTaken);
+
+            if (toHealth < amount - armorTaken)
+                outcome = new DamageOutcome { Delivered = armorTaken + toHealth, Absorbed = absorbed };
+
+            var healthTaken = Math.Min(toHealth, health.Current);
             if (target is Creature damagedCreature)
                 CreatureManager.RecordCombatDamage(mapChannel, damagedCreature, source, armorTaken + healthTaken);
             health.Current -= healthTaken;

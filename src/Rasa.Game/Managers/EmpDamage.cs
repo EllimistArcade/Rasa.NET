@@ -21,8 +21,12 @@ namespace Rasa.Managers
     /// hurts it, so a creature that carries VULNERABLE_EMP takes it as a machine does, and its
     /// vulnerability on top (CreatureResistances), not nothing. Ours.
     ///
-    /// The factor is applied with the resistances (GameEffectManager.ApplyResist), which every
-    /// hit of a type goes through, and what it takes off counts as resisted.
+    /// The factor is on a creature's health alone: EMP goes against shields and armour, and those
+    /// of a biological creature or a Machina take it whole. A hit is resisted as any other
+    /// (GameEffectManager.ApplyResist), a shield takes its share (ApplyAbsorb, ShieldDrone), the
+    /// armour its own, and what is left for health is cut by the factor (ToHealth) - a living
+    /// creature's armour is stripped by EMP and its health untouched. What the factor spares is
+    /// not counted as dealt (ActorManager.Damage, MissileManager).
     /// </summary>
     public static class EmpDamage
     {
@@ -46,6 +50,14 @@ namespace Rasa.Managers
                 return Machina;
 
             return Mechanical;
+        }
+
+        /// <summary>What of a hit that got past the shields and armour reaches the target's health, by its kind.</summary>
+        public static int ToHealth(Actor target, DamageType damageType, int pastArmor)
+        {
+            var factor = FactorFor(target, damageType);
+
+            return factor >= 1.0 || pastArmor <= 0 ? pastArmor : (int)System.Math.Round(pastArmor * factor);
         }
     }
 }

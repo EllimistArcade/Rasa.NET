@@ -3044,6 +3044,12 @@ namespace Rasa.Managers
         public const int AdrenalineBarMax = 1000;
 
         /// <summary>
+        /// Maximum power a point of Mind brings. The client: Mind "primarily increases maximum
+        /// power and damage done with Logos Abilities".
+        /// </summary>
+        public const int PowerPerMind = 3;
+
+        /// <summary>
         /// Adds adrenaline to the player's bar, up to its maximum, and tells the client. whoId 0
         /// makes the client announce the change (the floating number over the bar), as the live
         /// server did from the killing blow.
@@ -5219,12 +5225,16 @@ namespace Rasa.Managers
                 attribute[Attributes.Armor].Current = attribute[Attributes.Armor].CurrentMax;
             else
                 attribute[Attributes.Armor].Current = Math.Min(attribute[Attributes.Armor].Current, attribute[Attributes.Armor].CurrentMax);
-            // added by krssrb
-            // power test
-            attribute[Attributes.Power].NormalMax = 100 + (player.Level - 1) * 2 * 4 + player.SpentMind * 3;
+            // Power: the level's, and PowerPerMind for each point of Mind over the level's own -
+            // spent, or an effect's (Bio Augmentation's +Mind). It took only the points spent, so
+            // a module's Mind was a green number in the window and nothing more: +12 Mind on a
+            // helmet raised no power. The modules' Mind is power on top of the base, as their
+            // Power is, which the client shows apart from it.
+            attribute[Attributes.Power].NormalMax = 100 + (player.Level - 1) * 2 * 4 + (baseMind - levelBasedMind) * PowerPerMind;
             // Bio Augmentation's +Power.
             var powerBonus = WithPercent(attribute[Attributes.Power].NormalMax, GameEffectManager.AttributePercentOf(player, Attributes.Power)) - attribute[Attributes.Power].NormalMax;
-            attribute[Attributes.Power].CurrentMax = Math.Max(1, attribute[Attributes.Power].NormalMax + powerBonus + modules.Power);
+            attribute[Attributes.Power].CurrentMax = Math.Max(1,
+                attribute[Attributes.Power].NormalMax + powerBonus + modules.Power + modules.Mind * PowerPerMind);
             if (fullreset)
                 attribute[Attributes.Power].Current = attribute[Attributes.Power].CurrentMax;
             else

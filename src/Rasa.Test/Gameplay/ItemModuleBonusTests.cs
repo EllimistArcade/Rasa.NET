@@ -352,11 +352,45 @@ namespace Rasa.Test.Gameplay
             Assert.AreEqual(attributes[Attributes.Health].CurrentMax, attributes[Attributes.Health].NormalMax, "and no Health module to set them apart");
             Assert.AreEqual(attributes[Attributes.Health].CurrentMax, attributes[Attributes.Health].Current, "a full reset fills it");
             Assert.IsTrue(attributes[Attributes.Regen].CurrentMax > regen);
-            Assert.AreEqual(power, attributes[Attributes.Power].CurrentMax, "power comes of the level and the points spent");
+            // And Mind is power: the module's 3 points are 9, on top of the base, as a Power module is.
+            Assert.AreEqual(power, attributes[Attributes.Power].NormalMax, "the base stays the base");
+            Assert.AreEqual(power + 3 * ManifestationManager.PowerPerMind, attributes[Attributes.Power].CurrentMax);
+            Assert.AreEqual(attributes[Attributes.Power].CurrentMax, attributes[Attributes.Power].Current, "a full reset fills it");
 
             // Spirit over the level's base is crit chance, a percent per 15 points.
             Assert.AreEqual(CriticalHits.BaseChance + (spirit + 10 - CriticalHits.BaseSpirit(20)) / CriticalHits.SpiritDivisor,
                 CriticalHits.AttackerChance(client.Player, true), 1e-9);
+        }
+
+        /// <summary>
+        /// The report: +12 Mind on a helmet showed in green and raised no power. A module's point
+        /// of Mind is the power a point spent is, and comes off again with the helmet.
+        /// </summary>
+        [TestMethod]
+        public void TwelveMindOnAHelmetIsThirtySixPowerAsTwelveSpentAre()
+        {
+            using var context = new ProgressionTestContext();
+            var client = Player(context, 20);
+            var attributes = client.Player.Attributes;
+
+            ManifestationManager.Instance.UpdateStatsValues(client, true);
+            var power = attributes[Attributes.Power].CurrentMax;
+
+            Wear(context, client, EquipmentData.Helmet, Mind1, Mind1, Mind1, Mind1);
+            ManifestationManager.Instance.UpdateStatsValues(client, false);
+
+            Assert.AreEqual(attributes[Attributes.Mind].NormalMax + 12, attributes[Attributes.Mind].CurrentMax);
+            Assert.AreEqual(power + 36, attributes[Attributes.Power].CurrentMax, "+12 Mind, +36 power");
+            Assert.AreEqual(power, attributes[Attributes.Power].NormalMax, "beside the base, as the client shows a bonus");
+
+            client.Player.Inventory.EquippedInventory[(int)EquipmentData.Helmet] = 0;
+            ManifestationManager.Instance.UpdateStatsValues(client, false);
+            Assert.AreEqual(power, attributes[Attributes.Power].CurrentMax, "off with the helmet");
+
+            client.Player.SpentMind += 12;
+            ManifestationManager.Instance.UpdateStatsValues(client, true);
+            Assert.AreEqual(power + 36, attributes[Attributes.Power].NormalMax, "twelve points spent are the same 36");
+            Assert.AreEqual(power + 36, attributes[Attributes.Power].CurrentMax);
         }
 
         [TestMethod]

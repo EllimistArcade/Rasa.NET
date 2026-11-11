@@ -713,6 +713,45 @@ namespace Rasa.Managers
             }
         }
 
+        /// <summary>
+        /// The shots players fired this tick that land at once - not held for a flight
+        /// (ShotFlight), not a swing - resolved now, after the clients' input has been read and
+        /// before anything is sent (Server.ServiceClients). A shot fired by a client's
+        /// StartAutoFire or RequestWeaponAttack is fired as that input is read, after the map
+        /// workers have had their turn, and waited for the next tick's pass: its answer reached
+        /// the shooter a whole loop late, which with the network on top came after the 250 ms a
+        /// pistol's client keeps the shot in hand, and the client fired it a second time
+        /// (ShotFlight). The shots the auto-fire timer fires are fired in the map worker, before
+        /// that map's pass, and land on it.
+        /// </summary>
+        public void ResolveShotsDueNow(MapChannel mapChannel)
+        {
+            for (var i = mapChannel.QueuedMissiles.Count - 1; i >= 0; i--)
+            {
+                // A shot's resolution can queue another (a splash, a Feedback): the list may have
+                // shrunk or grown under the index.
+                if (i >= mapChannel.QueuedMissiles.Count)
+                    continue;
+
+                var missile = mapChannel.QueuedMissiles[i];
+
+                if (!(missile.Source is Manifestation) || missile.IsMelee || missile.HeldForFlight || missile.AfterWindup || missile.TriggerTime > 0)
+                    continue;
+
+                mapChannel.QueuedMissiles.RemoveAt(i);
+
+                try
+                {
+                    MissileTrigger(mapChannel, missile);
+                }
+                catch (Exception e)
+                {
+                    Logger.WriteLog(LogType.Error,
+                        $"Missile {missile.ActionId} from {missile.Source?.EntityId} at {missile.TargetEntityId} on map {mapChannel.MapInfo.MapContextId} threw and was dropped: {e}");
+                }
+            }
+        }
+
         /// <param name="armorBypassPercent">Percent of the damage that skips armour: the Torqueshell and Injection Gun skills. A player's item modules add their "Armor Piercing" to it here.</param>
         /// <param name="critBonus">Crit chance in percent the attack adds to the shooter's own (Firearms on a rifle).</param>
         /// <param name="melee">A melee swing, for the crouching crit modifiers.</param>
@@ -733,7 +772,7 @@ namespace Rasa.Managers
             // resolves on the next pass, as the half a millisecond a metre it used to be given
             // always came to.
             int LandsIn(float distance) => flightVelocity.HasValue && !melee
-                ? ShotFlight.HeldMs(distance, flightVelocity.Value, refireMs)
+                ? ShotFlight.HeldMs(distance, flightVelocity.Value, refireMs, ShotFlight.InHandMs(action.ActionId, action.ActionArgId))
                 : (int)(distance * 0.5f);
 
             var manualSource = action.Actor as Creature;

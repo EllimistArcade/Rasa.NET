@@ -268,7 +268,8 @@ namespace Rasa.Game
         /// does reaches the others in the tick it was done, whichever of them comes first in the
         /// list. A client whose transfer has run out is dropped, and neither read nor sent to.
         /// </summary>
-        internal static void ServiceClients(List<Client> clients, List<Client> readThisTick, long delta)
+        /// <param name="afterRead">Run once every client has been read and before anything is sent: the shots that input fired, landed in time for this tick's replies (MapChannelManager.ResolveShotsDueNow).</param>
+        internal static void ServiceClients(List<Client> clients, List<Client> readThisTick, long delta, Action afterRead = null)
         {
             readThisTick.Clear();
 
@@ -290,6 +291,18 @@ namespace Rasa.Game
                 catch (Exception e)
                 {
                     CloseFaulted(client, e);
+                }
+            }
+
+            if (afterRead != null)
+            {
+                try
+                {
+                    afterRead();
+                }
+                catch (Exception e)
+                {
+                    Logger.WriteLog(LogType.Error, $"Error after reading the clients: {e}");
                 }
             }
 
@@ -400,7 +413,7 @@ namespace Rasa.Game
                     Logger.WriteLog(LogType.Error, $"Error in the map channel worker: {e}");
                 }
 
-                ServiceClients(Clients, _readThisTick, delta);
+                ServiceClients(Clients, _readThisTick, delta, MapChannelManager.Instance.ResolveShotsDueNow);
 
                 if (_clientsToRemove.Count > 0)
                 {

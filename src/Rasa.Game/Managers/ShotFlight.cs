@@ -2,6 +2,8 @@ using System;
 
 namespace Rasa.Managers
 {
+    using Data;
+
     /// <summary>
     /// How long a shot is in the air, and what the server does about it.
     ///
@@ -26,15 +28,24 @@ namespace Rasa.Managers
     /// pulled and shows the result when both the shot has arrived and the server has answered,
     /// so an answer that comes as the shot lands is shown on time - and what the landing does
     /// in the world happens then too: the creature falls, and leaves its loot, when the round
-    /// reaches it and not when it leaves the barrel. The limit is the next shot. The client
-    /// gives a recovery to the action it has in hand (Actor.Recv_PerformRecovery), which is this
-    /// shot only until the weapon is fired again, so a shot is held only if it lands before
-    /// that: its flight, and the allowance the server already makes for a queue walked once a
-    /// pass and an uneven network (ManifestationManager.ShotTolerance), within the weapon's
-    /// refire - which is the client's own pace for the weapon's attack (Retune_weapon_swings).
-    /// That is every shot of a launcher, a shotgun, an injection gun or a Torqueshell rifle at
-    /// any range they reach, a rifle's to between 28 and 42 m, and a pistol's only close in for
-    /// the fast ones. Past that the shot resolves as it is fired, as before.
+    /// reaches it and not when it leaves the barrel.
+    ///
+    /// The limit is how long the shooter's client keeps the shot in hand. It gives a recovery to
+    /// the action it has (Actor.Recv_PerformRecovery), and its own shot is that action for its
+    /// windup and recovery - the attack argument's, 250 ms for a pistol, 500 for a rifle - or
+    /// until the shot has arrived, if that is later (BaseActorAction.Finish waits on the
+    /// strike), and no longer: the action is finished then whether the server has answered or
+    /// not. A recovery that comes after it finds no action, and the client makes a new one of
+    /// it and plays it - the firing animation and a second round out of the barrel, with the
+    /// one hit the server counted. Holding a shot for its flight puts its answer after the
+    /// strike, so a shot is held only if its answer still comes inside the windup and recovery:
+    /// its flight and the allowance for a queue walked once a pass and an uneven network
+    /// (ManifestationManager.ShotTolerance) within them (InHandMs), and within the weapon's
+    /// refire. The refire alone was the limit, and every pistol shot held - a pistol's refire
+    /// is 300 to 500 ms - came back after its 250 ms and was fired twice on the shooter's
+    /// screen; so was a rifle's past 17 m. Held now: every shot of a launcher or a shotgun at
+    /// any range it reaches, a rifle's to 17 m, a pistol's or an injection gun's never.
+    /// Anything else resolves as it is fired (MissileManager.ResolveShotsDueNow).
     /// </summary>
     public static class ShotFlight
     {
@@ -54,14 +65,30 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// How long the server holds a player's shot before it lands: its flight, if the weapon
-        /// cannot be fired again before then, and otherwise not at all.
+        /// How long the server holds a player's shot before it lands: its flight, if its answer
+        /// still reaches the shooter's client while it has the shot in hand and before the
+        /// weapon can be fired again, and otherwise not at all.
         /// </summary>
-        public static int HeldMs(float distance, int velocity, long refireMs)
+        /// <param name="inHandMs">The attack's windup and recovery (InHandMs); 0 when not known, and only the refire limits it.</param>
+        public static int HeldMs(float distance, int velocity, long refireMs, long inHandMs = 0)
         {
             var flight = Ms(distance, velocity);
+            var limit = inHandMs > 0 ? Math.Min(refireMs, inHandMs) : refireMs;
 
-            return flight > 0 && flight + ManifestationManager.ShotTolerance <= refireMs ? flight : 0;
+            return flight > 0 && flight + ManifestationManager.ShotTolerance <= limit ? flight : 0;
+        }
+
+        /// <summary>
+        /// How long the shooter's client has a shot of this attack in hand: its argument's
+        /// windup and recovery, as the client's action plays them. 0 when the server has no
+        /// level for it.
+        /// </summary>
+        public static long InHandMs(ActionId actionId, uint actionArgId)
+        {
+            if (AbilityManager.Instance == null || !AbilityManager.Instance.TryGetLevel(actionId, actionArgId, out var info))
+                return 0;
+
+            return Math.Max(0, info.WindupMs) + Math.Max(0, info.RecoveryMs);
         }
     }
 }

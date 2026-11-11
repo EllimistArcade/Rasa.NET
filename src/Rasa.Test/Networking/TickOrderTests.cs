@@ -103,6 +103,33 @@ namespace Rasa.Test.Networking
         }
 
         [TestMethod]
+        public void WhatIsDoneAfterTheReadsGoesOutInTheSameTick()
+        {
+            using var world = new WorldTestContext();
+            var first = PlayerDeathTests.Player(world, 0, 0);
+            var second = PlayerDeathTests.Player(world, 3, 0);
+            var sentToFirst = Connect(first);
+            var sentToSecond = Connect(second);
+            WorldTestContext.Drain(first);
+            WorldTestContext.Drain(second);
+
+            first.CallMethod(SysEntity.ClientMethodId, new Rasa.Packets.MapChannel.Server.GameEffectDetachedPacket { EffectId = 1 });
+
+            // The shots the input fired, landed after it is read (MapChannelManager.ResolveShotsDueNow).
+            var ran = 0;
+            Server.ServiceClients(new List<Client> { first, second }, new List<Client>(), 100, () =>
+            {
+                ran++;
+                Assert.IsEmpty(sentToFirst, "after the reads, before anything is sent");
+                second.CallMethod(SysEntity.ClientMethodId, new Rasa.Packets.MapChannel.Server.GameEffectDetachedPacket { EffectId = 2 });
+            });
+
+            Assert.AreEqual(1, ran);
+            Assert.HasCount(1, sentToFirst);
+            CollectionAssert.AreEqual(Detached(2), sentToSecond.Single(), "sent this tick");
+        }
+
+        [TestMethod]
         public void AClientWhoseInputClosesItIsSentNothingAndTheRestAreServed()
         {
             using var world = new WorldTestContext();

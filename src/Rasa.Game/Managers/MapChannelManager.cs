@@ -350,6 +350,21 @@ namespace Rasa.Managers
             return elapsed;
         }
 
+        /// <summary>
+        /// The shots the clients' input fired this tick that land at once, on every map, landed
+        /// before the replies go out (MissileManager.ResolveShotsDueNow). Run by the main loop
+        /// between reading the clients and sending to them.
+        /// </summary>
+        public void ResolveShotsDueNow()
+        {
+            foreach (var mapChannel in MapChannelArray.Values
+                         .Concat(_privateInstances.Snapshot())
+                         .Distinct()
+                         .ToArray())
+                if (mapChannel.QueuedMissiles.Count > 0)
+                    Guard("MissileManager.ResolveShotsDueNow", mapChannel, () => MissileManager.Instance.ResolveShotsDueNow(mapChannel));
+        }
+
         public void MapChannelWorker(long delta)
         {
             Timer.Update(delta);

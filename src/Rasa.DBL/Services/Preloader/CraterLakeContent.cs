@@ -174,8 +174,13 @@ namespace Rasa.Services.Preloader
         /// <summary>The panel on the courtyard's catwalk, by its terminal.</summary>
         public static readonly Vector3 Panel = new(-80f, 74.84f, 6f);
 
-        /// <summary>The weapons caches on the fortification's platform.</summary>
-        public static readonly Vector3[] Caches = { new(-283f, 169.04f, -52f), new(-283f, 169.04f, -64f) };
+        /// <summary>
+        /// The weapons caches on the fortification's platform, on its open floor east of the pipe
+        /// that crosses it, by Casper. They stood on x = -283, inside that pipe: one walled in where
+        /// nobody could reach it, the other half in it, neither of them to be clicked
+        /// (Crater_lake_caches).
+        /// </summary>
+        public static readonly Vector3[] Caches = { new(-277f, 169.04f, -50f), new(-277f, 169.04f, -58f) };
 
         /// <summary>The storage crates in the destroyed buildings.</summary>
         public static readonly Vector3[] Crates =

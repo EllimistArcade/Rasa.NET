@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using Microsoft.EntityFrameworkCore;
@@ -273,6 +274,47 @@ namespace Rasa.Test.Missions
 
             Reward(harness, Put(harness, C.Sten, harness.Client.Player.Position + new Vector3(2, 0, 0)), C.CentrifugeFuel, null, null, 6000, 1200);
             Assert.AreEqual(0L, Held(harness, C.CrystalTemplate), "Sten takes them");
+        }
+
+        [TestMethod]
+        public void TheWeaponsCachesStandInTheOpenOnThePlatform()
+        {
+            using var harness = Create();
+            StartReclaiming(harness);
+
+            var cover = Rasa.Navigation.CoverMesh.Read(Rasa.Navigation.CoverMesh.PathFor(NavMeshDirectory(), harness.Map.MapInfo.MapName));
+            var caches = harness.Map.DynamicObjects.Where(obj => (uint)obj.EntityClassId == C.CacheClass).ToList();
+            Assert.HasCount(C.Caches.Length, caches);
+
+            // They stood inside the pipe that crosses the platform: one walled in, the other half
+            // in it, and neither could be clicked.
+            foreach (var cache in caches)
+            {
+                var at = cache.Position;
+                Assert.IsTrue(harness.Map.NavMesh.DistanceToWall(at, 5) >= 1.5f, $"{at}: clear of the walls");
+                Assert.AreEqual(true, harness.Map.NavMesh.Reachable(C.Arrival, at), $"{at}: walked to");
+
+                // Seen from all round, a step off at a player's eye height.
+                for (var k = 0; k < 8; k++)
+                {
+                    var eye = at + new Vector3(3f * MathF.Cos(k * MathF.PI / 4), 1.7f, 3f * MathF.Sin(k * MathF.PI / 4));
+                    Assert.IsFalse(cover.GeometryBlocks(eye, at + new Vector3(0, 0.6f, 0)), $"{at}: seen from {eye}");
+                }
+            }
+
+            // Reclaiming What's Ours' marker is the first of them.
+            var catalog = new MissionContentCatalog(harness, new Dictionary<uint, Mission>(), null);
+            catalog.Load();
+            var marker = catalog.Missions[C.ReclaimingWhatsOurs].Objectives[C.GatherBombs].Indicators.Single();
+            Assert.AreEqual(C.Caches[0], marker.Position);
+        }
+
+        private static string NavMeshDirectory()
+        {
+            var root = AppContext.BaseDirectory;
+            while (!Directory.Exists(Path.Combine(root, "navmesh")))
+                root = Path.GetDirectoryName(root);
+            return Path.Combine(root, "navmesh");
         }
 
         [TestMethod]

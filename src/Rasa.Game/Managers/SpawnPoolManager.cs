@@ -879,29 +879,73 @@ namespace Rasa.Managers
         }
 
         /// <summary>How many directions <see cref="SpreadCentre"/> looks for open ground in, on each of its rings.</summary>
-        private const int SpreadDirections = 12;
+        private const int SpreadDirections = 32;
 
-        /// <summary>The rings <see cref="SpreadCentre"/> looks on, as shares of the pool's radius.</summary>
-        private static readonly float[] SpreadRings = { 1f / 3f, 2f / 3f, 1f };
+        /// <summary>How many rings <see cref="SpreadCentre"/> looks on, evenly out to its reach, past the point itself.</summary>
+        private const int SpreadRings = 8;
+
+        /// <summary>
+        /// How far from a pool's point, sideways, <see cref="SpreadCentre"/> looks for open ground
+        /// when the pool's own area has none: further for a pool whose radius is larger.
+        /// </summary>
+        public const float SpreadReach = 32f;
+
+        /// <summary>
+        /// The radius under which a pool's point is a spot someone placed and not a centroid, and
+        /// <see cref="SpreadCentre"/> looks for open ground in its own area only - above and below,
+        /// not out to <see cref="SpreadReach"/>. The generated pools are 5 m and more (posts 6,
+        /// squads 5, nests 6, the open-country packs 15); an instance's own content puts its
+        /// creatures where it means them, 1 or 2 m round a spot - the Nitroglazers in the Energy
+        /// Weapon Center's reactor tubes, whose tubes are their ground.
+        /// </summary>
+        public const float PlacedSpotRadius = 5f;
+
+        /// <summary>
+        /// How far above and below a placed spot (<see cref="PlacedSpotRadius"/>) its open ground is
+        /// looked for: its height is meant, if not always to the metre - the Warnet Caverns' spots
+        /// are up to 8.6 m over their cave's floor. The reactor tubes' Nitroglazers are 66 m under
+        /// the surface over the Energy Weapon Center, which is no ground of theirs.
+        /// </summary>
+        public const float PlacedSpotHeight = 10f;
+
+        /// <summary>
+        /// How far above and below a pool's point <see cref="SpreadCentre"/> looks for open ground.
+        /// A generated pool's height is the average of its kit's props, and a lair's kit runs up a
+        /// cavern's walls: the Atta lair on Torden Incline (531227) has props from 302 m to 399 m
+        /// and its point at 368 m, over a floor at 317 m.
+        /// </summary>
+        public const float SpreadHeight = 64f;
+
+        /// <summary>The steps up and down <see cref="SpreadCentre"/> looks in: the point query reaches 8 m each way.</summary>
+        private const float SpreadHeightStep = 8f;
 
         /// <summary>
         /// Where a pool with an area spreads its creatures from: its point, unless the mesh under
-        /// the point is a pocket - then the open ground in its area.
+        /// the point is a pocket - then the open ground nearest it.
         ///
         /// The spread (NavMeshQuery.RandomPointAround) starts on the polygon nearest the point and
         /// walks only what is joined to it. A mined area's point is the middle of the props it was
-        /// built from, and under a prop the mesh can be a pocket: a few square metres inside a Xanx
-        /// nest, joined to nothing. Every creature of the pool came out in it and stayed there - the
-        /// Xanx Wanderers by the Logos "Now" on Concordia Divide (530036, 530037: pockets of 22 m²
-        /// with open ground all round them). On a fresh database 58 pools on 29 maps, those two among
-        /// them, put every creature in a region under 25 m².
+        /// built from, and its height their average: the mesh under it, or the anchor that stands
+        /// in for it off the mesh (<see cref="Anchor"/>), can be a pocket - a few square metres
+        /// inside a Xanx nest, on top of a hive prop, in a trench, joined to nothing. Every creature
+        /// of the pool came out in it and stayed there, out of reach of the players shooting it -
+        /// the Xanx Wanderers by the Logos "Now" on Concordia Divide (530036, 530037: pockets of
+        /// 22 m² with open ground all round them). On a fresh database 257 pools of creatures that
+        /// move, on 46 maps, put them in regions under 1,000 m²; this leaves 29, lone creatures on
+        /// a point, which it does not move, and placed spots with no open ground in their own area
+        /// (the migration Pools_off_pockets moves those it can).
         ///
-        /// The pool's radius is the ground it is meant to spread over. The region of mesh under its
-        /// point (NavMeshQuery.RegionArea) is a pocket when it is smaller than half that disc and a
-        /// larger region is in it: then the spread starts from the walkable point of the largest
-        /// region found on three rings in twelve directions, the nearest to the point among equals.
-        /// A region as large as half the disc, or a disc with nothing larger in it - a platform, a
-        /// floor alone in its area - is the pool's ground as before. Worked out once per point.
+        /// The region under the point (NavMeshQuery.RegionArea) is a pocket when it is smaller than
+        /// a pocket in a hill (NavMeshManager.UnstickPocketArea). Then the spread starts from the
+        /// open ground - a region that is not a pocket - nearest the point, looked for on rings out
+        /// to the pool's radius or <see cref="SpreadReach"/>, and <see cref="SpreadHeight"/> above
+        /// and below it - for a placed spot (<see cref="PlacedSpotRadius"/>), its own area and
+        /// <see cref="PlacedSpotHeight"/>. Nearest counts a metre up or down as half a metre
+        /// sideways: a generated pool's point is where its props are, and its height only their
+        /// average - the floor under it is nearer than a ledge beside it. Where there is no open
+        /// ground, from the largest region larger than the point's in the pool's own area, on the
+        /// same floor. A point on open ground, or one with nothing better round it, is the pool's
+        /// ground as before. Worked out once per point.
         /// </summary>
         internal static Vector3 SpreadCentre(MapChannel mapChannel, SpawnPool pool)
         {
@@ -915,35 +959,50 @@ namespace Rasa.Managers
                 return centre;
 
             var spread = centre;
-            var here = navMesh.Nearest(centre);
-            var disc = (float)(Math.PI * pool.Radius * pool.Radius);
-
-            if (here.HasValue && navMesh.RegionArea(here.Value) is float hereArea && hereArea < disc / 2f)
+            var here = navMesh.Nearest(centre) ?? Anchor(mapChannel, pool);
+            if (here.HasValue && navMesh.RegionArea(here.Value) is float hereArea && hereArea < NavMeshManager.UnstickPocketArea)
             {
-                var bestArea = hereArea;
-                var bestDistance = float.MaxValue;
+                var placed = pool.Radius < PlacedSpotRadius;
+                var reach = placed ? pool.Radius : Math.Max(pool.Radius, SpreadReach);
+                var height = placed ? PlacedSpotHeight : SpreadHeight;
+                Vector3? open = null, larger = null;
+                float openDistance = float.MaxValue, largerArea = hereArea, largerDistance = float.MaxValue;
 
-                foreach (var ring in SpreadRings)
-                    for (var step = 0; step < SpreadDirections; step++)
+                for (var ring = 0; ring <= SpreadRings; ring++)
+                    for (var step = 0; step < (ring == 0 ? 1 : SpreadDirections); step++)
                     {
                         var angle = step * 2.0 * Math.PI / SpreadDirections;
-                        var probe = new Vector3(centre.X + (float)(Math.Cos(angle) * pool.Radius * ring), here.Value.Y,
-                            centre.Z + (float)(Math.Sin(angle) * pool.Radius * ring));
+                        var across = reach * ring / SpreadRings;
 
-                        if (navMesh.Nearest(probe) is not Vector3 ground ||
-                            Vector2.Distance(new Vector2(ground.X, ground.Z), new Vector2(centre.X, centre.Z)) > pool.Radius ||
-                            navMesh.RegionArea(ground) is not float area)
-                            continue;
-
-                        var distance = Vector3.Distance(centre, ground);
-
-                        if (area > bestArea || (area == bestArea && area > hereArea && distance < bestDistance))
+                        for (var up = -height; up <= height + SpreadHeightStep / 2f; up += SpreadHeightStep)
                         {
-                            spread = ground;
-                            bestArea = area;
-                            bestDistance = distance;
+                            var probe = new Vector3(centre.X + (float)(Math.Cos(angle) * across), centre.Y + Math.Min(up, height), centre.Z + (float)(Math.Sin(angle) * across));
+
+                            if (navMesh.Nearest(probe) is not Vector3 ground || !Within(ground, centre, reach) ||
+                                Math.Abs(ground.Y - centre.Y) > height || navMesh.RegionArea(ground) is not float area)
+                                continue;
+
+                            var distance = Vector2.Distance(new Vector2(ground.X, ground.Z), new Vector2(centre.X, centre.Z)) + Math.Abs(ground.Y - centre.Y) / 2f;
+
+                            if (area >= NavMeshManager.UnstickPocketArea)
+                            {
+                                if (distance < openDistance)
+                                {
+                                    open = ground;
+                                    openDistance = distance;
+                                }
+                            }
+                            else if (Within(ground, centre, pool.Radius) && Math.Abs(ground.Y - here.Value.Y) <= SpreadHeightStep &&
+                                     (area > largerArea || (area == largerArea && larger.HasValue && distance < largerDistance)))
+                            {
+                                larger = ground;
+                                largerArea = area;
+                                largerDistance = distance;
+                            }
                         }
                     }
+
+                spread = open ?? larger ?? spread;
             }
 
             pool.SpreadFrom = spread;
@@ -1023,7 +1082,7 @@ namespace Rasa.Managers
             // Where the others of its side already stand round the pool, and where any walking
             // there is making for: it comes out Spacing.Distance clear of them where it can.
             var keeps = Spacing.Keeps(creature);
-            var taken = keeps ? Spacing.Taken(mapChannel, creature, pos) : new List<Vector3>();
+            var taken = keeps ? Spacing.Taken(mapChannel, creature, pool.Radius > 0 ? SpreadCentre(mapChannel, pool) : pos) : new List<Vector3>();
 
             if (pool.Radius > 0)
             {

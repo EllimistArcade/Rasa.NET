@@ -1558,14 +1558,17 @@ namespace Rasa.Managers
 
         /// <summary>
         /// A creature's spawn zone: its pool's area when the pool has a radius (a camp, a nest),
-        /// otherwise <see cref="WanderZoneFallbackRadius"/> around the point it spawned on.
+        /// otherwise <see cref="WanderZoneFallbackRadius"/> around the point it spawned on. The area
+        /// is round the ground the pool spreads its creatures from (SpawnPool.AreaCentre), which
+        /// for a point over a pocket is the open ground beside it: round the point, a creature put
+        /// there would be outside its own zone from its first step, with nowhere to stroll to.
         /// </summary>
         public static (Vector3 Centre, float Radius) WanderZoneOf(Creature creature)
         {
             var pool = creature.SpawnPool;
 
             if (pool != null && pool.Radius > 0 && pool.MapContextId == creature.MapContextId)
-                return (pool.Position, pool.Radius);
+                return (pool.AreaCentre, pool.Radius);
 
             return (creature.HomePos.Position, WanderZoneFallbackRadius);
         }

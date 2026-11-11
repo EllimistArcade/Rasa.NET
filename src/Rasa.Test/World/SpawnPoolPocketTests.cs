@@ -65,11 +65,71 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
-        public void APocketWithNothingLargerInItsAreaKeepsItsPoint()
+        public void AXanxCreatureWandersRoundTheGroundItCameOutOn()
         {
-            // 531488: a 15 m² region on Palisades, alone in its 5 m disc.
+            // Round the pool's point, a spider put on the open ground beside the nest would be
+            // outside its own zone from its first step, with nowhere to stroll to.
+            var map = Map(Divide);
+            var pool = Pool(530036, 500.4f, 86.1f, 792.8f, 6f);
+            pool.MapContextId = 1148;
+            var from = SpawnPoolManager.SpreadCentre(map, pool);
+            var creature = new Creature { MapContextId = 1148, SpawnPool = pool };
+
+            Assert.AreEqual((from, 6f), BehaviorManager.WanderZoneOf(creature));
+            Assert.AreEqual(from, pool.AreaCentre);
+
+            pool.Position += new Vector3(1f, 0f, 0f);
+            Assert.AreEqual(pool.Position, pool.AreaCentre, "moved: the point, until it is worked out again");
+        }
+
+        [TestMethod]
+        [DataRow(531257U, "adv_arieki_torden_incline_ojasaattahive", -279.5f, 135.6f, -17.1f, 15f, 113.2f)]   // Ojasa Gatherers: anchor on a queen's mound
+        [DataRow(531429U, "adv_arieki_torden_mires_banefluxitemines", 110.4f, 127.3f, 448.3f, 40f, 105.9f)]  // Baneflux mines: the carts' floor, not the catwalk beside it
+        [DataRow(540106U, "adv_arieki_torden_plains", -1171.9f, 409.4f, -212.7f, 15f, 381.0f)]               // Beam Mantas: anchor on a cave mouth's rock; their sisters' floor, not the upland over it
+        [DataRow(531227U, "adv_arieki_torden_incline", -556.6f, 368.4f, 291.9f, 20f, 316.6f)]                // Atta lair: props from 302 m to 399 m
+        public void APointOffTheMeshWhoseAnchorIsAPocketSpreadsFromTheFloorUnderIt(uint id, string mapName, float x, float y, float z, float radius, float floor)
+        {
+            var map = Map(mapName);
+            var pool = Pool(id, x, y, z, radius);
+
+            Assert.IsFalse(map.NavMesh.IsOnMesh(pool.Position), "the point is off the mesh");
+            Assert.IsTrue(map.NavMesh.RegionArea(SpawnPoolManager.Anchor(map, pool).Value) < NavMeshManager.UnstickPocketArea, "and its anchor is a pocket");
+
+            var from = SpawnPoolManager.SpreadCentre(map, pool);
+
+            Assert.IsTrue(map.NavMesh.RegionArea(from) >= NavMeshManager.UnstickPocketArea, $"{from}: open ground");
+            Assert.AreEqual(floor, from.Y, 2f, $"{from}: the floor the props stand on");
+
+            for (var i = 0; i < 20; i++)
+            {
+                var point = SpawnPoolManager.SpawnPoint(map, pool, 3);
+
+                Assert.AreEqual(true, map.NavMesh.Reachable(point, from), $"{point}: on that ground");
+            }
+        }
+
+        [TestMethod]
+        [DataRow(531476U, 715.2f, 139.8f, -704.3f, 11f)]
+        [DataRow(531488U, 729.9f, 140.7f, -723.0f, 5f)]
+        public void ThraxInABaneTrenchOnPalisadesComeOutOfIt(uint id, float x, float y, float z, float radius)
+        {
+            // The trench's floor is 38 m² of mesh, cut off by its walls: beyond the radius, but in reach.
             var map = Map("adv_foreas_concordia_palisades");
-            var pool = Pool(531488, 729.9f, 140.7f, -723.0f, 5f);
+            var pool = Pool(id, x, y, z, radius);
+            var from = SpawnPoolManager.SpreadCentre(map, pool);
+
+            Assert.AreNotEqual(pool.Position, from);
+            Assert.IsTrue(Horizontal(from, pool.Position) <= SpawnPoolManager.SpreadReach, $"{from}");
+            Assert.IsTrue(map.NavMesh.RegionArea(from) > 1_000_000f, $"{from}: the open ground of the map");
+        }
+
+        [TestMethod]
+        public void APocketWithNoOpenGroundInReachKeepsItsPoint()
+        {
+            // 540090: Beam Mantas on 34 m² of a rock vista; the plateau is 63 m off, and the 75 m²
+            // pocket 60 m under them is no better, so not worth leaving their floor for.
+            var map = Map("adv_arieki_torden_mires");
+            var pool = Pool(540090, 492.5f, 263.0f, -385.6f, 15f);
 
             Assert.AreEqual(pool.Position, SpawnPoolManager.SpreadCentre(map, pool));
             Assert.IsTrue(map.NavMesh.IsOnMesh(SpawnPoolManager.SpawnPoint(map, pool, 2)), "still put on its ground");

@@ -84,6 +84,12 @@ namespace Rasa.Structures
 
         /// <summary>The pool's point <see cref="SpreadFrom"/> was worked out for: a pool moved since has it worked out again.</summary>
         public Vector3 SpreadFor { get; set; }
+
+        /// <summary>
+        /// The middle of the ground the pool's creatures spread over and wander in: where they are
+        /// spread from (<see cref="SpreadFrom"/>) once that is worked out for the point, else the point.
+        /// </summary>
+        public Vector3 AreaCentre => SpreadFrom is Vector3 spread && SpreadFor == Position ? spread : Position;
         // different spawn points
         //public int LocationCount { get; set; }
         //public Position[] LocationList { get; set; }

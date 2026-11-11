@@ -41,7 +41,9 @@ namespace Rasa.Managers
     ///    Hunters down in the courtyard's middle, and after he is dead they still come at whoever
     ///    is in the courtyard until the pen is open. His death is the next objective for the copy.
     ///    The pen's panel answers once he is dead and the courtyard's own generator is down; its
-    ///    objective done by a member, the pen's field goes down for the copy.
+    ///    objective done by a member, the pen's field goes down for the copy. A member at the
+    ///    panel while that generator stands is told so. In a copy made again, a member who has
+    ///    blown the fortification's generator or killed the Overseer has them counted as done.
     ///  - Daniel Corman in the pen: he follows the nearest member on Return to Sender or Bending
     ///    the Rules who comes within <see cref="EscortPickupRadius"/>, is put beside them when they
     ///    are more than <see cref="WarpDistance"/> away or where he cannot walk to them, and takes
@@ -86,6 +88,9 @@ namespace Rasa.Managers
 
         public const long RetryMs = 10_000;
 
+        /// <summary>How near the pen's panel a member on its objective is told why it does not answer.</summary>
+        public const float PanelHintRadius = 15f;
+
         /// <summary>The copy's people, whose missions they are: they take no harm.</summary>
         public static readonly uint[] StoryNpcs = { C.Velns, C.Daniel };
 
@@ -118,6 +123,12 @@ namespace Rasa.Managers
 
             public Creature Overseer;
             public bool OverseerDown, ShieldUp;
+
+            /// <summary>A member's mission has the Overseer dead already, from a copy before this one.</summary>
+            public bool OverseerBefore;
+
+            /// <summary>Members told at the panel that the courtyard's generator still stands.</summary>
+            public readonly HashSet<uint> ToldPanel = new();
             public long ShieldChangeAt;
             public int ShieldHealth;
 
@@ -170,6 +181,7 @@ namespace Rasa.Managers
 
             var members = Members(map);
 
+            CatchUp(map, state, members);
             Overseer(map, state, members, now);
             Panel(map, state);
 
@@ -178,6 +190,7 @@ namespace Rasa.Managers
 
             WeBeJammin(state, members, now);
             Reclaiming(map, state, members, now);
+            PanelHint(state, members);
             Drops(map, state, members, now);
             Teleporters(map, state, members, now);
             Lingering(map, state, members, now);
@@ -581,9 +594,49 @@ namespace Rasa.Managers
         /// <summary>Whether the copy's supply pen is open, for a test or a GM.</summary>
         public static bool PenOpen(MapChannel map) => StateOf(map)?.PenOpen == true;
 
-        /// <summary>The panel answers once the Overseer is dead and the courtyard's generator is down.</summary>
+        /// <summary>
+        /// The panel answers once the Overseer is dead - in this copy, or in a member's mission from
+        /// one before it - and the courtyard's generator is down.
+        /// </summary>
         private static void Panel(MapChannel map, State state) =>
-            SetEnabled(map, state.Panel, state.OverseerDown && state.InnerGenerator is { IsDown: true });
+            SetEnabled(map, state.Panel, (state.OverseerDown || state.OverseerBefore) && state.InnerGenerator is { IsDown: true });
+
+        /// <summary>
+        /// A copy made again starts over, but a member's mission does not: one on it who has blown the
+        /// fortification's generator finds the stronghold open, and one who has killed the
+        /// Overseer has the panel answer without him dead again. The courtyard's generator is no
+        /// objective of theirs, so it stands again; the panel's marker and its hint say so.
+        /// </summary>
+        private static void CatchUp(MapChannel map, State state, List<Client> members)
+        {
+            if (!state.BaseOpen && state.OuterGenerator is { IsDown: false } &&
+                members.Any(client => Active(client.Player, C.ReclaimingWhatsOurs) && Done(client.Player, C.ReclaimingWhatsOurs, C.BlowGenerator)))
+            {
+                PlacedDestructibles.Destroy(state.OuterGenerator, null);
+                OpenBase(map, state);
+            }
+
+            if (!state.OverseerBefore && members.Any(client => Active(client.Player, C.ReclaimingWhatsOurs) && Done(client.Player, C.ReclaimingWhatsOurs, C.KillOverseer)))
+                state.OverseerBefore = true;
+        }
+
+        /// <summary>
+        /// A member on the panel's objective who comes up to it while the courtyard's generator
+        /// stands is told so, once in the copy: the panel does not answer, and nothing in the
+        /// client's objective text says why.
+        /// </summary>
+        private static void PanelHint(State state, List<Client> members)
+        {
+            if (state.Panel == null || state.Panel.IsEnabled || state.InnerGenerator is not { IsDown: false })
+                return;
+
+            foreach (var client in members)
+                if (Wants(client.Player, C.ReclaimingWhatsOurs, C.UsePanel) &&
+                    Vector3.Distance(client.Player.Position, state.Panel.Position) <= PanelHintRadius &&
+                    state.ToldPanel.Add(client.Player.Id))
+                    CommunicatorManager.Instance.SystemMessage(client,
+                        "The panel is dead: the Bane generator in the courtyard still powers the pen's lock. Blow it with a detonator from the weapons cache.");
+        }
 
         private static void Reclaiming(MapChannel map, State state, List<Client> members, long now)
         {

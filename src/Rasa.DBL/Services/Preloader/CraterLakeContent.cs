@@ -778,5 +778,31 @@ namespace Rasa.Services.Preloader
         }
 
         #endregion
+
+        #region The pen's generator (Crater_lake_pen_generator)
+
+        /// <summary>
+        /// Reclaiming What's Ours' panel answers only with the courtyard's generator blown too (the
+        /// Ten Ton Hammer guide: after the Overseer, "blow the second generator inside the base",
+        /// then the panel), which neither the client's objective text nor a marker said. A second
+        /// marker on the panel's objective, the client's "Bane Generator" (243), at it.
+        /// </summary>
+        public static IEnumerable<string> PenGeneratorMarkerUp()
+        {
+            yield return "INSERT INTO mission_indicator (mission_id, content_revision, requirement, objective_id, indicator_id, pos_x, pos_y, pos_z, radius, show_3d_effect, comment) " +
+                $"SELECT {ReclaimingWhatsOurs}, {InstanceMissionSql.Literal(Revision)}, {(byte)MissionContentRequirement.Required}, {UsePanel}, {GeneratorMarker}, " +
+                $"{InstanceMissionSql.Literal((double)InnerGenerator.X)}, {InstanceMissionSql.Literal((double)InnerGenerator.Y)}, {InstanceMissionSql.Literal((double)InnerGenerator.Z)}, 8, 0, 'Objective marker' " +
+                $"FROM mission_content_definition d WHERE d.mission_id = {ReclaimingWhatsOurs} AND d.content_revision = {InstanceMissionSql.Literal(Revision)} " +
+                $"AND NOT EXISTS (SELECT 1 FROM mission_indicator x WHERE x.mission_id = {ReclaimingWhatsOurs} AND x.content_revision = d.content_revision " +
+                $"AND x.objective_id = {UsePanel} AND x.indicator_id = {GeneratorMarker});";
+        }
+
+        public static IEnumerable<string> PenGeneratorMarkerDown()
+        {
+            yield return $"DELETE FROM mission_indicator WHERE mission_id = {ReclaimingWhatsOurs} AND content_revision = {InstanceMissionSql.Literal(Revision)} " +
+                $"AND objective_id = {UsePanel} AND indicator_id = {GeneratorMarker};";
+        }
+
+        #endregion
     }
 }

@@ -32,6 +32,7 @@ namespace Rasa.Test.Missions
     public class CraterLakeTests
     {
         private const string Migration = "20271010000000_Crater_lake", Previous = "20271009000000_Three_devils_respawn";
+        private const string PenGenerator = "20271023000000_Crater_lake_pen_generator", BeforePenGenerator = "20271022000000_Attacks_on_their_models";
 
         private long _now = 1_000_000;
 
@@ -333,6 +334,10 @@ namespace Rasa.Test.Missions
             Assert.AreEqual(MissionObjectiveState.Incomplete, log.Objectives[C.UsePanel].State);
             Assert.IsFalse(panel.IsEnabled, "not while the courtyard's generator stands");
 
+            // Up at the panel, the player is told why, once.
+            Assert.IsTrue(PanelHints(harness).Any(text => text.Contains("courtyard")), "told at the panel");
+            Assert.AreEqual(0, PanelHints(harness).Count(text => text.Contains("courtyard")), "and only once");
+
             // The courtyard's generator, with the other detonator; the panel answers.
             var innerBomb = Bomb(harness, C.InnerBomb);
             Use(harness, innerBomb.Object);
@@ -363,6 +368,48 @@ namespace Rasa.Test.Missions
             PlacedDestructibles.Worker(harness.Map);
             Work(harness);
             Assert.IsFalse(fields.Any(ForceFields.StopsPlayer));
+        }
+
+        /// <summary>
+        /// A copy made again starts over: its generators stand and the Overseer lives. A member
+        /// whose mission has the fortification's generator blown and the Overseer dead finds the
+        /// stronghold open and the panel waiting only on the courtyard's generator, and has the
+        /// marker for it.
+        /// </summary>
+        [TestMethod]
+        public void InACopyMadeAgainTheMissionsProgressCounts()
+        {
+            using var harness = Create();
+            StartReclaiming(harness);
+            Use(harness, Object(harness, C.CacheClass));
+            foreach (var objective in new[] { C.BlowGenerator, C.KillOverseer })
+                Assert.IsTrue(harness.Manager.TryForceCompleteObjective(harness.Client, C.ReclaimingWhatsOurs, objective, "test"));
+            harness.Drain();
+            var log = harness.Client.Player.Missions[C.ReclaimingWhatsOurs];
+            Assert.AreEqual(MissionObjectiveState.Incomplete, log.Objectives[C.UsePanel].State);
+
+            Work(harness);
+            Assert.IsTrue(CraterLakeFacility.BaseOpen(harness.Map), "the stronghold open again");
+            Assert.IsTrue(Generator(harness, C.OuterGenerator).IsDown);
+            Assert.IsNotNull(CraterLakeFacility.OverseerOf(harness.Map), "the Overseer lives in this copy");
+            var panel = harness.Map.DynamicObjects.Single(obj => obj.MissionConversation?.MissionId == C.ReclaimingWhatsOurs);
+            Assert.IsFalse(panel.IsEnabled);
+
+            // The courtyard's generator is the one thing left, and the marker shows it.
+            Assert.AreEqual(1, harness.World.MissionIndicatorEntries.AsNoTracking().Count(row => row.MissionId == C.ReclaimingWhatsOurs &&
+                    row.ContentRevision == C.Revision && row.ObjectiveId == C.UsePanel && row.IndicatorId == C.GeneratorMarker &&
+                    Math.Abs(row.PosX - C.InnerGenerator.X) < 0.01 && Math.Abs(row.PosZ - C.InnerGenerator.Z) < 0.01));
+            Use(harness, Bomb(harness, C.InnerBomb).Object);
+            _now += 10_000;
+            PlacedUsables.Worker(harness.Map);
+            Work(harness);
+            Assert.IsTrue(Generator(harness, C.InnerGenerator).IsDown);
+            Assert.IsTrue(panel.IsEnabled);
+
+            Converse(harness, panel, C.ReclaimingWhatsOurs, C.UsePanel);
+            Assert.AreEqual(MissionObjectiveState.Completed, log.Objectives[C.UsePanel].State);
+            Work(harness);
+            Assert.IsTrue(CraterLakeFacility.PenOpen(harness.Map));
         }
 
         [TestMethod]
@@ -584,6 +631,46 @@ namespace Rasa.Test.Missions
             Assert.AreEqual(C.Missions.Length, Count(database, $"SELECT COUNT(*) AS Value FROM mission_content_definition WHERE content_revision = '{C.Revision}' AND enabled = 1"));
         }
 
+        [TestMethod]
+        public void ThePenGeneratorMarkerGoesInAndComesOut()
+        {
+            using var database = new Rasa.Test.Database.OrdinaryLootTestDatabase();
+            var migrator = database.Context.GetService<IMigrator>();
+            var marker = $"SELECT COUNT(*) AS Value FROM mission_indicator WHERE mission_id = {C.ReclaimingWhatsOurs} AND content_revision = '{C.Revision}' " +
+                $"AND objective_id = {C.UsePanel} AND indicator_id = {C.GeneratorMarker}";
+            var all = $"SELECT COUNT(*) AS Value FROM mission_indicator WHERE content_revision = '{C.Revision}'";
+
+            migrator.Migrate(BeforePenGenerator);
+            Assert.AreEqual(0, Count(database, marker));
+            var before = Count(database, all);
+
+            migrator.Migrate(PenGenerator);
+            Assert.AreEqual(1, Count(database, marker));
+            Assert.AreEqual(before + 1, Count(database, all));
+            foreach (var sql in C.PenGeneratorMarkerUp())
+                Assert.AreEqual(0, database.Context.Database.ExecuteSqlRaw(sql), "guarded");
+
+            migrator.Migrate(BeforePenGenerator);
+            Assert.AreEqual(0, Count(database, marker));
+            Assert.AreEqual(before, Count(database, all));
+
+        }
+
+        [TestMethod]
+        public void OnMySqlThePenGeneratorMarkerGoesInAndComesOut()
+        {
+            using var context = Rasa.Test.Database.PersistenceIntegrationTests.CreateContext(typeof(Rasa.Context.World.MySqlWorldContext), "unused");
+            var migrator = context.GetService<IMigrator>();
+            var up = migrator.GenerateScript(BeforePenGenerator, PenGenerator);
+            var down = migrator.GenerateScript(PenGenerator, BeforePenGenerator);
+
+            foreach (var sql in C.PenGeneratorMarkerUp())
+                StringAssert.Contains(up, sql);
+            StringAssert.Contains(up, $"'{PenGenerator}'");
+            foreach (var sql in C.PenGeneratorMarkerDown())
+                StringAssert.Contains(down, sql);
+        }
+
         #region Helpers
 
         private static long Count(Rasa.Test.Database.OrdinaryLootTestDatabase database, string sql) =>
@@ -646,6 +733,16 @@ namespace Rasa.Test.Missions
             var lethal = creature.Attributes[Attributes.Health].Current + Math.Max(0, creature.Attributes[Attributes.Armor].Current);
             ActorManager.Instance.Damage(harness.Map, creature, lethal, harness.Client.Player);
             harness.Drain();
+        }
+
+        /// <summary>The player taken up to the pen's panel and the facility worked once: the system messages sent.</summary>
+        private string[] PanelHints(WildernessRuntimeTestHarness harness)
+        {
+            harness.MoveTo(C.Panel + new Vector3(2, 0, 0));
+            harness.Drain();
+            _now += 100;
+            CraterLakeFacility.Worker(harness.Map);
+            return harness.Drain().OfType<Rasa.Packets.Communicator.Server.SystemMessagePacket>().Select(packet => packet.TextMessage).ToArray();
         }
 
         private static DynamicObject Object(WildernessRuntimeTestHarness harness, uint classId) =>

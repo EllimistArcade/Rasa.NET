@@ -878,6 +878,80 @@ namespace Rasa.Managers
             return best;
         }
 
+        /// <summary>How many directions <see cref="SpreadCentre"/> looks for open ground in, on each of its rings.</summary>
+        private const int SpreadDirections = 12;
+
+        /// <summary>The rings <see cref="SpreadCentre"/> looks on, as shares of the pool's radius.</summary>
+        private static readonly float[] SpreadRings = { 1f / 3f, 2f / 3f, 1f };
+
+        /// <summary>
+        /// Where a pool with an area spreads its creatures from: its point, unless the mesh under
+        /// the point is a pocket - then the open ground in its area.
+        ///
+        /// The spread (NavMeshQuery.RandomPointAround) starts on the polygon nearest the point and
+        /// walks only what is joined to it. A mined area's point is the middle of the props it was
+        /// built from, and under a prop the mesh can be a pocket: a few square metres inside a Xanx
+        /// nest, joined to nothing. Every creature of the pool came out in it and stayed there - the
+        /// Xanx Wanderers by the Logos "Now" on Concordia Divide (530036, 530037: pockets of 22 m²
+        /// with open ground all round them). On a fresh database 58 pools on 29 maps, those two among
+        /// them, put every creature in a region under 25 m².
+        ///
+        /// The pool's radius is the ground it is meant to spread over. The region of mesh under its
+        /// point (NavMeshQuery.RegionArea) is a pocket when it is smaller than half that disc and a
+        /// larger region is in it: then the spread starts from the walkable point of the largest
+        /// region found on three rings in twelve directions, the nearest to the point among equals.
+        /// A region as large as half the disc, or a disc with nothing larger in it - a platform, a
+        /// floor alone in its area - is the pool's ground as before. Worked out once per point.
+        /// </summary>
+        internal static Vector3 SpreadCentre(MapChannel mapChannel, SpawnPool pool)
+        {
+            if (pool.SpreadFrom is Vector3 known && pool.SpreadFor == pool.Position)
+                return known;
+
+            var centre = pool.Position;
+            var navMesh = mapChannel?.NavMesh;
+
+            if (navMesh == null || pool.Radius <= 0)
+                return centre;
+
+            var spread = centre;
+            var here = navMesh.Nearest(centre);
+            var disc = (float)(Math.PI * pool.Radius * pool.Radius);
+
+            if (here.HasValue && navMesh.RegionArea(here.Value) is float hereArea && hereArea < disc / 2f)
+            {
+                var bestArea = hereArea;
+                var bestDistance = float.MaxValue;
+
+                foreach (var ring in SpreadRings)
+                    for (var step = 0; step < SpreadDirections; step++)
+                    {
+                        var angle = step * 2.0 * Math.PI / SpreadDirections;
+                        var probe = new Vector3(centre.X + (float)(Math.Cos(angle) * pool.Radius * ring), here.Value.Y,
+                            centre.Z + (float)(Math.Sin(angle) * pool.Radius * ring));
+
+                        if (navMesh.Nearest(probe) is not Vector3 ground ||
+                            Vector2.Distance(new Vector2(ground.X, ground.Z), new Vector2(centre.X, centre.Z)) > pool.Radius ||
+                            navMesh.RegionArea(ground) is not float area)
+                            continue;
+
+                        var distance = Vector3.Distance(centre, ground);
+
+                        if (area > bestArea || (area == bestArea && area > hereArea && distance < bestDistance))
+                        {
+                            spread = ground;
+                            bestArea = area;
+                            bestDistance = distance;
+                        }
+                    }
+            }
+
+            pool.SpreadFrom = spread;
+            pool.SpreadFor = centre;
+
+            return spread;
+        }
+
         /// <summary>
         /// Whether an automatic pool with an area has walkable ground to put its creatures on.
         /// One that has none is marked (SpawnPool.NoWalkableGround) and logged, once: what it
@@ -918,6 +992,12 @@ namespace Rasa.Managers
         /// or, for a centre whose height is a map label's guess, the nearest walkable point in
         /// the column above and below it.
         ///
+        /// A point over a pocket of mesh - inside a nest, under a prop - spreads them from the open
+        /// ground in the area instead (<see cref="SpreadCentre"/>). The navmesh's draw is a point
+        /// on any polygon its circle reaches, which on open ground can be tens of metres past the
+        /// radius: one outside is traded for walkable ground under a point of the disc on the same
+        /// floor (<see cref="InsideDisc"/>), and kept only when no draw finds any.
+        ///
         /// One creature alone on a point that can go nowhere (BehaviorManager.NeverMoves) is not
         /// put on the mesh at all: it stands on the point, as an emplacement stands on its mount.
         /// What moves is on the mesh from its first step, so it starts there; what cannot is
@@ -947,26 +1027,43 @@ namespace Rasa.Managers
 
             if (pool.Radius > 0)
             {
-                Vector3? first = null;
+                Vector3? first = null, firstInside = null;
 
                 for (var draw = 0; draw < SpawnDraws; draw++)
                 {
-                    var walkable = NavMeshManager.RandomPointAround(mapChannel, pos, pool.Radius);
+                    var from = SpreadCentre(mapChannel, pool);
+                    var walkable = NavMeshManager.RandomPointAround(mapChannel, from, pool.Radius);
 
                     if (!walkable.HasValue && Anchor(mapChannel, pool) is Vector3 anchor)
+                    {
+                        from = anchor;
                         walkable = NavMeshManager.RandomPointAround(mapChannel, anchor, pool.Radius) ?? anchor;
+                    }
 
                     if (!walkable.HasValue)
                         break;
 
                     first ??= walkable;
 
+                    // The draw is a point anywhere on a polygon the circle reaches, and a polygon of
+                    // open ground can run on for tens of metres past it: one outside is traded for
+                    // the ground under a point of the disc joined to the same floor, where there is.
+                    if (!Within(walkable.Value, from, pool.Radius))
+                    {
+                        if (InsideDisc(mapChannel, from, pool.Radius) is not Vector3 inDisc)
+                            continue;
+
+                        walkable = inDisc;
+                    }
+
+                    firstInside ??= walkable;
+
                     if (Spacing.IsClear(walkable.Value, taken))
                         return walkable.Value;
                 }
 
-                if (first.HasValue)
-                    return first.Value;
+                if ((firstInside ?? first) is Vector3 drawn)
+                    return drawn;
 
                 pos += InDisc(pool.Radius);
             }
@@ -1149,6 +1246,34 @@ namespace Rasa.Managers
             CreatureManager.Instance.LoadedCreatures.TryGetValue(creatureId, out var creature) ? creature.TargetCategory : TargetCategory.Hostile;
 
         /// <summary>A point uniformly inside a disc of this radius, on the ground plane.</summary>
+        /// <summary>How many points of the disc <see cref="InsideDisc"/> tries.</summary>
+        private const int InsideDiscTries = 4;
+
+        private static bool Within(Vector3 point, Vector3 centre, float radius) =>
+            Vector2.Distance(new Vector2(point.X, point.Z), new Vector2(centre.X, centre.Z)) <= radius;
+
+        /// <summary>
+        /// Walkable ground under a random point of the disc round <paramref name="centre"/>, on the
+        /// floor the centre is on (NavMeshQuery.Reachable): null when a few tries find none.
+        /// </summary>
+        private static Vector3? InsideDisc(MapChannel mapChannel, Vector3 centre, float radius)
+        {
+            var navMesh = mapChannel?.NavMesh;
+
+            if (navMesh == null)
+                return null;
+
+            for (var attempt = 0; attempt < InsideDiscTries; attempt++)
+            {
+                var ground = navMesh.Nearest(centre + InDisc(radius));
+
+                if (ground.HasValue && Within(ground.Value, centre, radius) && navMesh.Reachable(centre, ground.Value) == true)
+                    return ground;
+            }
+
+            return null;
+        }
+
         internal static Vector3 InDisc(float radius)
         {
             var random = new Random();

@@ -74,6 +74,16 @@ namespace Rasa.Structures
         /// nowhere, and still shot. Decided on the first pass and logged once.
         /// </summary>
         public bool NoWalkableGround { get; set; }
+
+        /// <summary>
+        /// Where its creatures are spread from (SpawnPoolManager.SpreadCentre): its point, or open
+        /// ground in its area when its point is over a pocket of mesh. Worked out once for
+        /// <see cref="SpreadFor"/>, the point it was worked out for.
+        /// </summary>
+        public Vector3? SpreadFrom { get; set; }
+
+        /// <summary>The pool's point <see cref="SpreadFrom"/> was worked out for: a pool moved since has it worked out again.</summary>
+        public Vector3 SpreadFor { get; set; }
         // different spawn points
         //public int LocationCount { get; set; }
         //public Position[] LocationList { get; set; }

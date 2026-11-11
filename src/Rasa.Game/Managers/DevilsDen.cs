@@ -46,6 +46,11 @@ namespace Rasa.Managers
     ///    their first objective done, comes within <see cref="FransiscoFindRadius"/> of him.
     ///  - Shot down or blown up, the laser door stays down <see cref="DoorDownMs"/>; the
     ///    generator <see cref="GeneratorDownMs"/>.
+    ///  - Caritas takes no part in the detention center's fights: not sought, not hurt, as the
+    ///    AFS Resupply Bot (CreatureGameplayRules). She is FRIENDLY and unarmed, held 8.7 m from
+    ///    the Thrax of the Den's own pool 531512 and 14 m from Sklorax, inside the 18 m they go
+    ///    looking for a fight in: they killed her before anyone came for her, and a squad copy's
+    ///    pool does not bring her back, so Find Caritas had nobody to find.
     /// </summary>
     public static class DevilsDen
     {
@@ -77,6 +82,9 @@ namespace Rasa.Managers
 
             /// <summary>His pool, as last seen with him in it: let go of when he is dead.</summary>
             public SpawnPool Pool;
+
+            /// <summary>Caritas, as last kept out of the fights; another of her is kept out in turn.</summary>
+            public Creature Caritas;
         }
 
         private static readonly ConditionalWeakTable<MapChannel, State> States = new();
@@ -105,6 +113,7 @@ namespace Rasa.Managers
             Bombs(map, state);
             Destroyed(map, state, members);
             LaserDoor(map);
+            Caritas(map, state);
 
             if (members.Count == 0)
                 return;
@@ -317,6 +326,29 @@ namespace Rasa.Managers
             creature.Hate.Clear();
             CellManager.Instance.CellCallMethod(creature, new TargetCategoryPacket(category));
             BehaviorManager.Instance.StopFighting(creature);
+        }
+
+        #endregion
+
+        #region Caritas
+
+        private static readonly Func<bool> NoPartInFights = () => false;
+
+        /// <summary>Caritas, alive and in this copy; null if she is not.</summary>
+        public static Creature CaritasIn(MapChannel map) => Creatures(map).FirstOrDefault(creature => creature.DbId == D.Caritas);
+
+        private static void Caritas(MapChannel map, State state)
+        {
+            if (state.Caritas is { } kept && Alive(kept) && kept.ScriptedCombatGate == NoPartInFights)
+                return;
+
+            state.Caritas = CaritasIn(map);
+
+            if (state.Caritas is not { } caritas)
+                return;
+
+            caritas.ScriptedCombatGate = NoPartInFights;
+            caritas.AggroRange = 0f;
         }
 
         #endregion

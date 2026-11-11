@@ -486,6 +486,34 @@ namespace Rasa.Test.Missions
         private static long Count(Rasa.Test.Database.OrdinaryLootTestDatabase database, string sql) =>
             database.Context.Database.SqlQueryRaw<long>(sql).ToArray().Single();
 
+        /// <summary>
+        /// Caritas outlives the detention center's Bane - the Thrax of the Den's pool 531512 8.7 m from her,
+        /// Sklorax 14 m - who went for her, FRIENDLY and unarmed, and killed her before anyone came: she takes no
+        /// part in its fights, and is still there to be found. The player is a GM out of sight: the Bane notice
+        /// only her.
+        /// </summary>
+        [TestMethod]
+        public void CaritasOutlivesTheDetentionCentersBaneAndIsFound()
+        {
+            using var harness = Create();
+            harness.Client.Player.GmInvisible = true;
+            harness.SpawnWorld(D.FirstPool + 4);
+            var caritas = WildernessTwinPillarsTests.RequireNpc(harness, D.FirstPool + 4, D.Caritas);
+
+            DevilsDen.Worker(harness.Map);
+            Assert.AreSame(caritas, DevilsDen.CaritasIn(harness.Map));
+            Assert.IsTrue(Rasa.Game.Missions.World.CreatureGameplayRules.IsInvulnerable(caritas), "not hurt");
+
+            Rasa.Test.Missions.Plateau.PlateauMaligoBaseTests.AssertOutlivesTheBane(harness, harness.Map, D.FirstPool + 4);
+            Assert.AreEqual(caritas.Attributes[Attributes.Health].CurrentMax, caritas.Attributes[Attributes.Health].Current, "untouched");
+
+            harness.Client.Player.GmInvisible = false;
+            var cyrida = Put(harness, D.Cyrida, D.CaritasAt + new Vector3(3, 0, 0));
+            WildernessTwinPillarsTests.Accept(harness, cyrida, D.FindCaritas);
+            WildernessTwinPillarsTests.Talk(harness, caritas, D.FindCaritas, 1);
+            Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, D.FindCaritas, 1));
+        }
+
         private static WildernessRuntimeTestHarness Create()
         {
             var harness = WildernessRuntimeTestHarness.Create(mapContextId: D.Den);

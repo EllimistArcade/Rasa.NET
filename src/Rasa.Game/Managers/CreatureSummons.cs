@@ -510,6 +510,22 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A pool's creature just set down, come down from orbit (SpawnPoolManager.AnimFromOrbit):
+        /// born where it stands as a summon is, CREATURE_BIRTH at its class - a Stalker's is the
+        /// client's 20 s "Creature Birth" (622), the Stalker falling in and unfolding - and held
+        /// for as long (IsBusy). Whether it was: a class with no birth is set down as it is.
+        /// </summary>
+        public static bool Deploy(MapChannel mapChannel, Creature creature)
+        {
+            if (mapChannel == null || creature == null || AbilityManager.Instance == null
+                || !AbilityManager.Instance.TryGetLevel(BirthAction, (uint)creature.EntityClass, out _))
+                return false;
+
+            Birth(mapChannel, creature, creature);
+            return true;
+        }
+
+        /// <summary>
         /// Born: CREATURE_BIRTH at the creature's own class, which the client plays as it growing
         /// to size over the birth's recovery, and the CREATURE_BIRTH effect for as long.
         /// </summary>

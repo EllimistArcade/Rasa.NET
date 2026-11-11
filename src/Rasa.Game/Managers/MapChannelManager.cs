@@ -443,6 +443,7 @@ namespace Rasa.Managers
 
                     // Creature bombs, death blasts and self-destructs whose time has come.
                     Guard("CreatureBombs.Worker", mapChannel, () => CreatureBombs.Worker(mapChannel));
+                    Guard("JuggernautBlackhole.Worker", mapChannel, () => JuggernautBlackhole.Worker(mapChannel));
 
                     // Creature heals, repairs and revives whose windup is up.
                     Guard("CreatureSupport.Worker", mapChannel, () => CreatureSupport.Worker(mapChannel));

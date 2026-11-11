@@ -42,7 +42,10 @@ namespace Rasa.Managers
     ///    STALKER_EGG_DROP_EXPLOSION 305 on itself going off DELAY_TIME_MS later on every player
     ///    within the drop's EFFECT_RADIUS (60 m) for the egg row's damage, EMP, knocking them
     ///    KNOCKBACK_DISTANCE (10 m) back. One killed before the egg drops does not drop it. When
-    ///    to ovulate is ours: in a fight, with a player in reach, not already charging.
+    ///    to ovulate is ours: in a fight, not already charging, with a player the egg would
+    ///    catch - within the drop's EFFECT_RADIUS (EggReach), not only the charge's. A Stalker
+    ///    fights from its blaster's 60 m, and one that waited for a player inside the charge's
+    ///    20 m never laid an egg: the players that fought it shot it from where it stood.
     ///  - Missile (PredatorMissileAbility 426): the same on the player a Predator's missile hits -
     ///    PREDATOR_MISSILE_EXPLOSION, a BombEffect whose removeTarget is off, the class's
     ///    targetGameEffect - going off at once within EFFECT_RADIUS (10 m).
@@ -477,8 +480,8 @@ namespace Rasa.Managers
 
         /// <summary>
         /// A Stalker ovulates, if it would do something: not already charging or dropping an egg,
-        /// with a player in the charge's reach. The charge burns around it, and when it is done
-        /// the egg drops (StartEggDrop). Whether it did.
+        /// with a player its egg would catch (EggReach). The charge burns around it, and when it
+        /// is done the egg drops (StartEggDrop). Whether it did.
         /// </summary>
         public static bool Ovulate(MapChannel mapChannel, Creature stalker, CreatureAction action)
         {
@@ -491,13 +494,13 @@ namespace Rasa.Managers
                 return false;
 
             var radius = Math.Max(1, info.Get(AbilityProperty.EffectRadius, 20));
+            var egg = stalker.Actions.FirstOrDefault(IsEggDrop);
 
-            if (Caught(mapChannel, stalker, stalker.Position, radius).Count == 0)
+            if (Caught(mapChannel, stalker, stalker.Position, EggReach(info, egg == null ? null : LevelOf(egg))).Count == 0)
                 return false;
 
             var interval = Math.Max(250, info.Get(AbilityProperty.EffectIntervalMs, 2000));
             var now = Environment.TickCount64;
-            var egg = stalker.Actions.FirstOrDefault(IsEggDrop);
 
             var charge = new GameEffect
             {
@@ -538,6 +541,17 @@ namespace Rasa.Managers
             CellManager.Instance.CellCallMethod(mapChannel, stalker, new AbilityRecoveryPacket(action.ActionId, action.ActionArgId, AbilityRecoveryPacket.HitDataKind.None));
 
             return true;
+        }
+
+        /// <summary>
+        /// How far from a Stalker a player has to be for it to ovulate: the drop's EFFECT_RADIUS
+        /// (60 m) when it has an egg to drop, the charge's (20 m) when it has only the charge.
+        /// </summary>
+        public static float EggReach(ActionLevelInfo charge, ActionLevelInfo drop)
+        {
+            var reach = Math.Max(1, charge?.Get(AbilityProperty.EffectRadius, 20) ?? 20);
+
+            return drop == null ? reach : Math.Max(reach, RadiusOf(drop));
         }
 
         /// <summary>Whether a Stalker is charging an egg.</summary>

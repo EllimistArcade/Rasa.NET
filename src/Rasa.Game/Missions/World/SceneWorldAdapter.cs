@@ -599,7 +599,7 @@ namespace Rasa.Game.Missions.World
             return pool != null && ReferenceEquals(pool.RuntimeMapChannel, world.Map) &&
                 pool.MapContextId == world.Map.MapInfo.MapContextId &&
                 pool.SpawnPolicy != MissionSpawnGroupPolicy.ScenarioControlled && pool.Mode == 0 &&
-                pool.AnimType is >= 0 and <= 2 && pool.AliveCreatures == 0 &&
+                SpawnPoolManager.IsKnownAnimType(pool.AnimType) && pool.AliveCreatures == 0 &&
                 pool.SpawnSlot?.Any(slot => slot != null && slot.CreatureId != 0 &&
                     slot.CountMin >= 0 && slot.CountMax > 0 && slot.CountMax >= slot.CountMin &&
                     CreatureManager.Instance.LoadedCreatures.TryGetValue(slot.CreatureId, out var creature) &&

@@ -1594,7 +1594,7 @@ namespace Rasa.Managers
         {
             return pool.SpawnPolicy != MissionSpawnGroupPolicy.ScenarioControlled
                    && (pool.Mode == SpawnPoolManager.ModeAutomatic || pool.Mode == SpawnPoolManager.ModeControlPoint)
-                   && pool.AnimType >= 0 && pool.AnimType <= 2
+                   && SpawnPoolManager.IsKnownAnimType(pool.AnimType)
                    && pool.SpawnSlot != null
                    && pool.SpawnSlot.Any(s => s != null && s.CreatureId != 0 && s.CountMin >= 0 && s.CountMax > 0
                                               && s.CountMax >= s.CountMin && KnownCreature(s.CreatureId));

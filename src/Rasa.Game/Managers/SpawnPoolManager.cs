@@ -38,6 +38,27 @@ namespace Rasa.Managers
         /// </summary>
         public const short ModeScripted = 2;
 
+        /// <summary>spawnpool.anim_type: the pool's creatures are set down where they stand, as they are.</summary>
+        public const short AnimNone = 0;
+
+        /// <summary>spawnpool.anim_type: they come in on a Bane dropship (DropshipType.Spawner).</summary>
+        public const short AnimBaneDropship = 1;
+
+        /// <summary>spawnpool.anim_type: they come in on a human dropship.</summary>
+        public const short AnimHumanDropship = 2;
+
+        /// <summary>
+        /// spawnpool.anim_type: they come down from orbit. Each is set down where it stands and
+        /// born there, by CREATURE_BIRTH at its own class (CreatureSummons.Deploy): for a Stalker
+        /// (Vehicle_Bane_Stalker) the client's 20 s "Creature Birth" (622), the Stalker falling in
+        /// and unfolding, a Juggernaut's 12 s. It does nothing else until it is down. One whose
+        /// class has no birth is set down as it is.
+        /// </summary>
+        public const short AnimFromOrbit = 3;
+
+        /// <summary>Whether the spawn worker knows how to bring a pool's creatures in.</summary>
+        public static bool IsKnownAnimType(short animType) => animType >= AnimNone && animType <= AnimFromOrbit;
+
         /// <summary>How close a hostile pool's area may come to a friendly NPC, a hospital or a waypoint.</summary>
         public const float SafeClearance = 15f;
 
@@ -324,7 +345,7 @@ namespace Rasa.Managers
                 if (spawnPool.Suspended || spawnPool.ServiceSuspended || spawnPool.Quieted
                     || spawnPool.Mode != ModeAutomatic && !(spawnPool.Mode == ModeControlPoint && (spawnPool.IsGarrison || spawnPool.ServiceControlPointId != 0))
                         && !(spawnPool.Mode == ModeScripted && spawnPool.Woken)
-                    || spawnPool.AnimType < 0 || spawnPool.AnimType > 2)
+                    || !IsKnownAnimType(spawnPool.AnimType))
                     continue;
 
                 if (spawnPool.QueuedCreatures > 0 || spawnPool.DropshipQueue > 0)
@@ -495,13 +516,18 @@ namespace Rasa.Managers
             }
             else if (arrival?.Kind == SpawnPoolArrivalEntry.KindDropship)
                 EnqueueDropship(mapChannel, spawnPool, creatureList, arrival);
-            else if (spawnPool.AnimType == 0)    // animType==0; spawn without animation
+            else if (spawnPool.AnimType == AnimNone || spawnPool.AnimType == AnimFromOrbit)
             {
                 IncreaseQueuedCreatureCount(spawnPool, creatureList.Count);
 
                 try
                 {
-                    SpawnCreatures(spawnPool, creatureList);
+                    var spawned = SpawnCreatures(spawnPool, creatureList);
+
+                    // Down from orbit: each born where it was set down (AnimFromOrbit).
+                    if (spawnPool.AnimType == AnimFromOrbit)
+                        foreach (var creature in spawned)
+                            CreatureSummons.Deploy(mapChannel, creature);
                 }
                 finally
                 {

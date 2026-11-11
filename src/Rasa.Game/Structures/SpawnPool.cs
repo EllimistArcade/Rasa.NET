@@ -96,7 +96,7 @@ namespace Rasa.Structures
         // currently the DB structure only supports 1 spawn location, but the spawn system code already allows for multiple
         // spawn settings
         public short Mode { get; set; }     // automatic spawning, CP spawn, scripted spawn (manual trigger)
-        public short AnimType { get; set; } // which effect is used to spawn creatures (bane dropship, no effect, human dropship)   // ToDo
+        public short AnimType { get; set; } // how its creatures come in: SpawnPoolManager.AnimNone, AnimBaneDropship, AnimHumanDropship, AnimFromOrbit
         public uint MapContextId { get; set; }
         public MapChannel RuntimeMapChannel { get; set; }
         // spawn runtime info

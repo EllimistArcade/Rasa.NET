@@ -251,7 +251,7 @@ namespace Rasa.Test.World
         [TestMethod]
         [DataRow((short)1, (short)0)]
         [DataRow((short)2, (short)0)]
-        [DataRow((short)0, (short)3)]
+        [DataRow((short)0, (short)4)]
         [DataRow((short)0, (short)-1)]
         public void AutomaticWorkerDoesNotAdvanceManualModesOrUnsupportedAnimations(short mode, short animation)
         {

@@ -92,13 +92,29 @@ namespace Rasa.Managers
 
     public static class CreatureAreaAttacks
     {
+        /// <summary>
+        /// CR_JUGGERNAUT_MORTARS (JuggernautMortarsAbility, "Performs an attack from a
+        /// Juggernaut's mortars"): its arguments give the barrage - MORTAR_GUN_COUNT 2 guns,
+        /// MORTAR_FIRE_COUNT 3 volleys, MORTAR_ANGLE -10..10 - and no radius, and the client's
+        /// mortar FX (Ability - Creature - Jugg - Mortars - Resolve, 959) comes down on every
+        /// entity the recovery lists. Ours, the data giving none: the shells cover MortarRadius
+        /// metres round where its target stood when it fired.
+        /// </summary>
+        public const ActionId JuggernautMortars = (ActionId)244;
+        public const float MortarRadius = 8f;
+
         /// <summary>The area of a creature action, from its action data; none for a weapon pair or an action without one.</summary>
         public static CreatureArea AreaOf(ActionId actionId, uint actionArgId)
         {
             if (AbilityManager.Instance == null || !AbilityManager.Instance.TryGetLevel(actionId, actionArgId, out var info))
                 return default;
 
-            return CreatureArea.Of(info);
+            var area = CreatureArea.Of(info);
+
+            if (!area.IsArea && actionId == JuggernautMortars)
+                return CreatureArea.AroundPoint(MortarRadius);
+
+            return area;
         }
 
         /// <summary>

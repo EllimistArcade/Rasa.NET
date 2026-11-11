@@ -219,6 +219,13 @@ namespace Rasa.Managers
                 return;
             }
 
+            // A Juggernaut's blackhole destroyed: it closes and lets everyone go.
+            if (creature.IsScripted && JuggernautBlackhole.Is(creature))
+            {
+                JuggernautBlackhole.Killed(mapChannel, creature);
+                return;
+            }
+
             // A finishing move destroys the body. Recorded before anything else looks at the
             // death, so the self revive below and a Caretaker's revive later both see it.
             creature.CritKilled = critKill != CritKill.None;

@@ -13,6 +13,7 @@ using Rasa.Structures;
 using Rasa.Structures.Char;
 using Rasa.Structures.World;
 using Rasa.Test.Missions.Wilderness;
+using Rasa.Services.Preloader;
 
 namespace Rasa.Test.Missions
 {
@@ -207,6 +208,85 @@ namespace Rasa.Test.Missions
             Kill(harness, Put(harness, D.Qraal, D.QraalAt));
             Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, D.SeverTheHead, 1));
             WildernessTwinPillarsTests.Reward(harness, brody, D.SeverTheHead, 2, 29023, 38000, 3800);
+        }
+
+        /// <summary>
+        /// The power node objective's markers (DevilsDenMarkers), sent in the Den: one in the tower's service room, taking
+        /// in its two nodes, and one on the third, west of the impact site; every node inside one of them.
+        /// </summary>
+        [TestMethod]
+        public void EachPowerNodeIsInsideAMarkerTheClientIsSentInTheDen()
+        {
+            using var harness = Create();
+            var brody = Put(harness, D.Brody, D.QraalAt + new Vector3(3, 0, 0));
+            WildernessTwinPillarsTests.Accept(harness, brody, D.SeverTheHead);
+            Assert.AreEqual(D.Den, harness.Client.Player.MapContextId);
+
+            var info = MissionApplication.Instance.BuildStatusSnapshot(harness.Client.Player)[D.SeverTheHead];
+            var markers = info.ObjectivesList.Single(objective => objective.ObjectiveId == 3).IndicatorList;
+            Assert.HasCount(2, markers);
+            foreach (var node in new[] { D.NodeAAt, D.NodeBAt, D.NodeCAt })
+                Assert.IsTrue(markers.Any(marker =>
+                        Vector2.Distance(new Vector2(marker.Position.X, marker.Position.Z), new Vector2(node.X, node.Z)) <= marker.Radius),
+                    $"the node at {node} is in no marker");
+
+            // The Field Commander, the landing pad and the fuel depot are marked in the Den too.
+            foreach (var objective in new uint[] { 1, 4, 5 })
+                Assert.HasCount(1, info.ObjectivesList.Single(o => o.ObjectiveId == objective).IndicatorList, $"objective {objective}");
+        }
+
+        /// <summary>
+        /// Every marker of the Den's eight missions is shown on its own map (DevilsDenMarkers): the Den's places in the
+        /// Den, the Hightower rangers' in the Palisades; none is left to a mission-wide default.
+        /// </summary>
+        [TestMethod]
+        public void EveryDenMarkerIsOnItsOwnMap()
+        {
+            using var harness = Create();
+            var catalog = (MissionContentCatalog)typeof(MissionApplication)
+                .GetField("_catalog", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .GetValue(MissionApplication.Instance);
+            var missions = new[] { D.HakarisBand, D.LuroronsBand, D.FindCaritas, D.ElohArtifacts, D.DevilsStrike, D.MissingStrikeTeam, D.FinishTheTask, D.SeverTheHead };
+            var listed = DevilsDenMarkers.Markers.ToDictionary(m => (m.MissionId, m.Objective, m.Indicator), m => m.Map);
+            var seen = 0;
+
+            foreach (var missionId in missions)
+                foreach (var objective in catalog.Missions[missionId].Objectives.Values)
+                    foreach (var indicator in objective.Indicators)
+                    {
+                        Assert.IsTrue(listed.TryGetValue((missionId, objective.ObjectiveId, indicator.IndicatorId), out var map),
+                            $"{missionId}/{objective.ObjectiveId}/{indicator.IndicatorId} has no map");
+                        Assert.AreEqual(map, MissionMarkerProjection.ResolveMap(catalog, missionId, objective.ObjectiveId, indicator),
+                            $"{missionId}/{objective.ObjectiveId}/{indicator.IndicatorId}");
+                        seen++;
+                    }
+
+            Assert.AreEqual(DevilsDenMarkers.Markers.Length, seen);
+        }
+
+        [TestMethod]
+        public void TheMarkersGoInAndDownGivesTheScenesBackAsTheyWere()
+        {
+            using var database = new Rasa.Test.Database.OrdinaryLootTestDatabase();
+            var migrator = database.Context.GetService<IMigrator>();
+            const string Markers = "20271112000000_Devils_den_markers", Before = "20271111000000_Stalker_and_juggernaut_kits";
+            int Marked() => database.Context.MissionIndicatorEntries.AsNoTracking()
+                .Count(entry => entry.MissionId == D.SeverTheHead && entry.ContentRevision == D.Revision && entry.ObjectiveId == 3);
+            Dictionary<uint, string> Scenes() => database.Context.Set<MissionSceneBindingEntry>().AsNoTracking()
+                .Where(entry => entry.ContentRevision == D.Revision).ToList().ToDictionary(entry => entry.MissionId, entry => entry.Bindings);
+
+            migrator.Migrate(Before);
+            var before = Scenes();
+            Assert.AreEqual(1, Marked());
+
+            migrator.Migrate(Markers);
+            Assert.AreEqual(2, Marked());
+            foreach (var (missionId, bindings) in Scenes())
+                StringAssert.Contains(bindings, DevilsDenMarkers.Key + DevilsDenMarkers.MapsJson(missionId), $"mission {missionId}");
+
+            migrator.Migrate(Before);
+            Assert.AreEqual(1, Marked());
+            CollectionAssert.AreEquivalent(before.ToList(), Scenes().ToList());
         }
 
         [TestMethod]

@@ -671,7 +671,7 @@ namespace Rasa.Test.Missions
         }
 
         [TestMethod]
-        public void FullInventoryAndInboxRejectTheWholeRewardAndAllowRetry()
+        public void FullInventoryAndInboxRejectTheWholeRewardTellThePlayerAndAllowRetry()
         {
             using var context = MissionTestContext.WithCompletableMission(429);
             context.FillRewardCategory();
@@ -683,6 +683,13 @@ namespace Rasa.Test.Missions
 
             Assert.IsFalse(context.Manager.CompleteOfferedMission(
                 context.Client, context.Receiver.EntityId, 429, 0));
+
+            // The player is told why: "Insufficient room in inventory for items", which the client
+            // presents itself (DisplaySystemMessage), and nothing else.
+            var sent = context.Drain();
+            Assert.HasCount(1, sent);
+            Assert.AreEqual(PlayerMessage.PmNoRoomInInventory,
+                ((Rasa.Packets.ClientMethod.Server.DisplaySystemMessagePacket)sent.Single()).MsgId);
 
             AssertUnchanged(context, before);
             for (var slot = 50; slot <= 51; slot++)

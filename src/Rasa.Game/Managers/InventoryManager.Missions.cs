@@ -412,10 +412,14 @@ namespace Rasa.Managers
                     }
                 }
 
+                // "Insufficient room in inventory for items": the client shows it as big text, with the
+                // avatar's inventory-full voice (gameui kPlayerMessageDisplayBigText, manifestation
+                // kPlayerMessageVOs).
                 if (remaining != 0)
                     throw new GameplayRejectionException(overflowToInbox
                         ? "The complete item grant fits neither its inventory categories nor the inbox."
-                        : "The complete item grant does not fit its inventory categories.");
+                        : "The complete item grant does not fit its inventory categories.",
+                        PlayerMessage.PmNoRoomInInventory);
             }
 
             /// <summary>Puts the modules given, by slot, in a new item's slots.</summary>

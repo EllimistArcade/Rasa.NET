@@ -961,7 +961,11 @@ namespace Rasa.Test.Missions
             var npcs = new NpcManager(harness.Context, harness.Manager);
             npcs.RequestNpcConverse(harness.Client, new RequestNPCConversePacket { EntityId = corpse.EntityId });
             var session = harness.Client.MissionConversation;
+            harness.Drain();
             npcs.CompleteNPCObjective(harness.Client, ConradCorpseDialogueTests.Continue(corpse));
+            Assert.AreEqual(PlayerMessage.PmNoRoomInInventory, harness.Drain()
+                .OfType<Rasa.Packets.ClientMethod.Server.DisplaySystemMessagePacket>().Single().MsgId,
+                "The player is told the mission item has no room.");
             Assert.AreSame(session, harness.Client.MissionConversation);
             Assert.AreEqual(MissionObjectiveState.Incomplete, harness.Client.Player.Missions[1995].Objectives[3].State);
             Assert.AreEqual(50, harness.ReadOwnedTemplateCounts(11519).GetValueOrDefault(11519U));

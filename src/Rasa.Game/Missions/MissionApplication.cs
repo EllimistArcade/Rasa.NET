@@ -1025,6 +1025,7 @@ namespace Rasa.Managers
                 {
                     Logger.WriteLog(LogType.Error,
                         $"Unable to accept mission {missionId} for character {client.Player.Id}: {error.Message}");
+                    TellRejection(client, error);
                     return false;
                 }
 
@@ -1436,6 +1437,7 @@ namespace Rasa.Managers
                             $"Unable to complete mission {missionId} for character {client.Player.Id}: {error}");
                         if (!rejectedConversation)
                             ReconcileMissionFromDurable(client, missionId);
+                        TellRejection(client, error);
                         return false;
                     }
 
@@ -1494,6 +1496,17 @@ namespace Rasa.Managers
                     currentLog.State == expectedState &&
                     (runtimeMission.ContentRevision == definition.ContentRevision || runtimeMission.ContentRevision == "legacy");
             }
+        }
+
+        /// <summary>
+        /// Tells the player why an accept, a turn-in or a dialogue step did not go through, when the
+        /// rejection is one they can do something about (an item grant with no room: a full backpack
+        /// and inbox). Other rejections stay in the server log.
+        /// </summary>
+        private static void TellRejection(Client client, Exception error)
+        {
+            if (GameplayRejectionException.PlayerMessageOf(error) is { } message)
+                CommunicatorManager.ShowPlayerMessage(client, message);
         }
 
         private void ReconcileMissionFromDurable(Client client, uint missionId)
@@ -1688,6 +1701,7 @@ namespace Rasa.Managers
                 {
                     Logger.WriteLog(LogType.Error,
                         $"Unable to apply mission {key.MissionId} dialogue for character {client.Player.Id}: {error}");
+                    TellRejection(client, error);
                     return false;
                 }
 

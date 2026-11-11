@@ -1395,8 +1395,9 @@ namespace Rasa.Managers
         /// Damage a victim takes, after the resistance the effects on them add up to (Rage,
         /// Resistance, Sacrifice, Base Wave) and, for damage of a known type, a player's own
         /// resistance to that type (armour and Hazmat Armor, Manifestation.ResistanceData), or a
-        /// creature's RESIST_ and VULNERABLE_ flags for it (CreatureResistances: +50, -50);
-        /// resisted is what came off, negative when a vulnerability added to the hit. A creature's
+        /// creature's RESIST_ and VULNERABLE_ flags for it (CreatureResistances: +50, -50), and
+        /// EMP's factor for the creature's kind (EmpDamage: none to the biological, half to a
+        /// Machina); resisted is what came off, negative when a vulnerability added to the hit. A creature's
         /// attack carries the type of the weapon it plays (Managers.CreatureAttacks), so a
         /// player's own resistances meet it as well.
         /// </summary>
@@ -1416,10 +1417,13 @@ namespace Rasa.Managers
 
             resist += CreatureResistances.ResistOf(target, damageType);
 
-            if (resist == 0)
+            // EMP by the creature's kind: none to the biological, half to a Machina (EmpDamage).
+            var kind = EmpDamage.FactorFor(target, damageType);
+
+            if (resist == 0 && kind == 1.0)
                 return amount;
 
-            var taken = (int)Math.Round(amount * ResistMultiplier(resist));
+            var taken = (int)Math.Round(amount * kind * ResistMultiplier(resist));
             resisted = amount - taken;
 
             return taken;

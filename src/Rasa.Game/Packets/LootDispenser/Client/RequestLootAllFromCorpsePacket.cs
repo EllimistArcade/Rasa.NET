@@ -13,7 +13,7 @@
         public override void Read(PythonReader pr)
         {
             pr.ReadTuple();
-            EntityId = pr.ReadULong();
+            EntityId = pr.ReadId();
             AutoLootOnly = pr.ReadBool();
         }
     }

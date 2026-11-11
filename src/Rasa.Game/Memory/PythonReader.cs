@@ -190,6 +190,21 @@ namespace Rasa.Memory
             return PeekType() == PythonType.Long ? ReadLong() : ReadInt();
         }
 
+        /// <summary>
+        /// A count of items, in either form ReadInteger takes. A count below 0 comes back 0, which
+        /// the handlers take as nothing to do; a bare (uint) cast made -1 into 4294967295, all of
+        /// any stack. A count past what a uint holds comes back uint.MaxValue.
+        /// </summary>
+        public uint ReadCount()
+        {
+            var value = ReadInteger();
+
+            if (value <= 0)
+                return 0;
+
+            return value >= uint.MaxValue ? uint.MaxValue : (uint)value;
+        }
+
         public ulong ReadULong()
         {
             var type = Reader.ReadByte();

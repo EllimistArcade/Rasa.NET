@@ -14,7 +14,7 @@ namespace Rasa.Packets.Crafting.Client
         public override void Read(PythonReader pr)
         {
             pr.ReadTuple();
-            KraftwerksId = pr.ReadULong();
+            KraftwerksId = pr.ReadId();
             RecipeTemplateId = pr.ReadUInt();
         }
     }

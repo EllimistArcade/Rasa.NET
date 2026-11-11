@@ -29,8 +29,10 @@ namespace Rasa.Packets.LootDispenser.Client
         public override void Read(PythonReader pr)
         {
             pr.ReadTuple();
-            EntityId = pr.ReadULong();
-            ItemId = pr.ReadULong();
+            // An item dragged from the loot window onto the pack is named by the drag widget's id,
+            // a Python int (inventory.py LootItemToPersonalInventorySlot).
+            EntityId = pr.ReadId();
+            ItemId = pr.ReadId();
 
             if (pr.PeekType() == PythonType.Structs)
             {

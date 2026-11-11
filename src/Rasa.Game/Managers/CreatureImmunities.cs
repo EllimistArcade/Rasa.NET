@@ -10,9 +10,9 @@ namespace Rasa.Managers
     /// The flags are the client's damage types, so each names one:
     ///
     /// - Damage: IMMUNE_PHYSICAL, _FIRE, _ICE, _VIRULENT, _EMP, _LIGHT (Laser), _SONIC and
-    ///   _ENERGY (Electrical). A hit of that type does nothing and shows "Immune"
-    ///   (DamageImmunity.IsImmune, which every hit asks: weapon fire, creature attacks, abilities,
-    ///   damage over time, bombs, lightning).
+    ///   _ENERGY (Electrical), and Virulent for a MECHANICAL creature (VirulentDamage). A hit of
+    ///   that type does nothing and shows "Immune" (DamageImmunity.IsImmune, which every hit
+    ///   asks: weapon fire, creature attacks, abilities, damage over time, bombs, lightning).
     /// - Control: IMMUNE_KNOCKBACK, _STUN, _SLEEP, _SNARE, _ROOT, _CONFUSION, _FEAR and _BLIND,
     ///   and IMMOBILIZE_IMMUNITY, which is IMMUNE_ROOT under another name.
     ///   An effect that would do that to it is refused as it is attached, with "Immune" over it
@@ -64,6 +64,10 @@ namespace Rasa.Managers
 
             // IMMOBILIZE_IMMUNITY is IMMUNE_ROOT by another name: nothing holds it where it stands.
             if (type == DamageType.Root && CreatureManager.HasFlag(creature, CreatureFlag.ImmobilizeImmunity))
+                return true;
+
+            // "Machines are immune" to Virulent (VirulentDamage).
+            if (type == DamageType.Virulent && VirulentDamage.SparesMachine(creature))
                 return true;
 
             return Flags.TryGetValue(type, out var flag) && CreatureManager.HasFlag(creature, flag);

@@ -1390,6 +1390,8 @@ namespace Rasa.Managers
         /// attack carries the type of the weapon it plays (Managers.CreatureAttacks), so a
         /// player's own resistances meet it as well. EMP's factor for a creature's kind is not
         /// here: it is on what gets past the shields and armour to health (EmpDamage.ToHealth).
+        /// Virulent, which goes past the armour bar, is held off by the armour the target has
+        /// left (VirulentDamage.ArmorFactor), and that counts as resisted too.
         /// </summary>
         public static int ApplyResist(Actor target, int amount, out int resisted, DamageType damageType = 0)
         {
@@ -1407,10 +1409,13 @@ namespace Rasa.Managers
 
             resist += CreatureResistances.ResistOf(target, damageType);
 
-            if (resist == 0)
+            // Virulent by the armour left (VirulentDamage).
+            var armor = VirulentDamage.ArmorFactor(target, damageType);
+
+            if (resist == 0 && armor >= 1.0)
                 return amount;
 
-            var taken = (int)Math.Round(amount * ResistMultiplier(resist));
+            var taken = (int)Math.Round(amount * ResistMultiplier(resist) * armor);
             resisted = amount - taken;
 
             return taken;

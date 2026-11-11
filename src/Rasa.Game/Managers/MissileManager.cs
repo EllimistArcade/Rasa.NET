@@ -167,7 +167,8 @@ namespace Rasa.Managers
             missile.DamageA = ShieldDrone.Mitigate(mapChannel, creature, missile.Source, missile.DamageA, missile.DamageType);
 
             // decrease armor first - all of it but what bypasses armour
-            var armorDecrease = Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
+            // and none of Virulent, which goes past it to health (VirulentDamage)
+            var armorDecrease = VirulentDamage.BypassesArmor(missile.DamageType) ? 0 : Math.Min(ArmorShare(missile), creature.Attributes[Attributes.Armor].Current);
             creature.Attributes[Attributes.Armor].Current -= armorDecrease;
 
             // EMP past the armour reaches its health by its kind: none of a biological creature's,
@@ -482,7 +483,8 @@ namespace Rasa.Managers
                     }
 
             // decrease armor first - all of it but what bypasses armour
-            var armorDecrease = Math.Min(ArmorShare(missile), actor.Attributes[Attributes.Armor].Current);
+            // and none of Virulent, which goes past it to health (VirulentDamage)
+            var armorDecrease = VirulentDamage.BypassesArmor(missile.DamageType) ? 0 : Math.Min(ArmorShare(missile), actor.Attributes[Attributes.Armor].Current);
 
             // Whose doing it is, to the clients: a creature's shot is shown landing after its
             // flight, and the bars move with it rather than as it is fired (StagedBy).

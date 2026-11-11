@@ -421,8 +421,8 @@ namespace Rasa.Managers
 
             var armorTaken = 0;
 
-            // Armour first.
-            if (target.Attributes.TryGetValue(Attributes.Armor, out var armor) && armor.Current > 0)
+            // Armour first - but Virulent goes past it to health (VirulentDamage).
+            if (target.Attributes.TryGetValue(Attributes.Armor, out var armor) && armor.Current > 0 && !VirulentDamage.BypassesArmor(damageType))
             {
                 // Target Painting: that share of the hit goes past the armour.
                 // And the attacker's own piercing, the two added and at most all of it.

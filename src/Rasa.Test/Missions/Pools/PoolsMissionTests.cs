@@ -696,7 +696,8 @@ namespace Rasa.Test.Missions.Pools
             int Stays() => Count("SELECT COUNT(*) AS Value FROM spawnpool WHERE map_context_id = 1429 AND id NOT BETWEEN 760239 AND 760245");
 
             Assert.IsTrue(missions.All(Has));
-            Assert.AreEqual((7, 6, 6, 1, 2, 5), All(), "1305 has no scene; only the Toxicologist has a stat row");
+            // 1305's scene is Instance_marker_maps': only its marker's map. Only the Toxicologist has a stat row.
+            Assert.AreEqual((7, 6, 6, 1, 2, 6), All(), "1305's scene holds only its marker's map; only the Toxicologist has a stat row");
             var stays = Stays();
 
             world.GetService<IMigrator>().Migrate(RetreadCaves);
@@ -709,7 +710,7 @@ namespace Rasa.Test.Missions.Pools
 
             world.GetService<IMigrator>().Migrate(TurpisRefinery);
             Assert.IsTrue(missions.All(Has));
-            Assert.AreEqual((7, 6, 6, 1, 2, 5), All());
+            Assert.AreEqual((7, 6, 6, 1, 2, 5), All(), "the refinery's own migration gives 1305 no scene");
         }
 
         /// <summary>

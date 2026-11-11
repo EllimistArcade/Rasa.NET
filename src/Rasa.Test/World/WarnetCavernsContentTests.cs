@@ -152,7 +152,7 @@ namespace Rasa.Test.World
             }
         }
 
-        /// <summary>The hives hang under the roof, low enough to be shot and for a player on the floor to stir them.</summary>
+        /// <summary>The hives hang under the roof, out of the rock, low enough to be shot and for a player on the floor to stir them.</summary>
         [TestMethod]
         public void TheHivesHangUnderBugCitysRoofWithinReach()
         {
@@ -172,6 +172,16 @@ namespace Rasa.Test.World
                 var under = new Vector3((float)hive.X, (float)hive.Floor + 0.5f, (float)hive.Z);
                 Assert.IsFalse(cover.Blocked(under, new Vector3((float)hive.X, (float)hive.Y - 0.05f, (float)hive.Z)), $"{hive.Where}: in the rock");
                 Assert.IsTrue(cover.Blocked(under, new Vector3((float)hive.X, (float)hive.Y + 1f, (float)hive.Z)), $"{hive.Where}: the roof is just above it");
+
+                // Its pod, from 2 m under the stalk down, clear of the cavern wall: the north-west chamber's and the west
+                // one first hung with rock within 1 m on four sides of it, over a ledge, seen only through the wall.
+                foreach (var depth in new[] { 2f, 3.5f, 5f })
+                {
+                    var pod = new Vector3((float)hive.X, (float)hive.Y - depth, (float)hive.Z);
+                    var walled = Enumerable.Range(0, 16).Count(k =>
+                        cover.Blocked(pod, pod + new Vector3(MathF.Cos(k * MathF.PI / 8), 0, MathF.Sin(k * MathF.PI / 8))));
+                    Assert.IsTrue(walled <= 3, $"{hive.Where}: rock within 1 m of its pod {depth} m down on {walled} sides of 16");
+                }
             }
         }
 

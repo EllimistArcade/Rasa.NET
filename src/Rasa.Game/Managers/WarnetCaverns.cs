@@ -39,7 +39,8 @@ namespace Rasa.Managers
     ///    level-19 warnets (<see cref="WaveSize"/>) out of the Nest at whoever is nearest. Her death
     ///    is event 2 for every player on it, and another attack comes.
     ///  - The Hanging Hives in Bug City. Once all six have been brought down, Tozid comes out
-    ///    (his scripted pool), and again after that once they have all been brought down again.
+    ///    (his scripted pool), and again after that once they have all been brought down again:
+    ///    each back up first, as a hive still lying from the last time does not count twice.
     ///  - The metal container at the Dig Site gives one only to a player who wants one for
     ///    Create the Queen Lure (395) and has none.
     /// </summary>
@@ -86,8 +87,12 @@ namespace Rasa.Managers
             /// <summary>Wave pools woken whose warnets are still to be sent at the squad.</summary>
             public readonly HashSet<uint> Rushing = new();
 
-            /// <summary>The hives seen down since Tozid last came out.</summary>
+            /// <summary>The hives brought down since Tozid last came out.</summary>
             public readonly HashSet<uint> HivesDown = new();
+
+            /// <summary>The hives down at the last look: one lying since before he came out counts again only once it is
+            /// back up and brought down again.</summary>
+            public readonly HashSet<uint> HivesLying = new();
             public int TozidOuts;
 
             /// <summary>Scenario events already told, by player, assignment and event.</summary>
@@ -460,8 +465,15 @@ namespace Rasa.Managers
         private static void Hives(MapChannel map, State state)
         {
             foreach (var hive in W.Hives)
+            {
                 if (PlacedDestructibles.LiveOf(map, hive.Id) is { IsDown: true })
-                    state.HivesDown.Add(hive.Id);
+                {
+                    if (state.HivesLying.Add(hive.Id))
+                        state.HivesDown.Add(hive.Id);
+                }
+                else
+                    state.HivesLying.Remove(hive.Id);
+            }
 
             if (Pool(map, W.TozidPool) is not { } tozid)
                 return;

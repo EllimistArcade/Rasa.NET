@@ -327,14 +327,19 @@ namespace Rasa.Services.Preloader
 
         public const uint FirstHive = 571001;
 
-        /// <summary>The Hanging Hives (arch_forean_warnethive_v02: 6.5 m from its stalk to its tip), hung under Bug City's roof 6.9-7.7 m over the floor: low enough to shoot, and to stir.</summary>
+        /// <summary>
+        /// The Hanging Hives (arch_forean_warnethive_v02: 6.5 m from its stalk to its tip), hung under Bug City's roof 6.8-7.7 m
+        /// over the floor: low enough to shoot, and to stir. The north-west chamber's and the west one were first hung at
+        /// (263, 52, 69) and (262.94, 51.5, 91.22), in the rock over a ledge, where they could be hit only by an area attack
+        /// through the wall; WarnetCavernsHives moves them in a World that has them there.
+        /// </summary>
         public static readonly Hive[] Hives =
         {
-            new(FirstHive, 263.0, 52.0, 69.0, 44.58, "the north-west chamber"),
+            new(FirstHive, 267.9, 55.43, 70.2, 48.62, "the north-west chamber"),
             new(FirstHive + 1, 287.0, 59.6, 75.0, 51.91, "the high terrace"),
             new(FirstHive + 2, 306.2, 49.45, 97.0, 41.75, "the east terrace"),
             new(FirstHive + 3, 317.0, 53.3, 87.0, 46.07, "the east alcove"),
-            new(FirstHive + 4, 262.94, 51.5, 91.22, 44.55, "the west terrace"),
+            new(FirstHive + 4, 257.0, 52.25, 79.0, 45.29, "the west, north of the terrace"),
             new(FirstHive + 5, 311.0, 55.9, 51.0, 48.24, "the south-east terrace")
         };
 

@@ -371,6 +371,26 @@ namespace Rasa.Test.Missions
             harness.Drain();
             Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, M.TrophyCase, 4));
 
+            // The hives still lying from the last time do not bring him straight back.
+            Work(harness);
+            Work(harness);
+            Assert.IsFalse(Pool(harness, W.TozidPool).Woken, "not back while the hives he came out for still lie");
+            Assert.AreEqual(1, state.TozidOuts);
+            Assert.AreEqual(0, state.HivesDown.Count);
+
+            // Back up, and all six brought down again: he is out again.
+            foreach (var hive in hives)
+                PlacedDestructibles.Respawn(hive);
+            Work(harness);
+            foreach (var hive in hives.Take(5))
+                Assert.IsTrue(PlacedDestructibles.Destroy(hive, harness.Client.Player));
+            Work(harness);
+            Assert.IsFalse(Pool(harness, W.TozidPool).Woken, "five again is not all");
+            Assert.IsTrue(PlacedDestructibles.Destroy(hives[5], harness.Client.Player));
+            Work(harness);
+            Assert.IsTrue(Pool(harness, W.TozidPool).Woken, "out again");
+            Assert.AreEqual(2, state.TozidOuts);
+
             harness.SpawnWorld(W.ChelliakPool);
             WildernessDaghdasUrnTests.Kill(harness, Living(harness).Single(c => c.DbId == W.Chelliak));
             harness.Drain();

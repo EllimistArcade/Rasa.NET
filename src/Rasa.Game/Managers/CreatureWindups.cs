@@ -88,10 +88,11 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Whether the target of an ability wound up at an area is still in it as it lands: the
-        /// cone aimed, or the ring centred, where the target stood at the start of the windup
-        /// (Missile.AreaCentre), the ring around the creature where it stands. An ability with no
-        /// area always finds its target.
+        /// Whether the target of an ability wound up at it is still where it lands: in front of
+        /// the creature, inside the argument's FOV_LIMIT (InFieldOfView), and, for one wound up at
+        /// an area, in that area - the cone aimed, or the ring centred, where the target stood at
+        /// the start of the windup (Missile.AreaCentre), the ring around the creature where it
+        /// stands. An ability with neither always finds its target.
         /// </summary>
         public static bool StillCaught(Creature creature, Missile missile)
         {
@@ -100,12 +101,39 @@ namespace Rasa.Managers
             if (creature == null || target == null)
                 return true;
 
+            if (AbilityManager.Instance.TryGetLevel(missile.ActionId, missile.ActionArgId, out var info)
+                && !InFieldOfView(creature, target.Position, info))
+                return false;
+
             var area = CreatureAreaAttacks.AreaOf(missile.ActionId, missile.ActionArgId);
 
             if (!area.IsArea)
                 return true;
 
             return area.Contains(creature.Position, AbilityManager.FacingOf(creature), missile.AreaCentre ?? target.Position, target.Position);
+        }
+
+        /// <summary>
+        /// FOV_LIMIT (ability property 85): how far round from the way it faces a creature's
+        /// ability reaches. Nine creature attacks have one - 45 the Howler's sonic attack, the
+        /// Juggernaut's eye beam and guns, the Predator's missile and the Kael's Tectonic Strike;
+        /// 90 the Linker's ground and hand blasts and the Caretaker's attack; 120 the Linker's
+        /// chest blast - and nothing in the client reads it. Read here as degrees either side of
+        /// the creature's facing, as CONE_RADIUS is (ours): the creature turns to its target as
+        /// the windup starts and stands through it (BehaviorManager), so a target that has got
+        /// round it, out of that arc, by the time it lands has dodged it. Where the attack is a
+        /// cone too its own angle is no wider. On the flat; no limit, or one of 180 or more,
+        /// reaches all round.
+        /// </summary>
+        public static bool InFieldOfView(Creature creature, System.Numerics.Vector3 target, ActionLevelInfo info)
+        {
+            if (creature == null || info == null || !info.Has(AbilityProperty.FovLimit))
+                return true;
+
+            var limit = info.Get(AbilityProperty.FovLimit);
+
+            return limit <= 0 || limit >= 180
+                || AbilityManager.InCone(creature.Position, AbilityManager.FacingOf(creature), target, float.MaxValue, limit);
         }
 
         private sealed class Deferred

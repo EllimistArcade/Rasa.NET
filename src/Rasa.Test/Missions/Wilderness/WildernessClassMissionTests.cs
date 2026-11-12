@@ -235,6 +235,25 @@ namespace Rasa.Test.Missions.Wilderness
             }
         }
 
+        [TestMethod]
+        [DataRow(CharacterClass.Soldier, 2010U)]
+        [DataRow(CharacterClass.Specialist, 2011U)]
+        public void TheClassGearMissionCannotBeAbandoned(CharacterClass characterClass, uint missionId)
+        {
+            using var harness = CreateHarness();
+            SetProfile(harness, characterClass, 5);
+            harness.Manager.PublishInitialState(harness.Client);
+            harness.Drain();
+            Route(harness, new AssignRadioMissionPacket { MissionId = missionId });
+            Assert.IsTrue(harness.Client.Player.Missions.ContainsKey(missionId));
+
+            // NON_ABANDONABLE_MISSIONS (ClassEquipmentMissionsKept): the client offers no Abandon for it, and the
+            // server refuses one sent all the same.
+            Route(harness, new AbandonMissionPacket { MissionId = missionId });
+            Assert.IsFalse(harness.Manager.TryAbandon(harness.Client, missionId));
+            Assert.AreEqual(Rasa.Data.MissionState.Active, harness.Client.Player.Missions[missionId].State);
+        }
+
         private static void SetProfile(
             WildernessRuntimeTestHarness harness, CharacterClass characterClass, byte level)
         {

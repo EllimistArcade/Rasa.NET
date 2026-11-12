@@ -24,7 +24,8 @@ namespace Rasa.Managers
     ///  - between those who can be paid, so nobody's part goes to waste:
     ///     - experience, between the sharers below the level cap. One at the cap gains none
     ///       (ManifestationManager.GainExperience) and takes no share from the rest; a killer
-    ///       at the cap leaves the whole kill to their squad;
+    ///       at the cap leaves the whole kill to their squad. Nor does one the creature is too
+    ///       far below to be worth anything to (KillExperience.DangerFactor, nine levels);
     ///     - adrenaline, between the sharers who are alive. A dead one is given none
     ///       (ManifestationManager.GainAdrenaline) and takes no share. A member whose bar is
     ///       already full is counted: full is a moment, not a state;
@@ -48,9 +49,10 @@ namespace Rasa.Managers
     /// Bonus)". n is the sharers who can be paid, as above. The client's tooltip
     /// counts the whole squad, wherever it is; a kill counts those who share in it.
     ///
-    /// Each sharer's part is then multiplied by their item modules' bonus, their Experience
-    /// Booster (XPInfo's boosterMod: " (+50% Booster Bonus)") and their own kill streak
-    /// (KillStreaks, streakMod).
+    /// Each sharer's part is then cut by their own danger penalty for the creature - 20% less for
+    /// each level from five below them (KillExperience), their Base XP with it - and multiplied
+    /// by their item modules' bonus, their Experience Booster (XPInfo's boosterMod: " (+50%
+    /// Booster Bonus)") and their own kill streak (KillStreaks, streakMod).
     /// </summary>
     public static class KillShares
     {
@@ -104,6 +106,14 @@ namespace Rasa.Managers
         public static bool GainsExperience(Client client) =>
             client?.Player != null && client.Player.Level >= 1 && client.Player.Level < ManifestationManager.MaxPlayerLevel;
 
+        /// <summary>
+        /// Whether a kill of a creature of this level is worth experience to this player: they are
+        /// below the level cap, and it is not so far below them their danger penalty takes it all
+        /// (KillExperience). A creature level of 0 is no penalty.
+        /// </summary>
+        public static bool GainsExperience(Client client, uint creatureLevel) =>
+            GainsExperience(client) && KillExperience.DangerFactor(client.Player.Level, creatureLevel) > 0;
+
         /// <summary>Whether a kill's adrenaline can be given to this player: they are alive.</summary>
         public static bool GainsAdrenaline(Client client) =>
             client?.Player != null && client.Player.State != CharacterState.Dead;
@@ -128,15 +138,16 @@ namespace Rasa.Managers
 
         /// <summary>
         /// Pays one award of a kill's experience to those of the sharers who can gain it, each
-        /// their group part (GroupPartOf), and returns the part. critKill is the killer's: the
-        /// others are told of a finish as their team's.
+        /// their group part (GroupPartOf) after their danger penalty for a creature of
+        /// creatureLevel (KillExperience; 0, none), and returns the part before it. critKill is
+        /// the killer's: the others are told of a finish as their team's.
         /// </summary>
-        public static uint AwardExperience(ManifestationManager manifestations, IReadOnlyList<Client> sharers, Client killer, uint experience, CritKill critKill = CritKill.None)
+        public static uint AwardExperience(ManifestationManager manifestations, IReadOnlyList<Client> sharers, Client killer, uint experience, CritKill critKill = CritKill.None, uint creatureLevel = 0)
         {
             if (manifestations == null || sharers == null)
                 return 0;
 
-            var paid = sharers.Where(GainsExperience).ToList();
+            var paid = sharers.Where(sharer => GainsExperience(sharer, creatureLevel)).ToList();
 
             if (paid.Count == 0)
                 return 0;
@@ -155,13 +166,19 @@ namespace Rasa.Managers
             // line's Base XP is an even split, which the group, booster and streak bonuses are of.
             foreach (var sharer in paid)
             {
+                // Their own danger penalty for the creature first, on their part and on its Base XP.
+                var own = KillExperience.AfterDanger(share, sharer.Player.Level, creatureLevel);
+
+                if (own == 0)
+                    continue;
+
                 var streak = KillStreaks.MultiplierOf(sharer);
                 var boost = ExperienceBoost.PercentOf(sharer.Player);
-                var part = ExperienceBoost.Boosted(sharer.Player, ItemModuleBonuses.WithExperience(sharer.Player, share));
+                var part = ExperienceBoost.Boosted(sharer.Player, ItemModuleBonuses.WithExperience(sharer.Player, own));
 
                 manifestations.GainExperience(sharer, (uint)Math.Min(uint.MaxValue, (ulong)part * (ulong)streak),
                     sharer == killer || critKill == CritKill.None ? critKill : CritKill.Team, streak,
-                    groupMod, (100.0 + boost) / 100.0, even);
+                    groupMod, (100.0 + boost) / 100.0, KillExperience.AfterDanger(even, sharer.Player.Level, creatureLevel));
             }
 
             return share;

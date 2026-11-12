@@ -49,7 +49,7 @@ namespace Rasa.Test.Missions.Encounters
                 context.Client.Player.Missions[322].Objectives[1].Counters[0]);
             Assert.AreEqual(independentPolicy == MissionCreditMode.NearbyParty ? 1U : 0U,
                 fixture.Member.Player.Missions[322].Objectives[1].Counters[0]);
-            Assert.IsTrue(context.Client.Player.Experience is >= 90 and <= 110);
+            Assert.AreEqual(62u, context.Client.Player.Experience, "a level 1 kill (KillExperience)");
             Assert.AreEqual(0U, fixture.Member.Player.Experience);
             var lootId = fixture.Enemy.CorpseLootEntityId;
             var loot = context.Map.LootDispensers[lootId];

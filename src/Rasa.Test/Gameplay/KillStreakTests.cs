@@ -82,8 +82,8 @@ namespace Rasa.Test.Gameplay
         private static List<DisplayClientMessagePacket> PrestigeLines(IEnumerable<PythonPacket> sent) =>
             sent.OfType<DisplayClientMessagePacket>().Where(packet => packet.MsgId == PlayerMessage.PmPrestigePointsReceivedKillstreakmax).ToList();
 
-        /// <summary>A level 1 creature where the killer stands, killed by them, and what the killer's client was sent for it.</summary>
-        private static List<PythonPacket> Kill(MissionTestContext context, CritKill critKill = CritKill.None)
+        /// <summary>A creature of the level (1) where the killer stands, killed by them, and what the killer's client was sent for it.</summary>
+        private static List<PythonPacket> Kill(MissionTestContext context, CritKill critKill = CritKill.None, int level = 1)
         {
             var creature = new Creature
             {
@@ -91,7 +91,7 @@ namespace Rasa.Test.Gameplay
                 EntityClass = EntityClasses.HumanBaseMale,
                 MapContextId = context.Map.MapInfo.MapContextId,
                 Position = context.Client.Player.Position,
-                Level = 1,
+                Level = (uint)level,
                 State = CharacterState.Idle,
                 AppearanceData = new Dictionary<EquipmentData, AppearanceData>(),
                 Attributes = Enum.GetValues<Attributes>().ToDictionary(
@@ -208,7 +208,7 @@ namespace Rasa.Test.Gameplay
                 var gained = Gains(sent).Single();
 
                 Assert.AreEqual(2, gained.StreakMod, $"kill {kill}: +100% Kill Streak Bonus");
-                Assert.IsTrue(gained.BaseGained >= 90 && gained.BaseGained <= 110, $"a level 1 kill is 100 give or take 10, not {gained.BaseGained}");
+                Assert.AreEqual(62u, gained.BaseGained, "a level 1 kill is BASE_KILL_XP, 62 (KillExperience)");
                 Assert.AreEqual(gained.BaseGained * 2, gained.Gained);
                 Assert.AreEqual(1, gained.GroupMod);
                 Assert.AreEqual(1, gained.BoosterMod);
@@ -434,8 +434,8 @@ namespace Rasa.Test.Gameplay
             Assert.AreEqual(2, killers.StreakMod);
             Assert.AreEqual(2, mates.StreakMod);
             Assert.AreEqual(1.84, killers.GroupMod, 1e-9);
-            Assert.IsTrue(killers.BaseGained >= 45 && killers.BaseGained <= 55, $"half of 90 to 110, not {killers.BaseGained}");
-            Assert.IsTrue(killers.Gained >= 82 * 2 && killers.Gained <= 101 * 2 && killers.Gained % 2 == 0, $"92% of 90 to 110, twice, not {killers.Gained}");
+            Assert.AreEqual(31u, killers.BaseGained, "half of 62");
+            Assert.AreEqual(57u * 2, killers.Gained, "92% of 62, twice");
             Assert.AreEqual(killers.Gained, mates.Gained);
 
             Assert.AreEqual(0, KillStreaks.CreditOf(away));
@@ -626,8 +626,9 @@ namespace Rasa.Test.Gameplay
 
             client.Player.Level = ManifestationManager.MaxPlayerLevel;
 
+            // Of their own level: one far below them is worth nothing and no part of a streak (KillExperience).
             for (var kill = 1; kill <= 15; kill++)
-                Assert.IsEmpty(Gains(Kill(context)), "no experience at the cap");
+                Assert.IsEmpty(Gains(Kill(context, level: ManifestationManager.MaxPlayerLevel)), "no experience at the cap");
 
             Assert.AreEqual(5, KillStreaks.LevelOf(client));
             CollectionAssert.AreEqual(new[] { (client, 1) }, _prestige);

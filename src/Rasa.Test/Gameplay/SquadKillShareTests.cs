@@ -59,7 +59,7 @@ namespace Rasa.Test.Gameplay
                 Creatures(context).HandleCreatureKill(context.Map, creature, context.Client.Player);
 
                 var gained = Gains(context.Client).Single();
-                Assert.IsTrue(gained.Gained >= 90 && gained.Gained <= 110, $"a level 1 kill is 100 give or take 10, not {gained.Gained}");
+                Assert.AreEqual(62u, gained.Gained, "a level 1 kill is BASE_KILL_XP, 62 (KillExperience)");
                 Assert.AreEqual(gained.Gained, gained.BaseGained);
                 Assert.AreEqual(1, gained.GroupMod, "no group bonus alone");
                 Assert.AreEqual(gained.Gained, context.Client.Player.Experience);
@@ -96,10 +96,10 @@ namespace Rasa.Test.Gameplay
             {
                 Creatures(context).HandleCreatureKill(context.Map, creature, context.Client.Player);
 
-                // Three: 84% of 90 to 110 each, and a third of it their Base XP.
+                // Three: 84% of 62 each, and a third of it their Base XP.
                 var killers = Gains(context.Client).Single();
-                Assert.IsTrue(killers.Gained >= 75 && killers.Gained <= 92, $"84% of 90 to 110, not {killers.Gained}");
-                Assert.IsTrue(killers.BaseGained >= 30 && killers.BaseGained <= 36, $"a third of 90 to 110, not {killers.BaseGained}");
+                Assert.AreEqual(52u, killers.Gained, "84% of 62");
+                Assert.AreEqual(20u, killers.BaseGained, "a third of 62");
                 Assert.AreEqual(2.52, killers.GroupMod, 1e-9);
 
                 foreach (var sharer in new[] { context.Client, near, edge })
@@ -156,7 +156,7 @@ namespace Rasa.Test.Gameplay
                 Assert.HasCount(2, mates);
 
                 var share = killers[0].Gained;
-                Assert.IsTrue(share >= 82 && share <= 101, $"92% of 90 to 110, not {share}");
+                Assert.AreEqual(57u, share, "92% of 62");
                 Assert.IsTrue(killers.Concat(mates).All(gain => gain.Gained == share), "the kill and the finish are each split the same");
                 Assert.AreEqual(share * 2, context.Client.Player.Experience);
                 Assert.AreEqual(share * 2, mate.Player.Experience);

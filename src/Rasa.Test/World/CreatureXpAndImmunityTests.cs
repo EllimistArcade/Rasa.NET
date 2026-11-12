@@ -68,10 +68,10 @@ namespace Rasa.Test.World
                 MissionProgressRule.CompleteOnExactSubject(MissionProgressEventKind.CreatureKilled, 82));
             var killer = context.Client;
 
-            // A level 1 kill is 100 give or take 10: doubled, 180 to 220.
+            // A level 1 kill is BASE_KILL_XP, 62 (KillExperience): doubled, 124.
             var doubled = Kill(context, Corpse(context, CreatureFlag.XpModifier4Double));
             var gained = doubled.OfType<ExperienceChangedPacket>().Single().XPInfo.BaseGained;
-            Assert.IsTrue(gained >= 180 && gained <= 220, $"doubled: {gained}");
+            Assert.AreEqual(124, (int)gained, "doubled");
             var credit = KillStreaks.CreditOf(killer);
             Assert.IsTrue(credit > 0, "a kill in the streak");
 

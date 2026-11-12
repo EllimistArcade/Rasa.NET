@@ -45,7 +45,7 @@ namespace Rasa.Test.Gameplay
                 Creatures(context).HandleCreatureKill(context.Map, creature, soldier);
 
                 var gained = Gains(context.Client).Single();
-                Assert.IsTrue(gained.Gained >= 90 && gained.Gained <= 110, $"a level 1 kill, not {gained.Gained}");
+                Assert.AreEqual(62u, gained.Gained, "a level 1 kill: BASE_KILL_XP, 62 (KillExperience)");
                 Assert.AreEqual(gained.Gained, context.Client.Player.Experience);
                 Assert.IsEmpty(Gains(first), "the last to hit has it, not the first");
                 Assert.AreEqual(0u, first.Player.Experience);

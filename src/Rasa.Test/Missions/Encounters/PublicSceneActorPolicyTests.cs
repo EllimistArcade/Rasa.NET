@@ -43,7 +43,7 @@ namespace Rasa.Test.Missions.Encounters
             fixture.Kill(enemy);
 
             Assert.AreEqual(CharacterState.Dead, enemy.State);
-            Assert.IsTrue(player.Experience is >= 90 and <= 110, "Use the existing level-one kill XP range.");
+            Assert.AreEqual(62u, player.Experience, "a level 1 kill: BASE_KILL_XP, 62 (KillExperience)");
             Assert.AreEqual(player.EntityId, enemy.HarvestOwnerEntityId);
             Assert.AreNotEqual(0UL, enemy.CorpseLootEntityId);
             var loot = fixture.Context.Map.LootDispensers[enemy.CorpseLootEntityId];
@@ -218,7 +218,7 @@ namespace Rasa.Test.Missions.Encounters
             Assert.AreEqual(0UL, unrewarded.CorpseLootEntityId);
             Assert.AreEqual(0UL, ordinaryScene.CorpseLootEntityId);
             fixture.Kill(ordinaryStatic);
-            Assert.IsTrue(context.Client.Player.Experience is >= 90 and <= 110);
+            Assert.AreEqual(62u, context.Client.Player.Experience, "a level 1 kill (KillExperience)");
             Assert.AreNotEqual(0UL, ordinaryStatic.CorpseLootEntityId);
             Assert.IsTrue(CreatureGameplayRules.IsInvulnerable(protectedActor));
         }
@@ -451,7 +451,7 @@ namespace Rasa.Test.Missions.Encounters
 
             fixture.Kill(actor);
 
-            Assert.IsTrue(fixture.Context.Client.Player.Experience is >= 90 and <= 110);
+            Assert.AreEqual(62u, fixture.Context.Client.Player.Experience, "a level 1 kill (KillExperience)");
             Assert.AreNotEqual(0UL, actor.CorpseLootEntityId);
         }
 
@@ -471,7 +471,7 @@ namespace Rasa.Test.Missions.Encounters
 
             fixture.Kill(actor);
 
-            Assert.IsTrue(context.Client.Player.Experience is >= 90 and <= 110,
+            Assert.AreEqual(62u, context.Client.Player.Experience,
                 "Without a role override, the legacy experience reward flag gates scene-created actors only.");
             Assert.AreEqual(2U, context.Map.LootDispensers[actor.CorpseLootEntityId].LootItems.Single().ItemQuantity);
         }
@@ -495,7 +495,7 @@ namespace Rasa.Test.Missions.Encounters
             var inherited = fixture.Actor(run, "inherited");
             fixture.Kill(inherited);
 
-            Assert.IsTrue(context.Client.Player.Experience is >= 90 and <= 110);
+            Assert.AreEqual(62u, context.Client.Player.Experience, "a level 1 kill (KillExperience)");
             Assert.AreEqual(2U, context.Map.LootDispensers[inherited.CorpseLootEntityId].LootItems.Single().ItemQuantity);
         }
 

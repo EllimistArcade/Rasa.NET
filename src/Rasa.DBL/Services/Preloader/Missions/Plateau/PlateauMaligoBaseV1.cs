@@ -104,7 +104,7 @@ namespace Rasa.Services.Preloader.Missions.Plateau
 
         /// <summary>The pads: Level 1's west end, Level 2's control room (the massacre room), the chamber's east side.</summary>
         public static readonly (double X, double Y, double Z) Level1PadAt = (-214, -130.13, 128), Level2PadAt = (90, -100.08, 128),
-            ChamberPadAt = (-222, -104.28, 140);
+            ChamberPadAt = (-222, -99.85, 140);
 
         public static IEnumerable<string> Up()
         {

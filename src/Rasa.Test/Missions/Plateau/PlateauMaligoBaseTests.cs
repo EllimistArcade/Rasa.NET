@@ -1,4 +1,4 @@
-extern alias RasaGame;
+﻿extern alias RasaGame;
 
 using System.Collections.Generic;
 using System.Linq;
@@ -107,7 +107,9 @@ namespace Rasa.Test.Missions.Plateau
         /// <summary>
         /// The people, the officers and the pads stand on Maligo's navmesh, each where the player can walk to it: Level 1
         /// from the door, Level 2 from its pad, the chamber from where the terminal sets the player down. Level 2 is
-        /// not walked to from Level 1, nor the chamber from Level 2: the pads and the terminal are the ways in.
+        /// not walked to from Level 1: the pads are the way in. The chamber is: its floor is Level 2's, and its places
+        /// stand on it, not on the plane the navmesh has 4.5 m under it (Maligo_chamber_floor) - where they stood, the
+        /// charge under the floor, nothing to set the bomb on.
         /// </summary>
         [TestMethod]
         public void MaligosPeopleOfficersAndPadsStandWhereThePlayerWalks()
@@ -141,7 +143,7 @@ namespace Rasa.Test.Missions.Plateau
             var chamber = ToVector(PlateauOneWayTripV1.ChamberArrival);
             AssertConnected(copy, arrival, level1, "Level 1's pad");
             Assert.IsFalse(Connected(copy, arrival, level2), "Level 2 is not walked to from Level 1");
-            Assert.IsFalse(Connected(copy, level2, chamber), "the chamber is not walked to from Level 2");
+            AssertConnected(copy, level2, chamber, "the chamber's floor, from Level 2");
             AssertConnected(copy, chamber, Pad(PlateauMaligoBaseV1.ChamberPad), "the chamber's pad");
 
             Spawn(copy, PlateauMaligoBaseV1.Zyrutha, PlateauMaligoBaseV1.Kythura, PlateauMaligoBaseV1.DownedPrisoner,
@@ -189,7 +191,11 @@ namespace Rasa.Test.Missions.Plateau
                     (ToVector(PlateauOneWayTripV1.HomburgAt), "Homburg")
                 }.Concat(Enumerable.Range(0, PlateauOneWayTripV1.PrisonerLanes.Length)
                     .SelectMany(index => PlateauOneWayTripV1.MarchOf(index).Select(point => (ToVector(point.Position), $"march {index + 1}")))))
+            {
                 AssertConnected(copy, chamber, place, what);
+                AssertConnected(copy, level2, place, what + ", on the chamber's floor");
+                AssertStandsOnNavMesh(copy, place, 0.7f);
+            }
         }
 
         [TestMethod]
@@ -555,6 +561,7 @@ namespace Rasa.Test.Missions.Plateau
             Assert.AreEqual(PlateauOneWayTripV1.DeviceIntactState, (uint)device.StateId);
             AssertStandsOnNavMesh(copy, device.Position, 0.5f);
             Assert.AreEqual(PlateauOneWayTripV1.ChargeClass, (uint)charge.EntityClassId);
+            AssertStandsOnNavMesh(copy, charge.Position, 0.5f);
 
             IntoTheChamber(harness, copy);
             Use(harness, copy, charge, PlateauOneWayTripV1.UseArgument);
@@ -583,11 +590,11 @@ namespace Rasa.Test.Missions.Plateau
             Talk(harness, homburg, OneWayTrip, PlateauOneWayTripV1.Destroy);
             Assert.AreEqual(MissionObjectiveState.Incomplete, Objective(harness, OneWayTrip, PlateauOneWayTripV1.Report));
 
-            // A marker for every objective: on the objects and NPCs it is done at (12's at the device and the terminal).
+            // A marker for every objective: on the objects and NPCs it is done at (12's at the charge and the terminal).
             Assert.HasCount(13, Markers(harness, OneWayTrip));
             AssertMarker(harness, OneWayTrip, PlateauOneWayTripV1.Maybauer, maybauer.Position, 2f, "Maybauer");
             AssertMarker(harness, OneWayTrip, PlateauOneWayTripV1.Bomb, crate.Position, 0.5f, "the bomb crate");
-            AssertMarker(harness, OneWayTrip, PlateauOneWayTripV1.Destroy, device.Position, 0.5f, "the device");
+            AssertMarker(harness, OneWayTrip, PlateauOneWayTripV1.Destroy, charge.Position, 0.5f, "the charge");
             AssertMarker(harness, OneWayTrip, PlateauOneWayTripV1.Destroy,
                 SceneObject(harness, copy, OneWayTrip, PlateauOneWayTripV1.TerminalRole).Position, 0.5f, "the chamber terminal");
             AssertMarker(harness, OneWayTrip, PlateauOneWayTripV1.PowerDown,
@@ -609,6 +616,7 @@ namespace Rasa.Test.Missions.Plateau
             for (var index = 0; index < prisoners.Length; index++)
             {
                 var end = ToVector(PlateauOneWayTripV1.MarchOf(index).Last().Position);
+                System.Console.WriteLine($"DBG prisoner {index + 1} at {prisoners[index].Position} end {end}");
                 Assert.IsLessThan(1.5f, Vector3.Distance(prisoners[index].Position, end), $"prisoner {index + 1} at the device ({prisoners[index].Position})");
             }
 

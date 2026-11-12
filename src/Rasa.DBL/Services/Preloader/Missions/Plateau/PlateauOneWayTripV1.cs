@@ -59,11 +59,16 @@ namespace Rasa.Services.Preloader.Missions.Plateau
     ///    device and stop beside it at about the deadline: a sight only. CHANGE LATER: in 2008 the prisoners
     ///    reaching the device may have failed the mission (no source says).
     ///  - 15: the personal crate (Bane Cargo Crate 21568, as Bomb Voyage's) beside Maybauer gives the bomb.
-    ///  - The chamber: the Special Projects room (the client's ChunnelRoomMaligo at (-246, -100, 128)) is an island
-    ///    on the navmesh. The terminal (20631) beside the socket takes the player in (a scene transfer). CHANGE
-    ///    LATER: a door that opens. The way out is the chamber's local teleporter (PlateauMaligoBaseV1).
+    ///  - The chamber: the Special Projects room (the client's ChunnelRoomMaligo at (-246, -100, 128)). Its floor, at
+    ///    about -99.3 on the device's dais and -99.9 round it, is walked to from Level 2; the island the navmesh has
+    ///    4.5 m under it, at <see cref="UnderTheFloorY"/>, is a plane beneath the floor nobody stands on. The
+    ///    chamber's places were first put on that plane: the device, the charge, Homburg, the prisoners and the pad
+    ///    out stood under the floor, and the charge could not be seen or clicked (Maligo_chamber_floor). Each stands
+    ///    at the floor's height under it now, from the navmesh. The terminal (20631) beside the socket takes the
+    ///    player in (a scene transfer). The way out is the chamber's local teleporter (PlateauMaligoBaseV1).
     ///  - 12: the bomb is set at the device by an Explosive Charge (UsableBombHumV01 7870, usable once 15 is done);
-    ///    the device shows destroyed, the deadline is met, and Homburg appears; his talk completes 12.
+    ///    the device shows destroyed, the deadline is met, and Homburg appears; his talk completes 12. Its marker is
+    ///    on the charge, where the bomb is set, and on the terminal.
     ///  - The rewards: templates 120354-120357, the Uncommon V04 30-34 Bio gloves, Graviton helmet, Mech gloves and
     ///    Stealth gloves, four mission-reward templates in TaRapedia's order (the manufacturer names are not in
     ///    the client tables). Level 33.
@@ -129,20 +134,36 @@ namespace Rasa.Services.Preloader.Missions.Plateau
         public static readonly ScenePosition CrateAt = new(-173.99f, -90.28f, 133.44f);
 
         /// <summary>The Special Projects chamber: where the terminal sets the player down (facing west), the device, the charge, Homburg.</summary>
-        public static readonly ScenePosition ChamberArrival = new(-222, -104.28f, 128);
+        public static readonly ScenePosition ChamberArrival = new(-222, -99.7f, 128);
+
+        /// <summary>Where the chamber's places first stood: the plane under its floor (Maligo_chamber_floor).</summary>
+        public const float UnderTheFloorY = -104.28f;
         public const double ChamberArrivalYaw = 1.5708;
-        public static readonly ScenePosition DeviceAt = new(-246, -104.28f, 128);
+        public static readonly ScenePosition DeviceAt = new(-246, -99.28f, 128);
         /// <summary>5 m west of the arrival, on the line to the device: at 3 m and at 11 m from the device the real
         /// client's walk stopped 5-7 m short of it (the device's collision and the chamber's floor around it), out of
         /// use range (to-fix #31). ESTIMATE place.</summary>
-        public static readonly ScenePosition ChargeAt = new(-227, -104.28f, 128);
-        public static readonly ScenePosition HomburgAt = new(-228, -104.28f, 120);
+        public static readonly ScenePosition ChargeAt = new(-227, -99.39f, 128);
+        public static readonly ScenePosition HomburgAt = new(-228, -99.68f, 120);
 
         /// <summary>The prisoners' walks across the chamber: four stops of 200 s, at 0.4 m/s, so they stand at the device at about the deadline.</summary>
         public const uint StopMilliseconds = 200000;
         public const float MarchSpeed = 0.4f;
-        public static readonly float[] PrisonerLanes = { 112, 120, 136, 144 };
+        /// <summary>
+        /// The lanes the prisoners set out on, at the chamber's west end. The second was 120, through the machine at
+        /// (-268..-263, 117..121) that stands on the floor (the plane under it had none).
+        /// </summary>
+        public static readonly float[] PrisonerLanes = { 112, 124, 136, 144 };
         public static readonly float[] MarchX = { -272, -266, -261, -256, -252 };
+
+        /// <summary>The floor's height at each prisoner's march points, lane by lane (the navmesh's, to 0.01 m).</summary>
+        public static readonly float[][] MarchFloorY =
+        {
+            new[] { -99.88f, -99.87f, -99.61f, -99.2f, -99.12f },
+            new[] { -99.87f, -99.81f, -99.28f, -99.28f, -99.28f },
+            new[] { -99.88f, -99.88f, -99.47f, -99.42f, -99.37f },
+            new[] { -99.88f, -99.88f, -99.75f, -99.35f, -99.3f }
+        };
 
         public const double MarchYaw = -1.5708;         // east, to the device
 
@@ -158,7 +179,7 @@ namespace Rasa.Services.Preloader.Missions.Plateau
             var lane = PrisonerLanes[index];
             var last = MarchX.Length - 1;
             return MarchX.Select((x, step) => new SceneWaypoint(
-                new ScenePosition(x, ChamberArrival.Y, lane + (DeviceAt.Z - lane) * 0.5f * step / last),
+                new ScenePosition(x, MarchFloorY[index][step], lane + (DeviceAt.Z - lane) * 0.5f * step / last),
                 MarchYaw, step == 0 || step == last ? 0 : StopMilliseconds)).ToArray();
         }
 
@@ -261,7 +282,7 @@ namespace Rasa.Services.Preloader.Missions.Plateau
             mission.Indicator(PowerDown, 9, SocketAt.X, SocketAt.Y, SocketAt.Z, ObjectRadius);
             mission.Indicator(Maybauer, 10, MaybauerAt.X, MaybauerAt.Y, MaybauerAt.Z, NpcRadius);
             mission.Indicator(Bomb, 11, CrateAt.X, CrateAt.Y, CrateAt.Z, ObjectRadius);
-            mission.Indicator(Destroy, 12, DeviceAt.X, DeviceAt.Y, DeviceAt.Z, ObjectRadius);
+            mission.Indicator(Destroy, 12, ChargeAt.X, ChargeAt.Y, ChargeAt.Z, ObjectRadius);
             mission.Indicator(Destroy, 13, TerminalAt.X, TerminalAt.Y, TerminalAt.Z, ObjectRadius);
 
             mission.Evidence(1, MissionEvidenceSourceKind.Client, "native:missionobjective/877",

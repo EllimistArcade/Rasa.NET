@@ -256,10 +256,11 @@ namespace Rasa.Services.Preloader
             new(650229, Pravus, 63, 58.4, -45, -1.6, HostileRespawn, 0, (Thrax, 1, 1)),
             new(650230, Pravus, GateGuards.X, GateGuards.Y, GateGuards.Z, -1.6, HostileRespawn, 0, (GateGrenadier, 1, 1)),
 
-            // The research HQ and the compound about it.
+            // The research HQ and the compound about it; 650232 and 650233 on the ground, not on the plane at 33 under
+            // the hollows there (PravusHqGround).
             new(650231, Pravus, 180, 41.74, -8, -1.6, HostileRespawn, 5, (Thrax, 2, 2), (Grenadier, 1, 1)),
-            new(650232, Pravus, 150, 32.94, 30, -1.6, HostileRespawn, 5, (Thrax, 2, 2)),
-            new(650233, Pravus, 150, 33.14, -50, -1.6, HostileRespawn, 5, (Thrax, 2, 2)),
+            new(650232, Pravus, 150, 35.49, 30, -1.6, HostileRespawn, 5, (Thrax, 2, 2)),
+            new(650233, Pravus, 150, 38.34, -50, -1.6, HostileRespawn, 5, (Thrax, 2, 2)),
 
             // Inside: the tunnels' cross, the side rooms, and the prison.
             new(650240, Pravus, 224, 9.89, -24, 0, HostileRespawn, 4, (Thrax, 2, 2)),

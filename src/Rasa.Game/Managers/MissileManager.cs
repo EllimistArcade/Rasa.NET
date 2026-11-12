@@ -156,6 +156,9 @@ namespace Rasa.Managers
             // who opens fire and wins never enters combat at all.
             EnterCombat(missile.Source);
 
+            // A shooter far below its target does less (LevelGap).
+            missile.DamageA = LevelGap.Scale(missile.DamageA, missile.Source, creature);
+
             var beforeResist = missile.DamageA;
 
             Resist(creature, missile);
@@ -460,6 +463,9 @@ namespace Rasa.Managers
                 Immune(missile, actor);
                 return;
             }
+
+            // A creature or player far below the one it hits does less (LevelGap).
+            missile.DamageA = LevelGap.Scale(missile.DamageA, missile.Source, actor);
 
             // A smoke screen takes its share off a shot before anything else: "Incoming ranged
             // damage reduced by X%", and melee walks through it.

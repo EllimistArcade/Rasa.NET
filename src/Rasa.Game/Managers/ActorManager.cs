@@ -412,6 +412,9 @@ namespace Rasa.Managers
                 ManifestationManager.EnterCombatOf(source);
             }
 
+            // An attacker far below its target does less (LevelGap).
+            amount = LevelGap.Scale(amount, source, target);
+
             // A shield takes its share first; a hit it takes all of goes no further.
             amount = GameEffectManager.Instance.ApplyAbsorb(mapChannel, target, amount, out var absorbed);
             outcome = new DamageOutcome { Delivered = amount, Absorbed = absorbed };

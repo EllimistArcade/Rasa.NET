@@ -466,10 +466,11 @@ namespace Rasa.Test.Missions
             Assert.IsFalse(DamageImmunity.IsImmune(overseer, DamageType.Sonic));
             Assert.IsFalse(DamageImmunity.IsImmune(overseer, DamageType.Electrical));
 
-            // Enough Sonic breaks it at once.
+            // Enough Sonic breaks it at once: a tenth of his health, which is what a level 1
+            // character far below him does of all of it (LevelGap).
             harness.MoveTo(overseer.Position + new Vector3(4, 0, 0));
             var max = overseer.Attributes[Attributes.Health].NormalMax;
-            ActorManager.Instance.Damage(harness.Map, overseer, max / 10, harness.Client.Player, DamageType.Sonic);
+            ActorManager.Instance.Damage(harness.Map, overseer, max, harness.Client.Player, DamageType.Sonic);
             harness.Drain();
             Work(harness);
             Assert.IsFalse(CraterLakeFacility.ShieldUp(harness.Map));
@@ -772,7 +773,8 @@ namespace Rasa.Test.Missions
         private static void Kill(WildernessRuntimeTestHarness harness, Creature creature)
         {
             harness.MoveTo(creature.Position + new Vector3(2, 0, 0));
-            var lethal = creature.Attributes[Attributes.Health].Current + Math.Max(0, creature.Attributes[Attributes.Armor].Current);
+            // Ten times over: a level 1 character far below the creature does a tenth of its damage (LevelGap).
+            var lethal = 10 * (creature.Attributes[Attributes.Health].Current + Math.Max(0, creature.Attributes[Attributes.Armor].Current));
             ActorManager.Instance.Damage(harness.Map, creature, lethal, harness.Client.Player);
             harness.Drain();
         }

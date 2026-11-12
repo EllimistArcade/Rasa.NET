@@ -862,7 +862,8 @@ namespace Rasa.Test.Missions.Wilderness
                 CombatTick(harness);
             Assert.AreEqual(BehaviorManager.BehaviorActionFighting, skeev.Controller.CurrentAction, "and fights back");
 
-            ActorManager.Instance.Damage(harness.Map, skeev, (int)Toughness(skeev) + 1000, harness.Client.Player);
+            // Ten times over: a level 1 character far below him does a tenth of its damage (LevelGap).
+            ActorManager.Instance.Damage(harness.Map, skeev, 10 * ((int)Toughness(skeev) + 1000), harness.Client.Player);
             Assert.AreEqual(CharacterState.Dead, skeev.State, "and dies");
         }
 

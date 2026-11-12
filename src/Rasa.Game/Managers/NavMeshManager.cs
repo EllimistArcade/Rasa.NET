@@ -341,6 +341,61 @@ namespace Rasa.Managers
             return best;
         }
 
+        /// <summary>
+        /// The ground over <paramref name="here"/> when it is on a pocket of mesh buried under the terrain: a
+        /// part under <see cref="UnstickPocketArea"/> that no path joins to the ground over it (the tests of
+        /// <see cref="UnstickDestination"/>). Null anywhere else - on the ground, in a cave joined to it, on a
+        /// map that is all caves. The pockets are mesh built inside hillsides and on the beds of ponds under
+        /// the terrain: the Retread City pond in the Valverde Marshes has five, 785 m² and less, 3 m under the
+        /// bank. The top of the column over <paramref name="column"/> (over <paramref name="here"/> by default),
+        /// as /stuck has it; with <paramref name="firstUp"/>, for a creature, first the first ground up from the
+        /// pocket, metre by metre, that is a floor of its own and not another pocket - not the highest in the
+        /// column, a rock's top 18 m over that pond - within <see cref="PocketRise"/>.
+        /// </summary>
+        public static Vector3? GroundOverPocket(MapChannel mapChannel, Vector3 here, Vector3? column = null, bool firstUp = true)
+        {
+            var navMesh = mapChannel?.NavMesh;
+
+            // Cheapest first: most points are not underground, and a cave's region is large.
+            if (navMesh == null || !navMesh.IsUnderground(here) || navMesh.RegionArea(here) is not float area || area >= UnstickPocketArea)
+                return null;
+
+            var over = column ?? here;
+
+            for (var rise = 1f; firstUp && rise <= PocketRise; rise += 1f)
+            {
+                if (navMesh.Nearest(new Vector3(over.X, here.Y + rise, over.Z)) is not { } up || up.Y < here.Y + 1f ||
+                    navMesh.IsUnderground(up) || navMesh.Reachable(here, up) == true ||
+                    navMesh.RegionArea(up) is not float upArea || upArea < UnstickPocketArea)
+                    continue;
+
+                return up;
+            }
+
+            var ground = SafetyFloor.TopOfColumn(mapChannel, over);
+
+            return ground != null && ground.Value.Y > here.Y && !navMesh.IsUnderground(ground.Value) &&
+                   navMesh.Reachable(here, ground.Value) != true
+                ? ground
+                : null;
+        }
+
+        /// <summary>How far up from a buried pocket <see cref="GroundOverPocket"/> looks for the ground over it before taking the top of the column.</summary>
+        public const float PocketRise = 40f;
+
+        /// <summary>
+        /// Where to put a creature near <paramref name="position"/>: <see cref="NearestWalkable"/>, and the ground
+        /// over it when that is a buried pocket (<see cref="GroundOverPocket"/>), from which it could walk nowhere.
+        /// A Retread City mech put back beside its owner after a relog stood idle on the pond's bed at
+        /// (-196, 213.28, -670), 3 m under the bank, for good.
+        /// </summary>
+        public static Vector3? NearestStandable(MapChannel mapChannel, Vector3 position, float maxRadius = 32f)
+        {
+            var here = NearestWalkable(mapChannel, position, maxRadius);
+
+            return here == null ? null : GroundOverPocket(mapChannel, here.Value, position) ?? here;
+        }
+
         /// <summary>How far from the nearest walkable point a player can be and still be standing on it, for /stuck.</summary>
         public const float UnstickOnMesh = 1.5f;
 
@@ -391,15 +446,8 @@ namespace Rasa.Managers
             if (navMesh == null || here == null)
                 return here;
 
-            if (navMesh.IsUnderground(here.Value))
-            {
-                var ground = SafetyFloor.TopOfColumn(mapChannel, position);
-
-                if (ground != null && ground.Value.Y > here.Value.Y && !navMesh.IsUnderground(ground.Value) &&
-                    navMesh.Reachable(here.Value, ground.Value) != true &&
-                    navMesh.RegionArea(here.Value) is float area && area < UnstickPocketArea)
-                    return ground;
-            }
+            if (GroundOverPocket(mapChannel, here.Value, position, firstUp: false) is { } ground)
+                return ground;
 
             if (Vector3.Distance(position, here.Value) > UnstickOnMesh)
                 return here;

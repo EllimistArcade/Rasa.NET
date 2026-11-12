@@ -156,9 +156,16 @@ namespace Rasa.NavMesh
                 Console.WriteLine();
                 Console.WriteLine($"{name}");
 
+                var mapSettings = settings;
+                if (profile == null && MapNavFixes.For(name) is { } fixes)
+                {
+                    mapSettings = fixes.Apply(settings);
+                    Console.WriteLine($"  map fixes: {(fixes.Fine ? "fine grid, " : "")}{fixes.TerrainCuts.Length} terrain cut(s), {fixes.OffMeshLinks.Length} off-mesh link(s)");
+                }
+
                 try
                 {
-                    var geometry = MapGeometry.Load(mapDirectory, meshes, settings.TerrainStep, settings.TerrainMaxSlope);
+                    var geometry = MapGeometry.Load(mapDirectory, meshes, mapSettings.TerrainStep, mapSettings.TerrainMaxSlope);
                     Console.WriteLine($"  terrain {geometry.TerrainTriangles:n0} tris; {geometry.EntitiesWithCollision:n0} entities with collision ({geometry.EntityTriangles:n0} tris), "
                                       + $"{geometry.EntitiesWithoutCollision:n0} without, {geometry.EntitiesWithoutMesh:n0} with no mesh; "
                                       + $"bounds ({geometry.BoundsMin.X:0}, {geometry.BoundsMin.Y:0}, {geometry.BoundsMin.Z:0}) - ({geometry.BoundsMax.X:0}, {geometry.BoundsMax.Y:0}, {geometry.BoundsMax.Z:0})");
@@ -174,7 +181,7 @@ namespace Rasa.NavMesh
 
                     if (writeCover)
                     {
-                        var cover = CoverBuilder.Build(geometry, settings);
+                        var cover = CoverBuilder.Build(geometry, mapSettings);
                         var coverPath = CoverMesh.PathFor(output, name);
                         cover.Write(coverPath);
                         Console.WriteLine($"  wrote {coverPath} ({cover.TriangleCount:n0} tris, terrain {(cover.HasTerrain ? "yes" : "no")}, {new FileInfo(coverPath).Length / 1024:n0} KB)");
@@ -182,7 +189,11 @@ namespace Rasa.NavMesh
 
                     if (writeNav)
                     {
-                        var navMesh = NavMeshBuilder.Build(geometry, settings, Console.WriteLine);
+                        // After the cover: what is left out is left out of the walking only, and still blocks a shot.
+                        var cut = geometry.CutTerrain(mapSettings.TerrainCuts);
+                        if (cut > 0)
+                            Console.WriteLine($"  {cut:n0} terrain tris cut");
+                        var navMesh = NavMeshBuilder.Build(geometry, mapSettings, Console.WriteLine);
                         if (profile == BuildSettings.VelonHollowProfileName)
                             navMesh = VelonHollowNavMesh.MergeSeams(NavMeshFile.Read(baseNav), navMesh);
                         var path = NavMeshFile.PathFor(output, name);

@@ -98,6 +98,7 @@ namespace Rasa.NavMesh
             var added = 0;
             var polys = 0;
             var underground = 0;
+            var links = s.OffMeshLinks ?? new List<(System.Numerics.Vector3 From, System.Numerics.Vector3 To)>();
 
             foreach (var result in results)
             {
@@ -138,13 +139,14 @@ namespace Rasa.NavMesh
                     buildBvTree = true,
                     tileX = result.TileX,
                     tileZ = result.TileZ,
-                    offMeshConCount = 0,
-                    offMeshConVerts = Array.Empty<float>(),
-                    offMeshConRad = Array.Empty<float>(),
-                    offMeshConDir = Array.Empty<int>(),
-                    offMeshConAreas = Array.Empty<int>(),
-                    offMeshConFlags = Array.Empty<int>(),
-                    offMeshConUserID = Array.Empty<int>()
+                    // Every tile gets every link; Detour keeps in a tile those that start in it.
+                    offMeshConCount = links.Count,
+                    offMeshConVerts = links.SelectMany(link => new[] { link.From.X, link.From.Y, link.From.Z, link.To.X, link.To.Y, link.To.Z }).ToArray(),
+                    offMeshConRad = links.Select(_ => s.OffMeshLinkRadius).ToArray(),
+                    offMeshConDir = links.Select(_ => DtDetour.DT_OFFMESH_CON_BIDIR).ToArray(),
+                    offMeshConAreas = links.Select(_ => AreaGround).ToArray(),
+                    offMeshConFlags = links.Select(_ => NavMeshFlags.Walk).ToArray(),
+                    offMeshConUserID = links.Select((_, index) => index + 1).ToArray()
                 };
 
                 var dmesh = result.MeshDetail;

@@ -238,6 +238,10 @@ namespace Rasa.Managers
             if (nearest == null || AcrossGround(nearest.Value, probe) > OnMesh || Math.Abs(nearest.Value.Y - probe.Y) > 4f)
                 return null;
 
+            // Not on a pocket of mesh buried under the terrain, a pond's bed under its bank: nothing walks out of it.
+            if (NavMeshManager.GroundOverPocket(map, nearest.Value) != null)
+                return null;
+
             return nearest;
         }
 

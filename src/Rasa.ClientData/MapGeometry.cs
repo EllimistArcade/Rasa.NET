@@ -31,6 +31,46 @@ namespace Rasa.ClientData
         public TerrainHeightmap Terrain { get; private set; }
 
         /// <summary>
+        /// Leaves out the terrain triangles whose centre is inside one of the boxes, for a heightmap that runs
+        /// over a tunnel's floor (Rasa.NavMesh's MapNavFixes). Returns how many went.
+        /// </summary>
+        public int CutTerrain(IEnumerable<(Vector3 Min, Vector3 Max)> boxes)
+        {
+            var cuts = boxes?.ToArray() ?? Array.Empty<(Vector3, Vector3)>();
+
+            if (cuts.Length == 0 || TerrainTriangles == 0)
+                return 0;
+
+            var kept = new List<int>(Triangles.Count);
+            var cut = 0;
+
+            for (var t = 0; t < TerrainTriangles * 3; t += 3)
+            {
+                var centre = (Vertex(Triangles[t]) + Vertex(Triangles[t + 1]) + Vertex(Triangles[t + 2])) / 3f;
+
+                if (cuts.Any(box => centre.X >= box.Item1.X && centre.X <= box.Item2.X && centre.Y >= box.Item1.Y &&
+                                    centre.Y <= box.Item2.Y && centre.Z >= box.Item1.Z && centre.Z <= box.Item2.Z))
+                {
+                    cut++;
+                    continue;
+                }
+
+                kept.Add(Triangles[t]);
+                kept.Add(Triangles[t + 1]);
+                kept.Add(Triangles[t + 2]);
+            }
+
+            kept.AddRange(Triangles.Skip(TerrainTriangles * 3));
+            Triangles.Clear();
+            Triangles.AddRange(kept);
+            TerrainTriangles -= cut;
+
+            return cut;
+        }
+
+        private Vector3 Vertex(int index) => new Vector3(Vertices[index * 3], Vertices[index * 3 + 1], Vertices[index * 3 + 2]);
+
+        /// <summary>
         /// Loads a map's geometry from the client folder.
         /// </summary>
         /// <param name="mapDirectory">data/maps/&lt;name&gt;</param>

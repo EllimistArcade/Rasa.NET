@@ -260,7 +260,7 @@ namespace Rasa.Game.Missions
             {
                 var actor = resident.Bindings.Actors[follow.Role];
                 var offset = actor.FollowOffset ?? new ScenePosition(0, 0, 0);
-                var position = NavMeshManager.NearestWalkable(map, client.Player.Position +
+                var position = NavMeshManager.NearestStandable(map, client.Player.Position +
                     new System.Numerics.Vector3(offset.X, offset.Y, offset.Z))
                     ?? throw new GameplayRejectionException("The bootcamp medical tent has no grounded escort position.");
                 var ensure = desired.OfType<EnsureActorIntent>().Single(intent => intent.Role == follow.Role);
@@ -1589,7 +1589,7 @@ namespace Rasa.Game.Missions
                         var offset = resident.Bindings.Actors[ensure.Role].FollowOffset ?? new ScenePosition(0, 0, 0);
                         var position = new System.Numerics.Vector3((float)savedCharacter.CoordX + offset.X,
                             (float)savedCharacter.CoordY + offset.Y, (float)savedCharacter.CoordZ + offset.Z);
-                        position = NavMeshManager.NearestWalkable(resident.Map, position)
+                        position = NavMeshManager.NearestStandable(resident.Map, position)
                             ?? throw new GameplayRejectionException($"Scene {runId} has no grounded follower checkpoint.");
                         intent = ensure with { RestorePosition = new ScenePosition(position.X, position.Y, position.Z) };
                     }

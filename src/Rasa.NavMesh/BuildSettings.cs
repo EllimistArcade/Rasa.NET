@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Numerics;
+
 namespace Rasa.NavMesh
 {
     /// <summary>
@@ -39,6 +42,15 @@ namespace Rasa.NavMesh
 
         public int Threads = System.Environment.ProcessorCount;
 
+        /// <summary>Boxes whose terrain triangles (by centre) are left out of the navmesh, not the cover mesh (MapNavFixes).</summary>
+        public List<(Vector3 Min, Vector3 Max)> TerrainCuts = new();
+
+        /// <summary>Two-way off-mesh links, each between two points on the mesh (MapNavFixes).</summary>
+        public List<(Vector3 From, Vector3 To)> OffMeshLinks = new();
+
+        /// <summary>How far round each end of an off-mesh link Detour looks for the polygon it joins.</summary>
+        public float OffMeshLinkRadius = 0.6f;
+
         /// <summary>Fine rasterization and height detail for seven Velon Hollow escort tiles, with the original physical agent.</summary>
         public static BuildSettings VelonHollowSeams(int threads) => new()
         {
@@ -50,6 +62,17 @@ namespace Rasa.NavMesh
             VertsPerPoly = 6, DetailSampleDistance = 6f, DetailSampleMaxError = .5f,
             TerrainStep = 2, TerrainMaxSlope = 60f, Threads = threads
         };
+
+        /// <summary>
+        /// The fine grid of the Velon Hollow seams over a whole map: 0.2 m cells, short edges, half the height error.
+        /// For caves whose passages the 0.4 m grid breaks into parts no path joins (MapNavFixes).
+        /// </summary>
+        public static BuildSettings Fine(int threads)
+        {
+            var fine = VelonHollowSeams(threads);
+            fine.TerrainMaxSlope = 60f;
+            return fine;
+        }
 
         /// <summary>Finer Wilderness grid with the baseline physical agent, tile, border and simplification thresholds.</summary>
         public static BuildSettings WildernessHorizontal(int threads) => new()

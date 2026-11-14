@@ -173,6 +173,12 @@ namespace Rasa.Services.Preloader
         public static readonly Vector3 Tele3At = new(-38.0f, 93.2f, 245.2f);
         public static readonly Vector3 Tele4At = new(-37.42f, 93.22f, 218.77f);
         public static readonly Vector3 GeneratorAt = new(-118.0f, 135.72f, 160.0f);
+
+        /// <summary>
+        /// Its turn: the hall's long axis down the slope, so that its downhill end stands up to
+        /// 2.9 m clear of the ground and its uphill side is buried (StuckSpots).
+        /// </summary>
+        public const double GeneratorYaw = 2.8;
         public static readonly Vector3 GenBombAt = new(-113.0f, 137.72f, 156.0f);
         public static readonly Vector3 DoorAt = new(80.0f, 105.81f, 219.5f);
         public static readonly Vector3 DoorBombAt = new(72.0f, 105.68f, 224.0f);
@@ -423,7 +429,7 @@ namespace Rasa.Services.Preloader
             rows.Add(new(FirstPad + 2, MachineryClass, PadCAt, 3.14, "Devil's Den Thrax Machinery Landing Pad", 1500));
             rows.Add(new(FuelDepot, FuelDepotClass, FuelAt, 1.57, "Devil's Den Bane Machinery Fuel Depot (a bomb's to destroy)", 1500));
             rows.Add(new(LaserDoor, LaserDoorClass, DoorAt, 0.0, "Devil's Den detention center laser door", 3000));
-            rows.Add(new(GeneratorRow, GeneratorClass, GeneratorAt, 2.8, "Devil's Den generator up the path (a bomb's to destroy)", 1500));
+            rows.Add(new(GeneratorRow, GeneratorClass, GeneratorAt, GeneratorYaw, "Devil's Den generator up the path (a bomb's to destroy)", 1500));
 
             var teleporters = new[] { Tele1At, Tele2At, Tele3At, Tele4At };
 

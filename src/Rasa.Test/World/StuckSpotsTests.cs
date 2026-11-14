@@ -1,10 +1,13 @@
 using System;
 using System.Linq;
 using System.Numerics;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Rasa.Data;
 using Rasa.Managers;
+using Rasa.Structures.World;
 using Rasa.Test.Missions.Wilderness;
+using D = Rasa.Services.Preloader.DevilsDenContent;
 
 namespace Rasa.Test.World
 {
@@ -33,7 +36,12 @@ namespace Rasa.Test.World
         {
             StuckSpots.Reset();
             StuckSpots.Now = () => Environment.TickCount64;
+            PlacedDestructibles.Load(null);
+            PlacedDestructibles.Reset();
         }
+
+        /// <summary>Inside the Devil's Den generator, where the report put the player.</summary>
+        private static readonly Vector3 InTheGenerator = new Vector3(-123f, 134.2f, 165.5f);
 
         [TestMethod]
         public void EveryWayOutIsOpenFloorJoinedToItsCorner()
@@ -95,6 +103,66 @@ namespace Rasa.Test.World
             Work(harness, 0);
             Work(harness, StuckSpots.HoldMs * 3);
             Assert.AreEqual(Corner, player.Position);
+        }
+
+        [TestMethod]
+        public void TheDensGeneratorHoldsThoseUnderItsRoofAndNotThoseOnItOrBesideIt()
+        {
+            using var harness = Den();
+            var map = harness.Map;
+            Assert.IsNull(StuckSpots.At(map, InTheGenerator), "not until the generator is put down");
+
+            PlaceGenerator(harness);
+
+            var hall = StuckSpots.At(map, InTheGenerator);
+            Assert.IsNotNull(hall, "the reported spot is under the hall's roof");
+            StringAssert.Contains(hall.Name, "generator");
+
+            Vector3 At(float x, float y, float z) => StuckSpots.InFrame(D.GeneratorAt, (float)D.GeneratorYaw, new Vector3(x, y, z));
+
+            Assert.IsNotNull(StuckSpots.At(map, At(0f, 0f, 0f)), "the middle of the hall");
+            Assert.IsNotNull(StuckSpots.At(map, At(-6f, 2.8f, 0f)), "on the slope inside, under the roof");
+            Assert.IsNotNull(StuckSpots.At(map, At(0f, -1.5f, -11f)), "in the downhill tank");
+            Assert.IsNull(StuckSpots.At(map, At(-6.5f, 4.2f, 0f)), "on the roof where the uphill ground runs onto it");
+            Assert.IsNull(StuckSpots.At(map, At(0f, 7.8f, 0f)), "on its crest");
+            Assert.IsNull(StuckSpots.At(map, At(9.2f, 0.5f, 0f)), "beside it");
+            Assert.IsNull(StuckSpots.At(map, At(4f, -1f, -11f)), "beside the tank, in the open");
+            Assert.IsNull(StuckSpots.At(map, hall.Out), "the way out");
+
+            // The way out: open floor, joined to the floor the report was on.
+            var nav = map.NavMesh;
+            var way = nav.Nearest(hall.Out);
+            Assert.IsNotNull(way);
+            Assert.IsTrue(Vector3.Distance(new Vector3(way.Value.X, 0f, way.Value.Z), new Vector3(hall.Out.X, 0f, hall.Out.Z)) < 0.5f, $"{hall.Out} on the mesh ({way})");
+            Assert.AreEqual(true, nav.Reachable(nav.Nearest(InTheGenerator).Value, way.Value));
+            Assert.IsTrue(nav.DistanceToWall(way.Value, 2f) >= 1f, "clear of the mesh's edges");
+        }
+
+        [TestMethod]
+        public void OneWhoStaysInTheGeneratorIsTakenOutBesideIt()
+        {
+            using var harness = Den();
+            PlaceGenerator(harness);
+            var player = harness.Client.Player;
+            player.State = CharacterState.Idle;
+
+            Move(harness, InTheGenerator);
+            Work(harness, 0);
+            Work(harness, StuckSpots.HoldMs);
+
+            var spot = StuckSpots.At(D.Den, InTheGenerator);
+            Assert.IsTrue(Vector3.Distance(player.Position, spot.Out) < 1.5f, $"taken out to {player.Position}");
+            Assert.IsNull(StuckSpots.At(harness.Map, player.Position));
+        }
+
+        private static WildernessRuntimeTestHarness Den() => WildernessRuntimeTestHarness.Create(mapContextId: D.Den);
+
+        private static void PlaceGenerator(WildernessRuntimeTestHarness harness)
+        {
+            PlacedDestructibles.Load(harness.World.Set<WorldDestructibleEntry>().AsNoTracking()
+                .Where(row => row.MapContextId == D.Den && row.Id == D.GeneratorRow).ToList());
+            Assert.AreEqual(1, PlacedDestructibles.Place(harness.Map));
+            Assert.IsNotNull(PlacedDestructibles.LiveOf(harness.Map, D.GeneratorRow));
         }
 
         private static void Move(WildernessRuntimeTestHarness harness, Vector3 to)

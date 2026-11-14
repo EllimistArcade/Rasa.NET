@@ -902,6 +902,66 @@ namespace Rasa.Test.World
             }
         }
 
+        [TestMethod]
+        [DataRow(false)]
+        [DataRow(true)]
+        public void WalkingOffEitherKeepsTheItemOrLeavesTheWaypointPutDown(bool landedFirst)
+        {
+            using var harness = BootcampRuntimeTestHarness.Create();
+            var instance = harness.BootcampMap.IsPrivateInstance;
+            harness.BootcampMap.IsPrivateInstance = false;
+
+            var entry = harness.WorldContext.Set<EntityClassEntry>().AsNoTracking().Single(row => row.Id == (uint)PersonalWaypoints.WaypointClass);
+            EntityClassManager.Instance.LoadedEntityClasses[PersonalWaypoints.WaypointClass] = new EntityClass(entry.Id, entry.ClassName, entry.MeshId,
+                entry.ClassCollisionRole, entry.AugList.Split(',').Select(value => (AugmentationType)uint.Parse(value)).ToList(), entry.TargetFlag != 0);
+
+            try
+            {
+                var item = ToyTests.Grant(harness, 118782);
+                var manager = ToyTests.CreateManager(harness, 487, 2, 118782);
+                var interrupt = new RequestActionInterruptPacket { ActionId = ActionId.ConsumablePortableWaypoint, ActionArgId = 2 };
+                harness.Drain();
+
+                // Walking in the eight seconds' windup reaches the server before it lands; walking
+                // as its use animation starts, after.
+                manager.RequestPerformAbility(harness.Client, ToyTests.Request(487, 2, item.EntityId));
+                var pending = harness.BootcampMap.PerformRecovery.Single(action => action.ActionId == ActionId.ConsumablePortableWaypoint);
+
+                if (!landedFirst)
+                    ActorManager.Instance.RequestActionInterrupt(harness.Client, interrupt);
+
+                ToyTests.Land(harness, manager, pending);
+                var landed = harness.Drain();
+
+                if (landedFirst)
+                {
+                    ActorManager.Instance.RequestActionInterrupt(harness.Client, interrupt);
+                    Assert.IsEmpty(harness.Drain().ToList(), "nothing left to show: it was all sent as it landed");
+                }
+
+                using var unit = harness.Context.CreateChar();
+
+                if (landedFirst)
+                {
+                    Assert.IsNull(unit.Items.GetItem(item.Id), "used");
+                    Assert.HasCount(1, Placed(harness.BootcampMap), "and put down");
+                }
+                else
+                {
+                    Assert.IsNotNull(unit.Items.GetItem(item.Id), "kept");
+                    Assert.IsEmpty(Placed(harness.BootcampMap), "nothing put down");
+                    Assert.IsTrue(landed.OfType<ActionInterruptPacket>().Any(), "Interrupted");
+                }
+            }
+            finally
+            {
+                PersonalWaypoints.Worker(harness.BootcampMap, long.MaxValue - PersonalWaypoints.DeathMs);
+                PersonalWaypoints.Worker(harness.BootcampMap, long.MaxValue);
+                EntityClassManager.Instance.LoadedEntityClasses.Remove(PersonalWaypoints.WaypointClass);
+                harness.BootcampMap.IsPrivateInstance = instance;
+            }
+        }
+
         #endregion
 
         #region The packets

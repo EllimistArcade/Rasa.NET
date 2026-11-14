@@ -125,6 +125,56 @@ namespace Rasa.Test.Missions
             Assert.IsNotNull(unit.Items.GetItem(item.Id), "nothing to give back by the time it landed");
         }
 
+        [TestMethod]
+        [DataRow(false)]
+        [DataRow(true)]
+        public void WalkingOffEitherKeepsTheTokenAndThePointsOrUsesItAndGivesThemBack(bool landedFirst)
+        {
+            using var harness = BootcampRuntimeTestHarness.Create();
+            var player = harness.Client.Player;
+            player.Level = 10;
+            Spend(harness, 10, 9, 8);
+            var item = ToyTests.Grant(harness, RespecAttributesTemplate);
+            var manager = ToyTests.CreateManager(harness, 502, 1, RespecAttributesTemplate);
+            var interrupt = new Rasa.Packets.MapChannel.Client.RequestActionInterruptPacket { ActionId = ActionId.ConsumableResetAttribs, ActionArgId = 1 };
+            harness.Drain();
+
+            // The token has no windup: its use animation is its recovery, which starts as it is
+            // asked for. The interrupt the player's walking sends either reaches the server
+            // before it lands, or after.
+            manager.RequestPerformAbility(harness.Client, ToyTests.Request(502, 1, item.EntityId));
+            var pending = harness.BootcampMap.PerformRecovery.Single(queued => queued.ActionId == ActionId.ConsumableResetAttribs);
+            Assert.AreEqual(0, pending.WaitTime, "no windup");
+
+            if (!landedFirst)
+                ActorManager.Instance.RequestActionInterrupt(harness.Client, interrupt);
+
+            ToyTests.Land(harness, manager, pending);
+            var landed = harness.Drain();
+
+            if (landedFirst)
+            {
+                ActorManager.Instance.RequestActionInterrupt(harness.Client, interrupt);
+                Assert.IsEmpty(harness.Drain().ToList(), "nothing left to show: it was all sent as it landed");
+            }
+
+            using var unit = harness.Context.CreateChar();
+
+            if (landedFirst)
+            {
+                Assert.IsNull(unit.Items.GetItem(item.Id), "used");
+                Assert.AreEqual(0, player.SpentBody + player.SpentMind + player.SpentSpirit, "and given back");
+                Assert.IsTrue(landed.OfType<AttributeInfoPacket>().Any(), "shown as it landed");
+            }
+            else
+            {
+                Assert.IsNotNull(unit.Items.GetItem(item.Id), "kept");
+                Assert.AreEqual(27, player.SpentBody + player.SpentMind + player.SpentSpirit, "nothing given back");
+                Assert.IsTrue(landed.OfType<ActionInterruptPacket>().Any(), "Interrupted");
+                Assert.IsFalse(landed.OfType<AttributeInfoPacket>().Any());
+            }
+        }
+
         #region Fixture
 
         private static void Use(BootcampRuntimeTestHarness.Harness harness, AbilityManager manager, uint actionId, Item item)

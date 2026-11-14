@@ -979,6 +979,10 @@ namespace Rasa.Managers
             }
             action.Completed = true;
 
+            // What it puts on quietly, for the recovery to announce, kept should the player's
+            // client cancel the action before it plays it (QuietLandings).
+            using var quiet = QuietLandings.Open(player, action.ActionId, action.ActionArgId);
+
             if (action.IsInrerrupted || player.State == CharacterState.Dead && actionInfo.Module != SelfResModule)
             {
                 // The others are still showing the windup. The performer's client cancelled its

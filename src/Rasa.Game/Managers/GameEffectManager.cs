@@ -232,6 +232,10 @@ namespace Rasa.Managers
             else
                 CellManager.Instance.CellCallMethod(mapChannel, actor, attached);
 
+            // Quiet, for a player's recovery to announce: kept for their client, should it
+            // cancel the action before it does (QuietLandings).
+            QuietLandings.Note(actor, effect);
+
             // A stun calls off the ability or tool a player is winding up, after the stun itself
             // has gone out.
             if (effect.IsStun && actor is Manifestation stunned)

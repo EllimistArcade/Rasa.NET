@@ -8,6 +8,7 @@ namespace Rasa.Test.World
     using Rasa.Managers;
     using Rasa.Missions;
     using Rasa.Packets.Manifestation.Server;
+    using Rasa.Packets.MapChannel.Client;
     using Rasa.Packets.MapChannel.Server;
     using Rasa.Structures;
     using Rasa.Test.Missions;
@@ -216,6 +217,80 @@ namespace Rasa.Test.World
                 Assert.AreEqual(0L, entry.XpBoostRemainingMs);
             }
         }
+
+        [TestMethod]
+        public void WalkingOffAfterItLandedShowsTheBoostRatherThanLosingIt()
+        {
+            using var harness = BootcampRuntimeTestHarness.Create();
+            var client = harness.Client;
+            var player = client.Player;
+
+            // The client plays the recovery, and the player starts walking before it has
+            // announced the boost: it cancels the action and asks for it to be interrupted.
+            var (item, _) = Use(harness, 1, Booster);
+            var boost = player.ActiveEffects.Values.Single(e => e.TypeId == ExperienceBoost.TypeId);
+
+            ActorManager.Instance.RequestActionInterrupt(client, Interrupt(1));
+
+            // Too late to call off: used, and on - and shown, taken off the client's quiet copy
+            // first, since it will not announce an effect id it holds.
+            Assert.IsFalse(player.Inventory.PersonalInventory.Contains(item.EntityId), "used");
+            Assert.IsTrue(player.ActiveEffects.ContainsKey(boost.EffectId), "on");
+            var sent = harness.Drain();
+            var detach = sent.OfType<GameEffectDetachedPacket>().Single();
+            var attach = sent.OfType<GameEffectAttachedPacket>().Single();
+            Assert.AreEqual(boost.EffectId, detach.EffectId);
+            Assert.AreEqual(boost.EffectId, attach.EffectId);
+            Assert.AreEqual(ExperienceBoost.TypeId, attach.EffectTypeId);
+            Assert.IsTrue(attach.Announced, "announced");
+            Assert.IsLessThan(sent.ToList().IndexOf(attach), sent.ToList().IndexOf(detach), "the detach first");
+            Assert.IsFalse(sent.OfType<ActionInterruptPacket>().Any(), "not interrupted: it landed");
+
+            // Once.
+            ActorManager.Instance.RequestActionInterrupt(client, Interrupt(1));
+            Assert.IsEmpty(harness.Drain().ToList());
+        }
+
+        [TestMethod]
+        public void WalkingOffWhileItWindsUpCallsItOffAndKeepsTheBooster()
+        {
+            using var harness = BootcampRuntimeTestHarness.Create();
+            var client = harness.Client;
+            var item = ToyTests.Grant(harness, Booster);
+            var manager = ToyTests.CreateManager(harness, BoosterAction, 1, Booster);
+
+            manager.RequestPerformAbility(client, ToyTests.Request((int)BoosterAction, 1, item.EntityId));
+            var pending = harness.BootcampMap.PerformRecovery.Single(candidate => candidate.ActionId == ActionId.ConsumableAddEffect);
+            ActorManager.Instance.RequestActionInterrupt(client, Interrupt(1));
+            ToyTests.Land(harness, manager, pending);
+
+            Assert.IsTrue(client.Player.Inventory.PersonalInventory.Contains(item.EntityId), "kept");
+            Assert.IsFalse(client.Player.ActiveEffects.Values.Any(e => e.TypeId == ExperienceBoost.TypeId));
+            Assert.IsNull(client.Player.QuietlyLanded);
+            var sent = harness.Drain();
+            Assert.IsTrue(sent.OfType<ActionInterruptPacket>().Any(), "Interrupted");
+            Assert.IsFalse(sent.OfType<GameEffectAttachedPacket>().Any());
+        }
+
+        [TestMethod]
+        public void AnInterruptForAnotherActionOrLongAfterShowsNothing()
+        {
+            using var harness = BootcampRuntimeTestHarness.Create();
+            var client = harness.Client;
+
+            Use(harness, 1, Booster);
+
+            ActorManager.Instance.RequestActionInterrupt(client, Interrupt(3));
+            ActorManager.Instance.RequestActionInterrupt(client, new RequestActionInterruptPacket { ActionId = ActionId.WeaponAttack, ActionArgId = 1 });
+            Assert.IsFalse(harness.Drain().OfType<GameEffectAttachedPacket>().Any(), "not that action");
+
+            client.Player.QuietlyLanded.LandedTick -= QuietLandings.WindowMs + 1;
+            ActorManager.Instance.RequestActionInterrupt(client, Interrupt(1));
+            Assert.IsFalse(harness.Drain().OfType<GameEffectAttachedPacket>().Any(), "its recovery long played");
+        }
+
+        private static RequestActionInterruptPacket Interrupt(uint level) =>
+            new RequestActionInterruptPacket { ActionId = ActionId.ConsumableAddEffect, ActionArgId = level };
 
         /// <summary>Uses the item and lands the action; what was sent, which must not be a refusal.</summary>
         private static (Item Item, System.Collections.Generic.List<object> Packets) Use(BootcampRuntimeTestHarness.Harness harness, uint level, uint template)

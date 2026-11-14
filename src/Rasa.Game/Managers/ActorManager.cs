@@ -130,6 +130,12 @@ namespace Rasa.Managers
         }
         #region Handlers
 
+        /// <summary>
+        /// The player's client cancelled the action - they moved, mostly - and asks for it to be
+        /// called off. One still winding up is, when it comes to land. One that has landed already
+        /// cannot be: what it put on quietly for its recovery to announce, which the client threw
+        /// away with the action, is shown to them announced (QuietLandings).
+        /// </summary>
         public void RequestActionInterrupt(Client client, RequestActionInterruptPacket packet)
         {
             foreach (var action in client.Player.MapChannel.PerformRecovery)
@@ -138,8 +144,10 @@ namespace Rasa.Managers
                         if (action.ActionArgId == packet.ActionArgId)
                         {
                             action.IsInrerrupted = true;
-                            break;
+                            return;
                         }
+
+            QuietLandings.Reannounce(client, packet.ActionId, packet.ActionArgId);
         }
 
         /// <summary>

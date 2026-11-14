@@ -312,6 +312,12 @@ namespace Rasa.Structures
         public SavedVitals LeftWith { get; set; }
 
         /// <summary>
+        /// The last ability of theirs to land, with what it put on quietly for its recovery to
+        /// announce; null when it put on nothing so (Managers.QuietLandings).
+        /// </summary>
+        public QuietLandings QuietlyLanded { get; set; }
+
+        /// <summary>
         /// Environment.TickCount64 until which a player whose connection dropped in a fight stays
         /// in the world - still there to be fought - before the map worker takes them out; 0 for
         /// none (Managers.CombatLogout).

@@ -40,6 +40,16 @@ namespace Rasa.Test.Missions.Plateau
     [DoNotParallelize]
     public class PlateauMaligoBaseTests
     {
+        /// <summary>Maligo Base's collision geometry (the map's cover mesh).</summary>
+        private static readonly System.Lazy<Rasa.Navigation.CoverMesh> MaligoCover = new(() =>
+        {
+            var directory = new System.IO.DirectoryInfo(System.AppContext.BaseDirectory);
+            while (directory != null && !System.IO.File.Exists(System.IO.Path.Combine(directory.FullName, "Rasa.NET.sln")))
+                directory = directory.Parent;
+            return Rasa.Navigation.CoverMesh.Read(Rasa.Navigation.CoverMesh.PathFor(System.IO.Path.Combine(directory!.FullName, "navmesh"),
+                "adv_foreas_valverde_plateau_maligobasev3"));
+        });
+
         private const uint Maligo = PlateauMaligoBaseV1.MapContextId;
         private const uint Ustor = PlateauUstorYardV1.MapContextId;
         private const uint Showdown = PlateauShowdownV1.MissionId;
@@ -282,6 +292,10 @@ namespace Rasa.Test.Missions.Plateau
                 Assert.AreEqual(PlateauSelfPreservationV1.SwitchOff, (uint)switches[index].StateId);
                 AssertStandsOnNavMesh(copy, switches[index].Position, 0.5f);
                 AssertConnected(copy, arrival, switches[index].Position, $"switch {index + 1}");
+                // In sight of the floor it is used from, not behind a wall.
+                var floor = copy.NavMesh.Nearest(switches[index].Position).Value;
+                Assert.IsFalse(MaligoCover.Value.GeometryBlocks(floor + new Vector3(0, 1.5f, 0), switches[index].Position + new Vector3(0, 1.5f, 0)),
+                    $"switch {index + 1} in sight of the floor at {floor}");
                 // The switch outside the field, its CPU inside: the step from one to the other meets the field.
                 Assert.IsTrue(ForceFields.StopsPlayer(copy, switches[index].Position + new Vector3(0, 1, 0), cpus[index].obj.Position + new Vector3(0, 1, 0)),
                     $"field {index + 1} between its switch and its CPU");

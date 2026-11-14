@@ -71,13 +71,17 @@ namespace Rasa.Services.Preloader.Missions.Plateau
 
         /// <summary>
         /// The switches, one per CPU (the same index): hidden objective, use sequence, colour and place, outside its room's
-        /// field (ESTIMATE places, on the navmesh).
+        /// field (ESTIMATE places, on the navmesh). Each stands against the corridor's side of a wall, facing out from it:
+        /// 0.36 m off the wall's face at 1.5 m up, as the green one is. The yellow and the red stood 1.3 m and 0.9 m behind
+        /// the outer wall of a service turn (ArchBaneIndustrialServiceTurn16mV01), out of sight and reach: the yellow is now
+        /// in front of the curved wall at (-22, -132, 328), turned to it, 0.32 m off its foot, which leans out; the red in
+        /// front of the one at (-46, -132, 296), turned to it (MaligoSwitchWalls).
         /// </summary>
         public static readonly (uint Objective, uint Sequence, string Colour, ScenePosition At, double Facing)[] Switches =
         {
             (2, 11, "green", new(45.3f, -130.88f, 306), -1.5708),
-            (3, 12, "yellow", new(-27, -130.88f, 331.3f), 3.1416),
-            (4, 13, "red", new(-49.3f, -130.88f, 292), 1.5708),
+            (3, 12, "yellow", new(-26.9f, -130.88f, 329.3f), 2.77),
+            (4, 13, "red", new(-48.2f, -130.88f, 293), 1.39),
         };
 
         public static string CpuRole(uint sequence) => $"security-cpu-{sequence}";

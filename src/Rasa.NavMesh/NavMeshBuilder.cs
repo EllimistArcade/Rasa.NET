@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using DotRecast.Core;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using DotRecast.Recast;
@@ -24,7 +25,8 @@ namespace Rasa.NavMesh
         public const int AreaUnderground = 1;
         public const int AreaWalkableInput = 0x3f;
 
-        public static DtNavMesh Build(MapGeometry geometry, BuildSettings s, Action<string> log)
+        /// <param name="onlyTiles">When given, only these tiles (x, z on the tile grid) are built.</param>
+        public static DtNavMesh Build(MapGeometry geometry, BuildSettings s, Action<string> log, IReadOnlyCollection<(int X, int Z)> onlyTiles = null)
         {
             var geom = new RcSampleInputGeomProvider(geometry.Vertices.ToArray(), geometry.Triangles.ToArray());
             var minimumBorder = RcConfig.CalcBorder(s.AgentRadius, s.CellSize);
@@ -68,7 +70,18 @@ namespace Rasa.NavMesh
 
             try
             {
-                results = new RcBuilder().BuildTiles(geom, cfg, false, true, Math.Max(1, s.Threads), Task.Factory);
+                if (onlyTiles == null)
+                    results = new RcBuilder().BuildTiles(geom, cfg, false, true, Math.Max(1, s.Threads), Task.Factory);
+                else
+                {
+                    var builder = new RcBuilder();
+                    var progress = new RcAtomicInteger(0);
+                    results = onlyTiles
+                        .Where(tile => tile.X >= 0 && tile.X < tilesX && tile.Z >= 0 && tile.Z < tilesZ)
+                        .AsParallel().WithDegreeOfParallelism(Math.Max(1, s.Threads))
+                        .Select(tile => builder.BuildTile(geom, cfg, bmin, bmax, tile.X, tile.Z, progress, onlyTiles.Count, false))
+                        .ToList();
+                }
             }
             finally
             {

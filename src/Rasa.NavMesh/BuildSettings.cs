@@ -10,8 +10,6 @@ namespace Rasa.NavMesh
     /// </summary>
     public sealed class BuildSettings
     {
-        public const string VelonHollowProfileName = "velon-hollow-seams-v2";
-        public const string VelonHollowMapName = "adv_foreas_howlingmaw_deathburrow";
         public const string WildernessProfileName = "wilderness-horizontal-v1";
         public const string WildernessMapName = "adv_foreas_concordia_wilderness";
 
@@ -48,10 +46,13 @@ namespace Rasa.NavMesh
         /// <summary>Two-way off-mesh links, each between two points on the mesh (MapNavFixes).</summary>
         public List<(Vector3 From, Vector3 To)> OffMeshLinks = new();
 
+        /// <summary>Tiles (x, z on the 51.2 m tile grid) built again on the <see cref="Fine"/> grid and put in place of the ordinary ones (MapNavFixes).</summary>
+        public List<(int X, int Z)> FineTiles = new();
+
         /// <summary>How far round each end of an off-mesh link Detour looks for the polygon it joins.</summary>
         public float OffMeshLinkRadius = 0.6f;
 
-        /// <summary>Fine rasterization and height detail for seven Velon Hollow escort tiles, with the original physical agent.</summary>
+        /// <summary>Fine rasterization and height detail, with the original physical agent: <see cref="Fine"/>, first made for the Velon Hollow escort seams.</summary>
         public static BuildSettings VelonHollowSeams(int threads) => new()
         {
             CellSize = 0.2f, CellHeight = 0.2f,

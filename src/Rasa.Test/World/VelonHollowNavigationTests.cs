@@ -15,7 +15,7 @@ namespace Rasa.Test.World
         private const string Map = "adv_foreas_howlingmaw_deathburrow";
         private static readonly HashSet<(int X, int Z)> Rebuilt = new()
         {
-            (19, 10), (20, 10), (20, 12), (21, 11), (22, 11), (23, 9), (23, 10)
+            (19, 10), (20, 10), (20, 12), (21, 11), (22, 11), (23, 9), (23, 10), (27, 21)
         };
         private static string NavFile
         {
@@ -90,7 +90,7 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
-        public void OnlySevenTilePayloadsChangeAndTheOriginalPhysicalAgentIsRetained()
+        public void OnlyTheEightFineTilePayloadsChangeAndTheOriginalPhysicalAgentIsRetained()
         {
             using var file = new BinaryReader(File.OpenRead(NavFile));
             Assert.AreEqual(0x4d534554, file.ReadInt32());
@@ -107,13 +107,13 @@ namespace Rasa.Test.World
             Assert.AreEqual(file.BaseStream.Length, file.BaseStream.Position);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             foreach (var tile in tiles.Where(t => !Rebuilt.Contains((t.Key.X, t.Key.Z)))) hash.AppendData(tile.Value);
-            // Fingerprint of the 1,593 untouched tile payloads, as the child-bone collision rebuild
-            // (79f36cd6) left them.
-            Assert.AreEqual("9987EEB4666E81D9345548174DF6FEB4AC2224A7F7DA871B73B3919A03645B08", Convert.ToHexString(hash.GetHashAndReset()));
+            // Fingerprint of the 1,592 tile payloads the fine tiles leave as the ordinary build makes them
+            // (as the child-bone collision rebuild, 79f36cd6, left them; Rasa.NavMesh's MapNavFixes).
+            Assert.AreEqual("588B6490A39B81E39C2F5C886AA08C60F82E6A59A7727EE823210B3DCB1C32AC", Convert.ToHexString(hash.GetHashAndReset()));
             var mesh = Query().NavMesh;
             var selected = Enumerable.Range(0, mesh.GetMaxTiles()).Select(mesh.GetTile)
                 .Where(t => t?.data?.header != null && Rebuilt.Contains((t.data.header.x, t.data.header.y))).ToArray();
-            Assert.HasCount(7, selected);
+            Assert.HasCount(8, selected);
             foreach (var tile in selected)
             {
                 Assert.AreEqual(2f, tile.data.header.walkableHeight, .001f);

@@ -23,6 +23,19 @@ namespace Rasa.Test.World
         private const string TurpisRefinery = "adv_foreas_valverde_marshes_wetlandrefinery";
         private const string SupplyDepot = "adv_foreas_valverde_marshes_banesupplydepot";
         private const string RetreadCaves = "adv_foreas_valverde_pools_retread_caves";
+        private const string Marshes = "adv_foreas_valverde_marshes";
+        private const string VillageRuins = "adv_foreas_valverde_marshes_villageruins";
+
+        // Valverde Marshes (1454): the zone's side and the crate area's side of the 1.2 m passage on the tile edge
+        // z = 28.8; the crate area's side and the temple's upper floor's side of the passage between them.
+        private static readonly Vector3 ZoneSide = new(-349f, 217.55f, 29.6f);
+        private static readonly Vector3 CrateAreaSide = new(-343f, 217.03f, 28.2f);
+        private static readonly Vector3 CrateAreaInner = new(-252f, 228.08f, 119.8f);
+        private static readonly Vector3 TempleUpperFloor = new(-240f, 228.08f, 119.8f);
+
+        // Village Ruins (1743): the map link's arrival; the Healing Shaman's hospital in its hut.
+        private static readonly Vector3 RuinsArrival = new(-138f, 63.17f, -360f);
+        private static readonly Vector3 RuinsHospital = new(-117.8f, 60.17f, -273.4f);
 
         // Turpis Refinery (1429): the map link's arrival; either side of the tunnel mouth the heightmap closed;
         // Hard Core's three hard drives (PoolsHardCoreV1).
@@ -96,6 +109,36 @@ namespace Rasa.Test.World
                 AssertRoute(nav, camp, other);
                 AssertRoute(nav, other, camp);
             }
+        }
+
+        [TestMethod]
+        public void MarshesZoneReachesTheCrateAreaAndTheTemplesUpperFloor()
+        {
+            var nav = Query(Marshes);
+
+            foreach (var (from, to) in new[] { (ZoneSide, CrateAreaSide), (CrateAreaInner, TempleUpperFloor), (ZoneSide, TempleUpperFloor) })
+            {
+                AssertRoute(nav, from, to);
+                AssertRoute(nav, to, from);
+            }
+
+            Assert.IsGreaterThan(1000000f, nav.RegionArea(nav.NearestInColumn(TempleUpperFloor, 4f).Value).Value, "on the zone's own mesh");
+        }
+
+        [TestMethod]
+        public void VillageRuinsArrivalWalksToTheHospital()
+        {
+            var nav = Query(VillageRuins);
+
+            AssertRoute(nav, RuinsArrival, RuinsHospital);
+            AssertRoute(nav, RuinsHospital, RuinsArrival);
+
+            var route = nav.FindPath(nav.NearestInColumn(RuinsArrival, 4f).Value, nav.NearestInColumn(RuinsHospital, 4f).Value, out _);
+            var length = 0f;
+            var at = nav.NearestInColumn(RuinsArrival, 4f).Value;
+            foreach (var corner in route) { length += Vector3.Distance(at, corner); at = corner; }
+            Assert.IsTrue(length is > 100f and < 130f, $"{length:0} m: through the village, not round it");
+            Assert.IsGreaterThan(50000f, nav.RegionArea(nav.NearestInColumn(RuinsArrival, 4f).Value).Value, "not an 85 m² part of its own");
         }
 
         /// <summary>A creature sent across each link, by the server's own movement, arrives on the far side, and back.</summary>

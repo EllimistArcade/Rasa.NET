@@ -7,7 +7,8 @@ namespace Rasa.NavMesh
 {
     /// <summary>
     /// Corrections the builder makes to one map's navmesh, every time it builds that map without a
-    /// --profile: a finer grid, terrain left out over a tunnel mouth, off-mesh links. Each is where the
+    /// --profile: a finer grid over the whole map or over some of its tiles, terrain left out over a
+    /// tunnel mouth, off-mesh links. Each is where the
     /// ordinary build leaves parts of a map no path joins, which an escort, a guard or a creature
     /// sent after a player cannot cross. Checked against the rebuilt meshes by NavMeshJoinsTests.
     /// </summary>
@@ -18,8 +19,40 @@ namespace Rasa.NavMesh
         public (Vector3 Min, Vector3 Max)[] TerrainCuts { get; init; } = Array.Empty<(Vector3, Vector3)>();
         public (Vector3 From, Vector3 To)[] OffMeshLinks { get; init; } = Array.Empty<(Vector3, Vector3)>();
 
+        /// <summary>
+        /// Tiles (x, z on the 51.2 m grid) built on the fine grid in place of the ordinary ones; the rest of the map
+        /// is the ordinary build, tile for tile. For seams the 0.4 m cells leave between floors that are one.
+        /// </summary>
+        public (int X, int Z)[] FineTiles { get; init; } = Array.Empty<(int, int)>();
+
         public static readonly MapNavFixes[] All =
         {
+            // Velon Hollow (2136). Escort seams the 0.4 m cells leave open: across x = 102.4 and x = 0 and on the
+            // hospital's ramp (the first seven, which the velon-hollow-seams-v2 profile rebuilt over the shipped
+            // file), and seam G5 at (361.8, 34.6, 52.6) on the edge z = 51.2, which cut the hospital off from the
+            // control room: Holy Vengeance's followers (1977) stopped 100 m short at (360.8, 34.7, 51.2).
+            new MapNavFixes
+            {
+                Map = "adv_foreas_howlingmaw_deathburrow",
+                FineTiles = new[] { (23, 9), (23, 10), (21, 11), (22, 11), (19, 10), (20, 10), (20, 12), (27, 21) }
+            },
+            // Valverde Marshes (1454). Two narrow passages with the client's floor and full headroom the 0.4 m
+            // cells close: from the zone into the crate area at (-346, 217.5, 28.6), 1.2 m wide, on the edge
+            // z = 28.8; and from the crate area to the temple's upper floor at (-246, 228.1, 119.8).
+            new MapNavFixes
+            {
+                Map = "adv_foreas_valverde_marshes",
+                FineTiles = new[] { (16, 23), (18, 25) }
+            },
+            // Village Ruins (1743). The map link's arrival (-138.5, 63, -360) was on an 85 m² part, split at the
+            // tile edge x = -128 though the floor runs on at 62.9 with no step; the Healing Shaman's hospital
+            // (-117.8, 60.16, -273.4) on a 30 m² part in its hut. A player arrived and revived where no NPC could
+            // path; arrival to hospital is now 113 m.
+            new MapNavFixes
+            {
+                Map = "adv_foreas_valverde_marshes_villageruins",
+                FineTiles = new[] { (5, 0), (5, 2) }
+            },
             // Turpis Refinery (1429). The heightmap runs over the mouth of the cavern entrance
             // (terra_foreas_cavern_entrance_24m_v04 at (-256, 130, -198)): faces of 53-59 degrees, 0.3-1.4 m
             // over the tunnel floor at 124.8, which the 60 degree rule (TerrainMaxSlope) keeps. They cut the
@@ -67,6 +100,7 @@ namespace Rasa.NavMesh
             var applied = Fine ? BuildSettings.Fine(settings.Threads) : settings;
             applied.TerrainCuts = TerrainCuts.ToList();
             applied.OffMeshLinks = OffMeshLinks.ToList();
+            applied.FineTiles = FineTiles.ToList();
             return applied;
         }
     }

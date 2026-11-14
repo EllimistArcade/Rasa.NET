@@ -41,7 +41,7 @@ namespace Rasa.NavMesh
 
         private static int Run(string[] args)
         {
-            string client = null, output = "navmesh", pathTest = null, profile = null, baseNav = null;
+            string client = null, output = "navmesh", pathTest = null, profile = null;
             var maps = new List<string>();
             var settings = new BuildSettings();
             var writeObj = false;
@@ -59,7 +59,6 @@ namespace Rasa.NavMesh
                     case "--out": output = Next(); break;
                     case "--map": maps.Add(Next()); break;
                     case "--profile": profile = Next(); break;
-                    case "--base-nav": baseNav = Next(); break;
                     case "--terrain-step": settings.TerrainStep = int.Parse(Next()); break;
                     case "--cell": settings.CellSize = float.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--cell-height": settings.CellHeight = float.Parse(Next(), CultureInfo.InvariantCulture); break;
@@ -83,7 +82,6 @@ namespace Rasa.NavMesh
                 var profileMap = profile switch
                 {
                     BuildSettings.WildernessProfileName => BuildSettings.WildernessMapName,
-                    BuildSettings.VelonHollowProfileName => BuildSettings.VelonHollowMapName,
                     _ => throw new ArgumentException($"Unknown navigation profile '{profile}'.")
                 };
                 if (pathTest != null || maps.Count != 1 ||
@@ -96,15 +94,8 @@ namespace Rasa.NavMesh
                 };
                 if (args.Any(tuningOptions.Contains) || positional.Count != 0)
                     throw new ArgumentException($"Profile '{profile}' cannot be combined with geometry overrides or positional arguments.");
-                settings = profile == BuildSettings.WildernessProfileName
-                    ? BuildSettings.WildernessHorizontal(settings.Threads)
-                    : BuildSettings.VelonHollowSeams(settings.Threads);
-                if (profile == BuildSettings.VelonHollowProfileName && (baseNav == null || !File.Exists(baseNav)))
-                    throw new ArgumentException($"Profile '{profile}' requires --base-nav <existing Velon Hollow .nav>.");
+                settings = BuildSettings.WildernessHorizontal(settings.Threads);
             }
-
-            if (baseNav != null && profile != BuildSettings.VelonHollowProfileName)
-                throw new ArgumentException("--base-nav is only valid with the Velon Hollow seam profile.");
 
             if (pathTest != null)
                 return PathTest(pathTest, positional);
@@ -129,7 +120,7 @@ namespace Rasa.NavMesh
             var stopwatch = Stopwatch.StartNew();
             if (profile != null)
                 Console.WriteLine($"Profile {profile}: cell {settings.CellSize} m, radius {settings.AgentRadius} m, " +
-                    $"climb {settings.AgentMaxClimb} m; " + (baseNav == null ? "full map" : "seven escort tiles over the supplied base navmesh"));
+                    $"climb {settings.AgentMaxClimb} m; full map");
             Console.WriteLine($"Indexing mesh archives in {dataDirectory} ...");
             using var meshes = new MeshLibrary(dataDirectory, csv);
             Console.WriteLine($"  {meshes.MeshCount} meshes, {meshes.ClassCount} entity classes, {stopwatch.Elapsed.TotalSeconds:0.0} s");
@@ -160,7 +151,8 @@ namespace Rasa.NavMesh
                 if (profile == null && MapNavFixes.For(name) is { } fixes)
                 {
                     mapSettings = fixes.Apply(settings);
-                    Console.WriteLine($"  map fixes: {(fixes.Fine ? "fine grid, " : "")}{fixes.TerrainCuts.Length} terrain cut(s), {fixes.OffMeshLinks.Length} off-mesh link(s)");
+                    Console.WriteLine($"  map fixes: {(fixes.Fine ? "fine grid, " : "")}{(fixes.FineTiles.Length > 0 ? $"{fixes.FineTiles.Length} fine tile(s), " : "")}" +
+                                      $"{fixes.TerrainCuts.Length} terrain cut(s), {fixes.OffMeshLinks.Length} off-mesh link(s)");
                 }
 
                 try
@@ -194,8 +186,14 @@ namespace Rasa.NavMesh
                         if (cut > 0)
                             Console.WriteLine($"  {cut:n0} terrain tris cut");
                         var navMesh = NavMeshBuilder.Build(geometry, mapSettings, Console.WriteLine);
-                        if (profile == BuildSettings.VelonHollowProfileName)
-                            navMesh = VelonHollowNavMesh.MergeSeams(NavMeshFile.Read(baseNav), navMesh);
+                        if (mapSettings.FineTiles.Count > 0)
+                        {
+                            var fineSettings = BuildSettings.Fine(mapSettings.Threads);
+                            fineSettings.OffMeshLinks = mapSettings.OffMeshLinks;
+                            var fine = NavMeshBuilder.Build(geometry, fineSettings, Console.WriteLine, mapSettings.FineTiles);
+                            navMesh = NavMeshTiles.Merge(navMesh, fine, mapSettings.FineTiles);
+                            Console.WriteLine($"  {mapSettings.FineTiles.Count} tile(s) on the fine grid");
+                        }
                         var path = NavMeshFile.PathFor(output, name);
                         NavMeshFile.Write(path, navMesh);
                         Console.WriteLine($"  wrote {path} ({new FileInfo(path).Length / 1024:n0} KB) in {mapWatch.Elapsed.TotalSeconds:0.0} s");
@@ -260,7 +258,6 @@ namespace Rasa.NavMesh
         {
             Console.WriteLine("Rasa.NavMesh --client <Tabula Rasa folder> [--out navmesh] [--map <name>]... [--terrain-step 2] [--cell 0.4] [--cell-height 0.2] [--detail-distance 6] [--threads N] [--obj] [--cover-only | --no-cover]");
             Console.WriteLine($"Rasa.NavMesh --client <Tabula Rasa folder> --map {BuildSettings.WildernessMapName} --profile {BuildSettings.WildernessProfileName} [--out navmesh] [--threads N] [--cover-only | --no-cover]");
-            Console.WriteLine($"Rasa.NavMesh --client <folder> --map {BuildSettings.VelonHollowMapName} --profile {BuildSettings.VelonHollowProfileName} --base-nav <existing .nav> [--out navmesh] [--no-cover]");
             Console.WriteLine("Rasa.NavMesh --path <file.nav> x1 y1 z1 x2 y2 z2");
         }
     }

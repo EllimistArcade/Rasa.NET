@@ -27,8 +27,9 @@ namespace Rasa.Test.Missions.Plateau
     /// Why these tests: two objectives are spawn pools cleared in a squad copy, a count no kill tally can make; the book's
     /// crate must give only once the inner outpost is clear; the followers must never fail the mission.
     ///
-    /// The shipped Velon Hollow navmesh cuts the hospital and the control room off (a bug report is filed upstream):
-    /// there HolyVengeanceFollowersHaveAPathToTheControlRoom is Inconclusive; the playthrough puts the player at each place.
+    /// The Velon Hollow navmesh joins the hospital to the control room across seam G5 (a fine tile, Rasa.NavMesh's
+    /// MapNavFixes): HolyVengeanceFollowersHaveAPathToTheControlRoom holds the followers' path to it; the playthrough
+    /// puts the player at each place.
     ///
     /// [TestCategory]: none, as PlateauCampResistanceTests.
     /// </summary>
@@ -160,8 +161,8 @@ namespace Rasa.Test.Missions.Plateau
             foreach (var home in PlateauHolyVengeanceV1.FollowersAt)
             {
                 var path = copy.NavMesh.FindPath(ToVector(home), crate, out var joined);
-                if (path == null || !joined)
-                    Assert.Inconclusive("No navmesh path from the hospital to the control room: the Velon Hollow navmesh is split (upstream bug report).");
+                Assert.IsTrue(path != null && joined && Vector3.Distance(path[^1], crate) <= 0.5f,
+                    $"a path from {ToVector(home)} to the control room, not stopping at seam G5 (360.8, 34.7, 51.2)");
                 path = copy.NavMesh.FindPath(crate, ToVector(home), out joined);
                 Assert.IsTrue(joined && path != null && Vector3.Distance(path[^1], ToVector(home)) <= 0.5f, $"back to {ToVector(home)}");
             }

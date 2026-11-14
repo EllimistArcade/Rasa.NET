@@ -229,6 +229,39 @@ namespace Rasa.Test.Missions
             CollectionAssert.IsSubsetOf(asked, shrines, "every Logos a mission asks for has a shrine");
         }
 
+        /// <summary>
+        /// Arriving, the missions go again once the client has its actor. The world map and the
+        /// radar make their mission markers on each MissionStatusInfo only while GetManifestation()
+        /// resolves; the snapshot sent first, for the tracking to be filtered against, comes while
+        /// it does not, and the world map had no markers - a Logos dispatch's shrine marked on the
+        /// radar and not on the map - until some mission changed.
+        /// </summary>
+        [TestMethod, DoNotParallelize]
+        public void ArrivingTheMissionsAreSentAgainOnceTheClientHasItsActor()
+        {
+            using var harness = Wilderness.WildernessAliaBranchesTests.CreateHarness();
+            harness.SpawnWorld(211);
+            Wilderness.WildernessAliaBranchesTests.SeedCompletedHistory(harness, 1407, 1069);
+            Wilderness.WildernessAliaBranchesTests.Accept(harness, new NpcManager(harness, harness.Manager), 211, LogosDamage);
+            harness.Drain();
+
+            ManifestationManager.Instance.AssignPlayer(harness.Client);
+            var packets = harness.Drain().ToList();
+
+            var actor = packets.FindIndex(packet => packet is Rasa.Packets.MapChannel.Server.SetControlledActorIdPacket);
+            var snapshots = packets.Select((packet, index) => (Packet: packet as Rasa.Packets.Mission.Server.MissionStatusInfoPacket, Index: index))
+                .Where(sent => sent.Packet != null).ToList();
+            Assert.IsGreaterThanOrEqualTo(0, actor);
+            Assert.IsTrue(snapshots.Any(sent => sent.Index < actor), "one before the actor: the saved tracking is filtered against it");
+
+            var again = snapshots.Where(sent => sent.Index > actor).Select(sent => sent.Packet).Single();
+            var marker = again.MissionStatusDict[LogosDamage].ObjectivesList.Single().IndicatorList.Single();
+            Assert.AreEqual(new System.Numerics.Vector3(406.0f, 246.168f, 441.0f), marker.Position, "the Damage shrine (logos 6)");
+        }
+
+        /// <summary>Logos: Damage, a Wilderness dispatch with no authored marker: its shrine is marked (Logos 6).</summary>
+        private const uint LogosDamage = 907;
+
         [TestMethod]
         [DataRow("objective")]
         [DataRow("indicator")]

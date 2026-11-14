@@ -2249,6 +2249,16 @@ namespace Rasa.Managers
             // false tells the client this is the initial selection, not a request.
             client.CallMethod(player.EntityId, new AbilityDrawerSlotPacket(player.CurrentAbilityDrawer, false));
 
+            // The missions again, now the actor is: the world map and the radar make their mission
+            // markers on each MissionStatusInfo (UI_UPDATE_CURRENT_MISSIONS: mapwindow
+            // HandleUpdateMissionIndicators, radarwindow HandleUpdateObjectiveIndicators), and make
+            // none while GetManifestation() is None - as it is for the snapshot above. The radar
+            // made them again when the tracking loaded (UI_UPDATE_MISSION_TRACKING); the world map
+            // only shows and hides the markers it has, so it had none, on logging in and on every
+            // map, until some mission changed: a Logos dispatch's shrine was marked on the radar
+            // and not on the map, and tracking it again changed nothing.
+            MissionApplication.Instance.PublishInitialState(client);
+
             _characterManager.OfferStartingExperienceMission(client);
 
             // What the missions make of the arrival is for a player who is in the world

@@ -462,6 +462,37 @@ namespace Rasa.Test.Missions
         }
 
         /// <summary>
+        /// The gate is the copy's, and a copy is made again for one who comes back: who saw the
+        /// projector, logged out and came back found the gate shut, Nekala on the hill and The
+        /// Reason Why's last marker by the entrance, where nobody stood. She waits there for them.
+        /// </summary>
+        [TestMethod]
+        public void InANewCopyNekalaWaitsByTheEntranceForOneWhoIsToTalkToHerThere()
+        {
+            using var harness = Create();
+            var nekala = Put(harness, D.Nekala, D.NekalaAtMarFend);
+            WildernessTwinPillarsTests.Accept(harness, nekala, D.TheReasonWhy);
+            Work(harness);
+            Assert.IsLessThan(3f, Vector3.Distance(nekala.Position, D.NekalaAtMarFend), "on the hill while the tests are still to do");
+
+            // Back in a new copy with everything but her done.
+            var log = harness.Client.Player.Missions[D.TheReasonWhy];
+            foreach (var objective in log.Objectives.Values)
+                objective.State = objective.ObjectiveId == CavesOfDonn.NekalaAtEntranceObjective
+                    ? MissionObjectiveState.Incomplete
+                    : MissionObjectiveState.Completed;
+            Work(harness);
+
+            Assert.IsFalse(CavesOfDonn.IsGateOpen(harness.Map), "the gate of a new copy");
+            Assert.IsLessThan(1f, Vector3.Distance(nekala.Position, D.NekalaAtEntrance), $"by the entrance, at {nekala.Position}");
+
+            // A newcomer to whom she is to give the mission wants her on the hill: she goes back.
+            harness.Client.Player.Missions.Remove(D.TheReasonWhy);
+            Work(harness);
+            Assert.IsLessThan(3f, Vector3.Distance(nekala.Position, D.NekalaAtMarFend), $"on the hill, at {nekala.Position}");
+        }
+
+        /// <summary>
         /// The gate and the cave-ins are classes the client does not make targetable, put down by
         /// the copy itself with no scene run: they were sent untargetable, and the use key never
         /// picked them out. They are targetable while in service, and the gate is not once open.

@@ -83,6 +83,9 @@ namespace Rasa.Managers
         /// </summary>
         public static readonly uint[] StoryNpcs = { D.Stone, D.Napoli, D.Nekala, D.DyingForean };
 
+        /// <summary>The Reason Why's last objective: talk to Nekala, marked by the entrance (CavesOfDonnContent.NekalaAtEntrance).</summary>
+        public const uint NekalaAtEntranceObjective = 18;
+
         /// <summary>How near Elder Nekala a member has to come for her to hand them more bombs.</summary>
         public const float NekalaResupplyRadius = 10f;
 
@@ -688,11 +691,20 @@ namespace Rasa.Managers
             }
         }
 
-        /// <summary>Nekala: at Mar Fend, or by the entrance once the gate is open and nobody in the copy still wants her on the hill.</summary>
+        /// <summary>
+        /// Nekala: at Mar Fend, or by the entrance once the gate is open, or for a member who is to
+        /// talk to her there (The Reason Why's last objective, <see cref="NekalaAtEntranceObjective"/>),
+        /// and nobody in the copy still wants her on the hill.
+        ///
+        /// The gate is the copy's, and a copy is made again for one who comes back to the caves: a
+        /// player who saw the projector, logged out and came back found the gate shut, Nekala on the
+        /// hill and the objective's marker by the entrance, where nobody stood.
+        /// </summary>
         private static void MoveNekala(MapChannel map, State state, List<Client> members)
         {
-            state.NekalaAtEntrance = state.GateOpen && !members.Any(client =>
-                Wants(client.Player, D.TooQuiet, 5) || !Active(client.Player, D.TheReasonWhy) && !Done(client.Player, D.TheReasonWhy));
+            state.NekalaAtEntrance = (state.GateOpen || members.Any(client => Wants(client.Player, D.TheReasonWhy, NekalaAtEntranceObjective))) &&
+                !members.Any(client =>
+                    Wants(client.Player, D.TooQuiet, 5) || !Active(client.Player, D.TheReasonWhy) && !Done(client.Player, D.TheReasonWhy));
 
             var nekala = Find(map, D.Nekala);
 

@@ -218,10 +218,13 @@ namespace Rasa.Test.Missions
 
             var device = Object(harness, H.ShockingDeviceClass);
             Assert.AreEqual(H.ShockingDeviceName, device.NameOverrideId);
-            Assert.AreEqual(UseObjectState.ThreeStateSwithState0, device.StateId);
+            Assert.AreEqual(H.ShockingDeviceModel, device.Position);
+            harness.MoveTo(H.Eggs);
+            Work(harness);
+            Assert.AreEqual(UseObjectState.ThreeStateSwithState1, device.StateId, "the queen lowered");
 
             Use(harness, device);
-            Assert.AreEqual(UseObjectState.ThreeStateSwithState1, device.StateId);
+            Assert.AreEqual(UseObjectState.ThreeStateSwithState2, device.StateId, "shocked");
             Assert.AreEqual(0, Living(harness, H.YoungAtta).Count, "not before the shock is over");
 
             _now += OjasaHive.DeviceShockMs;
@@ -243,8 +246,74 @@ namespace Rasa.Test.Missions
             Kill(harness, young[1]);
             Work(harness);
             Assert.IsTrue(harness.Client.Player.Missions[H.AttaOughtToDoIt].Completeable);
-            Assert.AreEqual(UseObjectState.ThreeStateSwithState0, device.StateId);
+            Assert.AreEqual(UseObjectState.ThreeStateSwithState1, device.StateId, "lowered again");
         }
+
+        [TestMethod]
+        public void TheShockingDeviceLowersItsQueenWhenAPlayerComesIntoItsRoom()
+        {
+            using var harness = Create();
+            SpawnJohn(harness);
+            StartOn(harness, H.AttaOughtToDoIt, 1);
+            harness.MoveTo(H.JohnAtCellThree);
+            Work(harness);
+
+            var device = Object(harness, H.ShockingDeviceClass);
+            Assert.AreEqual(UseObjectState.ThreeStateSwithState0, device.StateId, "raised");
+
+            // Not usable raised: the client would not send it, and nothing comes of it if one did.
+            Use(harness, device);
+            _now += OjasaHive.DeviceShockMs;
+            harness.MoveTo(H.JohnAtCellThree);
+            Work(harness);
+            Assert.AreEqual(UseObjectState.ThreeStateSwithState0, device.StateId);
+            Assert.AreEqual(0, Living(harness, H.YoungAtta).Count);
+
+            // The cavern under the alcove's lip, and the lake below it, are not its room.
+            Assert.IsFalse(OjasaHive.InDeviceRoom(H.ShockingDevice + new Vector3(-40, -8, 0)));
+            Assert.IsFalse(OjasaHive.InDeviceRoom(new Vector3(-118f, 100f, -380f)));
+            Assert.IsTrue(OjasaHive.InDeviceRoom(H.Eggs));
+
+            harness.MoveTo(H.ShockingDevice + new Vector3(-20, 0, 0));
+            Work(harness);
+            Assert.AreEqual(UseObjectState.ThreeStateSwithState1, device.StateId, "lowered for the player come in");
+
+            harness.MoveTo(H.JohnAtCellThree);
+            Work(harness);
+            Assert.AreEqual(UseObjectState.ThreeStateSwithState1, device.StateId, "and stays lowered");
+        }
+
+        /// <summary>The client's use range: an avatar's (Actor.GetUseRange, 3) doubled (Manifestation.GetUseRange).</summary>
+        private const float ClientUseRange = 6f;
+
+        /// <summary>
+        /// The device's DAMAGE1 point, which the client measures a use from (UseObject._InUseRadiusOf), over its
+        /// model's origin: on the queen's head, raised in its state 0 idle, lowered in its state 1 talking
+        /// (creature_atta_queen_control_device_v01.geo and its .anm files).
+        /// </summary>
+        private static readonly Vector3 QueenRaised = new(0f, 19.75f, -3.85f), QueenLowered = new(0f, 8.77f, -4.11f);
+
+        [TestMethod]
+        public void TheLoweredQueenIsInReachFromTheDevicesSpotHoweverItFaces()
+        {
+            var floor = H.ShockingDevice;
+
+            for (var step = 0; step < 16; step++)
+            {
+                var yaw = step * MathF.PI / 8f;
+                Assert.IsTrue(Vector3.Distance(floor, Damage1(H.ShockingDeviceModel, yaw, QueenLowered)) <= ClientUseRange - 0.5f, $"{yaw}: lowered");
+                Assert.IsTrue(Vector3.Distance(floor, Damage1(H.ShockingDeviceModel, yaw, QueenRaised)) > ClientUseRange, $"{yaw}: raised");
+                Assert.IsTrue(Vector3.Distance(floor, Damage1(H.ShockingDevice, yaw, QueenLowered)) > ClientUseRange, $"{yaw}: on the floor, lowered");
+            }
+
+            // The rig's lowest point, its hoses at 5.48 m in the lowered pose, is not under the floor; the queen's, at
+            // 7.65 m, is 2 m over it.
+            Assert.IsTrue(H.ShockingDeviceModel.Y + 5.48f >= floor.Y - 0.05f);
+            Assert.IsTrue(H.ShockingDeviceModel.Y + 7.65f >= floor.Y + 2f);
+        }
+
+        private static Vector3 Damage1(Vector3 origin, float yaw, Vector3 offset) =>
+            origin + Vector3.Transform(offset, Quaternion.CreateFromAxisAngle(Vector3.UnitY, yaw));
 
         [TestMethod]
         public void HelpingTheAttaTurnsTheHiveAndJohnCleansUp()

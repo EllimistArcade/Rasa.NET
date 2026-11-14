@@ -99,6 +99,20 @@ namespace Rasa.Services.Preloader
         public static readonly Vector3 BrannCorpse = new(316f, 84.06988f, 136f);
         public static readonly Vector3[] BrannBins = { new(-399f, 125.4702f, -215f), new(-341f, 123.860565f, -204f) };
         public static readonly Vector3 ShockingDevice = new(-104f, 118.465454f, -375f);
+
+        /// <summary>
+        /// How far down the Shocking Device's model stands in the floor under <see cref="ShockingDevice"/>, where its
+        /// marker is. The client lets a player use it from within 6 m of its DAMAGE1 point, on the queen's head
+        /// (creature_atta_queen_control_device_v01.geo, on Bip01 Q Chest), and that is 19.8 m over the model's
+        /// origin with the queen raised (state 0, its idle) and 8.8 m with her lowered (state 1, its talking): on the
+        /// floor she was out of reach either way. Down this far and lowered, the point is 3.3 m over the floor and
+        /// 4.1 m to the side of the device's middle; the rig's lowest hoses touch the floor, the queen hangs 2 m
+        /// clear of it.
+        /// </summary>
+        public const float ShockingDeviceSunk = 5.5f;
+
+        /// <summary>Where the Shocking Device's model stands: <see cref="ShockingDeviceSunk"/> under its spot.</summary>
+        public static Vector3 ShockingDeviceModel => ShockingDevice - new Vector3(0f, ShockingDeviceSunk, 0f);
         public static readonly Vector3 Eggs = new(-95.3f, 121.3479f, -394f);
         public static readonly Vector3 Throne = new(181.5f, 131.20636f, -290.5f);
         public static readonly Vector3 BrannCamp = new(-386f, 122.6f, -204f);

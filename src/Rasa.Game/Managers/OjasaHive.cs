@@ -65,6 +65,22 @@ namespace Rasa.Managers
         public const float QueenMinHeight = 100f;
         public const uint QueenCameraScript = 1;
         public const long DeviceShockMs = 2_000;
+
+        /// <summary>
+        /// The Shocking Device's states. It stands with its queen raised (state 0, its idle) until a player comes
+        /// into its room (<see cref="DeviceRoomRadius"/>), then lowers her (state 0 to 1, its 5.3 s lowering) and is
+        /// ready to use: lowered is the only way the client lets a player near enough to her to use it
+        /// (OjasaHiveContent.ShockingDeviceSunk). A use shocks her (state 2, its death), and it rearms lowered.
+        /// </summary>
+        public const UseObjectState DeviceRaised = UseObjectState.ThreeStateSwithState0;
+        public const UseObjectState DeviceReady = UseObjectState.ThreeStateSwithState1;
+        public const UseObjectState DeviceShocked = UseObjectState.ThreeStateSwithState2;
+
+        /// <summary>
+        /// The Shocking Device's room: the alcove at the east end of the egg cavern, walled to the north, east and
+        /// south, about 25 m across from the device to the cavern's lower floor to the west.
+        /// </summary>
+        public const float DeviceRoomRadius = 25f, DeviceRoomHeight = 12f;
         public const long DeviceRearmMs = 60_000;
         public const long BrawlResetMs = 30_000;
         public const float JohnCleanupRadius = 60f;
@@ -78,7 +94,7 @@ namespace Rasa.Managers
         /// <summary>The side taken at the Queen.</summary>
         public enum Side { None, Atta, Brann }
 
-        internal enum DeviceStage { Idle, Shocking, Spent }
+        internal enum DeviceStage { Raised, Idle, Shocking, Spent }
 
         /// <summary>A sulfur lake: the world (x, z) of its footprint's far corner, its size, and its surface.</summary>
         public readonly struct Lake
@@ -134,7 +150,7 @@ namespace Rasa.Managers
             public long WaveStartedAt;
             public long WaveRearmAt;
 
-            public DeviceStage DeviceStep = DeviceStage.Idle;
+            public DeviceStage DeviceStep = DeviceStage.Raised;
             public long DeviceAt;
             public ulong DeviceUser;
             public readonly List<Creature> Young = new();
@@ -185,6 +201,7 @@ namespace Rasa.Managers
 
             MoveJohn(map, state, members);
             FlamethrowerTest(map, state, members, now);
+            LowerDevice(map, state, members);
             Device(map, state, now);
             Queen(map, state, members, now);
             AttaOnSide(map, state);
@@ -202,8 +219,12 @@ namespace Rasa.Managers
             for (var i = 0; i < H.BrannBins.Length; i++)
                 state.Bins.Add(Usable(map, $"ojasa:brann-bin-{i}", H.BrannBinClass, H.BrannBins[i], i == 0 ? 0.4 : 3.5, UseObjectState.TdStateClosed));
 
-            state.Device = Usable(map, "ojasa:shocking-device", H.ShockingDeviceClass, H.ShockingDevice, 2.0, UseObjectState.ThreeStateSwithState0);
+            state.Device = Usable(map, "ojasa:shocking-device", H.ShockingDeviceClass, H.ShockingDeviceModel, 2.0, DeviceRaised);
             state.Device.NameOverrideId = H.ShockingDeviceName;
+
+            // One the copy already had may have been lowered.
+            if (state.Device.StateId != DeviceRaised)
+                state.DeviceStep = DeviceStage.Idle;
         }
 
         private static DynamicObject Usable(MapChannel map, string key, uint classId, Vector3 position, double rotation, UseObjectState initial)
@@ -346,7 +367,7 @@ namespace Rasa.Managers
 
         /// <summary>
         /// A finished use of an object (DynamicObjectManager.FootlockerRecovery): true if it is the
-        /// copy's Shocking Device, which this takes; it does nothing while it is still spent.
+        /// copy's Shocking Device, which this takes; it does nothing while it is still raised or spent.
         /// </summary>
         public static bool Used(MapChannel map, Client client, DynamicObject obj)
         {
@@ -361,15 +382,34 @@ namespace Rasa.Managers
             state.DeviceStep = DeviceStage.Shocking;
             state.DeviceAt = Now() + DeviceShockMs;
             state.DeviceUser = client.Player.EntityId;
-            Show(map, obj, UseObjectState.ThreeStateSwithState1, client.Player.EntityId);
+            Show(map, obj, DeviceShocked, client.Player.EntityId);
             return true;
         }
+
+        /// <summary>The Shocking Device, still raised, lowers its queen for the first player into its room.</summary>
+        private static void LowerDevice(MapChannel map, State state, List<Client> members)
+        {
+            if (state.Device == null || state.DeviceStep != DeviceStage.Raised)
+                return;
+
+            var comer = members.FirstOrDefault(client => InDeviceRoom(client.Player.Position));
+
+            if (comer == null)
+                return;
+
+            state.DeviceStep = DeviceStage.Idle;
+            Show(map, state.Device, DeviceReady, comer.Player.EntityId);
+        }
+
+        public static bool InDeviceRoom(Vector3 at) =>
+            Math.Abs(at.Y - H.ShockingDevice.Y) <= DeviceRoomHeight &&
+            Vector2.Distance(new Vector2(at.X, at.Z), new Vector2(H.ShockingDevice.X, H.ShockingDevice.Z)) <= DeviceRoomRadius;
 
         private static void Device(MapChannel map, State state, long now)
         {
             var device = state.Device;
 
-            if (device == null || state.DeviceStep == DeviceStage.Idle)
+            if (device == null || state.DeviceStep is DeviceStage.Raised or DeviceStage.Idle)
                 return;
 
             if (state.DeviceStep == DeviceStage.Shocking)
@@ -396,7 +436,6 @@ namespace Rasa.Managers
 
                 state.DeviceStep = DeviceStage.Spent;
                 state.DeviceAt = now + DeviceRearmMs;
-                Show(map, device, UseObjectState.ThreeStateSwithState2, state.DeviceUser);
                 return;
             }
 
@@ -416,7 +455,7 @@ namespace Rasa.Managers
                 return;
 
             state.DeviceStep = DeviceStage.Idle;
-            Show(map, device, UseObjectState.ThreeStateSwithState0, state.DeviceUser);
+            Show(map, device, DeviceReady, state.DeviceUser);
         }
 
         private static void Show(MapChannel map, DynamicObject obj, UseObjectState next, ulong actor)

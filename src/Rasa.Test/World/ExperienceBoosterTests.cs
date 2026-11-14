@@ -232,18 +232,17 @@ namespace Rasa.Test.World
 
             ActorManager.Instance.RequestActionInterrupt(client, Interrupt(1));
 
-            // Too late to call off: used, and on - and shown, taken off the client's quiet copy
-            // first, since it will not announce an effect id it holds.
+            // Too late to call off: used, and on - and announced on the client's copy by a hit of
+            // nothing that names it, which it was not taken off for: no status icon blinks.
             Assert.IsFalse(player.Inventory.PersonalInventory.Contains(item.EntityId), "used");
             Assert.IsTrue(player.ActiveEffects.ContainsKey(boost.EffectId), "on");
             var sent = harness.Drain();
-            var detach = sent.OfType<GameEffectDetachedPacket>().Single();
-            var attach = sent.OfType<GameEffectAttachedPacket>().Single();
-            Assert.AreEqual(boost.EffectId, detach.EffectId);
-            Assert.AreEqual(boost.EffectId, attach.EffectId);
-            Assert.AreEqual(ExperienceBoost.TypeId, attach.EffectTypeId);
-            Assert.IsTrue(attach.Announced, "announced");
-            Assert.IsLessThan(sent.ToList().IndexOf(attach), sent.ToList().IndexOf(detach), "the detach first");
+            var announce = sent.OfType<AnnounceMapDamagePacket>().Single();
+            Assert.AreEqual(0, announce.Amount, "nothing dealt");
+            Assert.IsFalse(announce.DeathBlow);
+            CollectionAssert.AreEqual(new[] { (uint)ExperienceBoost.TypeId }, announce.TargetEffectIds.ToList());
+            Assert.IsFalse(sent.OfType<GameEffectDetachedPacket>().Any(), "not taken off");
+            Assert.IsFalse(sent.OfType<GameEffectAttachedPacket>().Any(), "nor put on again");
             Assert.IsFalse(sent.OfType<ActionInterruptPacket>().Any(), "not interrupted: it landed");
 
             // Once.
@@ -270,6 +269,7 @@ namespace Rasa.Test.World
             var sent = harness.Drain();
             Assert.IsTrue(sent.OfType<ActionInterruptPacket>().Any(), "Interrupted");
             Assert.IsFalse(sent.OfType<GameEffectAttachedPacket>().Any());
+            Assert.IsFalse(sent.OfType<AnnounceMapDamagePacket>().Any());
         }
 
         [TestMethod]
@@ -282,11 +282,11 @@ namespace Rasa.Test.World
 
             ActorManager.Instance.RequestActionInterrupt(client, Interrupt(3));
             ActorManager.Instance.RequestActionInterrupt(client, new RequestActionInterruptPacket { ActionId = ActionId.WeaponAttack, ActionArgId = 1 });
-            Assert.IsFalse(harness.Drain().OfType<GameEffectAttachedPacket>().Any(), "not that action");
+            Assert.IsFalse(harness.Drain().OfType<AnnounceMapDamagePacket>().Any(), "not that action");
 
             client.Player.QuietlyLanded.LandedTick -= QuietLandings.WindowMs + 1;
             ActorManager.Instance.RequestActionInterrupt(client, Interrupt(1));
-            Assert.IsFalse(harness.Drain().OfType<GameEffectAttachedPacket>().Any(), "its recovery long played");
+            Assert.IsFalse(harness.Drain().OfType<AnnounceMapDamagePacket>().Any(), "its recovery long played");
         }
 
         private static RequestActionInterruptPacket Interrupt(uint level) =>

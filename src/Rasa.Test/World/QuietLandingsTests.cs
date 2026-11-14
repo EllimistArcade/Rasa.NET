@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -52,18 +53,19 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
-        public void OnlyWhatIsStillOnIsShown()
+        public void OnlyWhatIsStillOnIsAnnouncedOneHitForEachHolder()
         {
             using var world = new WorldTestContext();
             var client = Player(world);
             var player = client.Player;
 
-            GameEffect kept, gone;
+            GameEffect kept, alsoKept, gone;
 
             using (QuietLandings.Open(player, ActionId.ConsumableAddEffect, 1))
             {
                 kept = Attach(world, player, 901, e => e.AnnounceOnAttach = false);
-                gone = Attach(world, player, 902, e => e.AnnounceOnAttach = false);
+                alsoKept = Attach(world, player, 902, e => e.AnnounceOnAttach = false);
+                gone = Attach(world, player, 903, e => e.AnnounceOnAttach = false);
             }
 
             GameEffectManager.Instance.DettachEffect(world.Map, player, gone);
@@ -72,9 +74,29 @@ namespace Rasa.Test.World
             ActorManager.Instance.RequestActionInterrupt(client,
                 new RequestActionInterruptPacket { ActionId = ActionId.ConsumableAddEffect, ActionArgId = 1 });
 
-            var sent = WorldTestContext.Drain(client).Select(p => p.Message).OfType<CallMethodMessage>().Select(m => m.Packet).ToList();
-            Assert.AreEqual(kept.EffectId, sent.OfType<GameEffectDetachedPacket>().Single().EffectId);
-            Assert.AreEqual(kept.EffectId, sent.OfType<GameEffectAttachedPacket>().Single(p => p.Announced).EffectId);
+            var sent = WorldTestContext.Drain(client).Select(p => p.Message).OfType<CallMethodMessage>().ToList();
+            var hit = sent.Single();
+            Assert.AreEqual(player.EntityId, hit.EntityId, "on the holder");
+            var announce = (AnnounceMapDamagePacket)hit.Packet;
+            CollectionAssert.AreEqual(new uint[] { 901, 902 }, announce.TargetEffectIds.ToList());
+        }
+
+        [TestMethod]
+        public void TheHitDoesNothingButNameTheEffects()
+        {
+            // Actor.Recv_AnnounceMapDamage(rawInfo): the 12-tuple, nothing dealt, nothing
+            // absorbed or resisted - so no number, no log line, no reaction - and the types last
+            // but one, which AnnounceDamage announces on the actor.
+            var raw = (List<object>)HitResultTests.Decode(new AnnounceMapDamagePacket(0, targetEffectIds: new uint[] { 10000053 }))[0];
+
+            Assert.HasCount(12, raw);
+            Assert.AreEqual(0L, raw[3], "absorbed");
+            Assert.AreEqual(0L, raw[4], "resisted");
+            Assert.AreEqual(0L, raw[5], "finalAmt");
+            Assert.AreEqual(0L, raw[7], "deathBlow");
+            Assert.AreEqual(0L, raw[9], "wasImmune");
+            CollectionAssert.AreEqual(new object[] { 10000053L }, (List<object>)raw[10]);
+            Assert.IsEmpty((List<object>)raw[11]);
         }
 
         private static GameEffect Attach(WorldTestContext world, Manifestation player, int typeId, Action<GameEffect> shape)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Rasa.Managers
 {
@@ -26,19 +27,25 @@ namespace Rasa.Managers
     /// So while a player's recovery is resolved (<see cref="Open"/>), GameEffectManager.Attach
     /// tells <see cref="Note"/> of each effect it puts on quietly, and the last recovery's are
     /// kept on the player. An interrupt for that action that comes after it has landed
-    /// (<see cref="Reannounce"/>) has each that is still on taken off the player's own client and
-    /// put back announced, as a client that met the holder now would be shown it
-    /// (GameEffectManager.ShowEffectsTo). Its Recv_GameEffectAttached will not announce an effect
-    /// id it already holds, so the detach goes first. Nobody else cancelled anything: the others
-    /// play the recovery to its end.
+    /// (<see cref="Reannounce"/>) has those still on announced on the player's own client by a
+    /// hit of nothing: an AnnounceMapDamage whose rawInfo does no damage and names their types in
+    /// targetEffectIds. Actor.AnnounceDamage announces one of each type that has not been yet -
+    /// what the recovery's hit would have done - and with nothing dealt it floats no number,
+    /// writes no combat log line and plays no reaction (combatmessages.OnCombatDamage,
+    /// AnnounceDamage). Nobody else cancelled anything: the others play the recovery to its end.
+    ///
+    /// An effect the client had announced already - an action whose strike had fired before the
+    /// player moved - is left as it is: AnnounceGameEffectAttach finds none of its type left to
+    /// announce and only notes the type for the next one attached in ten seconds
+    /// (PhysicalEntity.__delayedAnnounce). Taking it off and putting it back announced would have
+    /// done the same for the one that had not been, and made the status icon of the one that had
+    /// blink.
     ///
     /// Only effects a newcomer is shown announced (GameEffect.AnnounceToNewcomers): one kept quiet
     /// for good, a vampiric drain's or a run speed module's, stays so.
     ///
     /// The client sends no interrupt once the action has finished - it is no longer its current
-    /// one - so one that comes late is one whose resolution it threw away. An action with a strike
-    /// that had already fired and announced the effect will have it shown again: a status icon
-    /// taken off and put back, which is all.
+    /// one - so one that comes late is for an action it has cut short.
     /// </summary>
     public sealed class QuietLandings : IDisposable
     {
@@ -110,19 +117,17 @@ namespace Rasa.Managers
             // Once: a second interrupt for it finds nothing.
             player.QuietlyLanded = null;
 
+            // One hit for each holder, naming the types of what it holds that is still on.
             var shown = false;
 
-            foreach (var (holder, effect) in landed._effects)
+            foreach (var group in landed._effects
+                .Where(entry => entry.Holder.ActiveEffects.TryGetValue(entry.Effect.EffectId, out var still)
+                    && ReferenceEquals(still, entry.Effect) && !entry.Effect.IsExpired && entry.Effect.TypeId > 0)
+                .GroupBy(entry => entry.Holder))
             {
-                if (!holder.ActiveEffects.TryGetValue(effect.EffectId, out var still) || !ReferenceEquals(still, effect) || effect.IsExpired)
-                    continue;
+                var types = group.Select(entry => (uint)entry.Effect.TypeId).ToList();
 
-                client.CallMethod(holder.EntityId, new GameEffectDetachedPacket { EffectId = effect.EffectId });
-                client.CallMethod(holder.EntityId, GameEffectManager.AttachedPacket(effect, true));
-
-                if (effect.IsPaused)
-                    client.CallMethod(holder.EntityId, new GameEffectPausePacket(effect.EffectId, true));
-
+                client.CallMethod(group.Key.EntityId, new AnnounceMapDamagePacket(0, targetEffectIds: types));
                 shown = true;
             }
 

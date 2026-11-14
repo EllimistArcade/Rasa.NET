@@ -358,6 +358,10 @@ namespace Rasa.Managers
             if (target == null || amount <= 0 || target.State == CharacterState.Dead || target.State == CharacterState.Dying)
                 return 0;
 
+            // A player's ability landing on it: its bars on their client wait for the hit to be
+            // played, which their client may yet cut short (QuietLandings).
+            QuietLandings.NoteHit(target, source);
+
             // No creature's hit lands on an ambient creature, a blast or a splash included, and an
             // ambient creature's lands on nothing (AmbientCreatures). A player's is all it takes.
             if (AmbientCreatures.Spares(source, target))

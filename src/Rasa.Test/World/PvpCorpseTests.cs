@@ -146,6 +146,66 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
+        public void TheWavesCasterWhoWalkedOffIsStillShownTheCloneRise()
+        {
+            using var world = new WorldTestContext();
+            world.AddClass((EntityClasses)AbilityManager.CloneMaleClassId);
+            var red = Fighter(world, RedClanId, 0);
+            var blue = Fighter(world, BlueClanId, 6);
+
+            WithFeud(world, () =>
+            {
+                Kill(world, blue);
+
+                // Reanimation Wave raises quietly, for its recovery to announce REANIMATED on each
+                // hit; nobody arriving later is shown the rising (AnnounceToNewcomers), but the
+                // caster who cast it is, should their client cut the recovery short.
+                var info = Level(ActionId.SaExobiologistReanimationWave, 1);
+                info.Properties[AbilityProperty.Duration] = 120;
+
+                using (QuietLandings.Open(red.Player, ActionId.SaExobiologistReanimationWave, 1))
+                    Invoke("ReanimationWave", world.Map, red.Player, info, new ActionData(red.Player, ActionId.SaExobiologistReanimationWave, 1, 0, 0));
+
+                var clone = world.Map.MapCellInfo.Cells.Values.SelectMany(c => c.CreatureList).Distinct().Single(c => c.MasterEntityId == red.Player.EntityId);
+
+                try
+                {
+                    var effect = clone.ActiveEffects.Values.Single(e => e.TypeId == AbilityManager.ReanimatedTypeId);
+                    Assert.IsFalse(effect.AnnounceOnAttach);
+                    Assert.IsFalse(effect.AnnounceToNewcomers);
+                    Assert.IsTrue(effect.AnnounceToCaster);
+
+                    WorldTestContext.Drain(red);
+                    ActorManager.Instance.RequestActionInterrupt(red, new Rasa.Packets.MapChannel.Client.RequestActionInterruptPacket
+                    {
+                        ActionId = ActionId.SaExobiologistReanimationWave,
+                        ActionArgId = 1
+                    });
+
+                    var hit = WorldTestContext.Drain(red).Select(p => p.Message).OfType<Rasa.Packets.Protocol.CallMethodMessage>()
+                        .Single(m => m.Packet is AnnounceMapDamagePacket);
+                    Assert.AreEqual(clone.EntityId, hit.EntityId);
+                    CollectionAssert.AreEqual(new[] { (uint)AbilityManager.ReanimatedTypeId }, ((AnnounceMapDamagePacket)hit.Packet).TargetEffectIds.ToList());
+                }
+                finally
+                {
+                    foreach (var effect in clone.ActiveEffects.Values.ToArray())
+                        GameEffectManager.Instance.DettachEffect(world.Map, clone, effect);
+                    clone.State = CharacterState.Dead;
+                    var tracked = (System.Collections.IEnumerable)typeof(AbilityManager)
+                        .GetField("RisenCreatures", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null);
+                    var record = tracked.Cast<object>().SingleOrDefault(r =>
+                        ReferenceEquals(r.GetType().GetField("Creature")!.GetValue(r), clone));
+                    if (record != null)
+                        record.GetType().GetField("RemoveAt")!.SetValue(record, Environment.TickCount64 - 1);
+                    Invoke("ReanimationWorker", world.Map);
+                    if (EntityManager.Instance.GetEntityType(clone.EntityId) == EntityType.Creature)
+                        CellManager.Instance.RemoveCreatureFromWorld(world.Map, clone);
+                }
+            });
+        }
+
+        [TestMethod]
         public void HortimonculusGrowsFromTheEnemyAndSendsThemToTheirHospital()
         {
             using var world = new WorldTestContext();

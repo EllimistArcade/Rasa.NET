@@ -14,8 +14,9 @@ namespace Rasa.Test.World
     using Rasa.Structures;
 
     /// <summary>
-    /// What a player's recovery put on quietly, for its announce (QuietLandings): kept for their
-    /// client, and shown to it announced when it interrupts the action after it has landed.
+    /// What a player's recovery did that their client shows as it plays it (QuietLandings): the
+    /// effects it put on quietly and what it hit, kept for their client, and announced to it when
+    /// it interrupts the action after it has landed.
     /// </summary>
     [TestClass]
     [DoNotParallelize]
@@ -28,19 +29,21 @@ namespace Rasa.Test.World
             var client = Player(world);
             var player = client.Player;
 
-            GameEffect quiet, loud, hidden, serverOnly;
+            GameEffect quiet, risen;
 
             using (QuietLandings.Open(player, ActionId.ConsumableAddEffect, 1))
             {
                 quiet = Attach(world, player, 901, e => e.AnnounceOnAttach = false);
-                loud = Attach(world, player, 902, e => { });
-                hidden = Attach(world, player, 903, e => { e.AnnounceOnAttach = false; e.AnnounceToNewcomers = false; });
-                serverOnly = Attach(world, player, 904, e => { e.AnnounceOnAttach = false; e.ServerOnly = true; });
+                Attach(world, player, 902, e => { });
+                Attach(world, player, 903, e => { e.AnnounceOnAttach = false; e.AnnounceToNewcomers = false; });
+                Attach(world, player, 904, e => { e.AnnounceOnAttach = false; e.ServerOnly = true; });
+                risen = Attach(world, player, 907, e => { e.AnnounceOnAttach = false; e.AnnounceToNewcomers = false; e.AnnounceToCaster = true; });
             }
 
             var landed = player.QuietlyLanded;
             Assert.IsNotNull(landed);
-            Assert.AreSame(quiet, landed.Effects.Single().Effect, "the one the recovery announces; not one kept quiet for good");
+            CollectionAssert.AreEqual(new[] { quiet, risen }, landed.Effects.Select(entry => entry.Effect).ToList(),
+                "the ones the recovery announces; not one kept quiet for good, unless its caster is to see it");
 
             // Outside a recovery nothing is kept, and a recovery that put on nothing quietly
             // leaves none.
@@ -82,6 +85,44 @@ namespace Rasa.Test.World
         }
 
         [TestMethod]
+        public void WhatTheAbilityHitIsAnnouncedToItsCasterForItsBars()
+        {
+            using var world = new WorldTestContext();
+            var client = Player(world);
+            var player = client.Player;
+            var struck = Spawn(world);
+            var gone = Spawn(world);
+            var other = Spawn(world);
+
+            using (QuietLandings.Open(player, ActionId.AaSoldierShrapnel, 1))
+            {
+                ActorManager.Instance.Damage(world.Map, struck, 50, player, out _);
+                ActorManager.Instance.Damage(world.Map, struck, 50, player, out _);
+                ActorManager.Instance.Damage(world.Map, gone, 50, player, out _);
+                ActorManager.Instance.Damage(world.Map, other, 50, struck, out _);
+            }
+
+            var landed = player.QuietlyLanded;
+            CollectionAssert.AreEqual(new[] { struck, gone }, landed.Hit.ToList(), "the player's hits, each once; not another's");
+            Assert.IsEmpty(landed.Effects.ToList());
+
+            // One left the world since: nothing to announce on.
+            Unregister(gone);
+            WorldTestContext.Drain(client);
+            ActorManager.Instance.RequestActionInterrupt(client,
+                new RequestActionInterruptPacket { ActionId = ActionId.AaSoldierShrapnel, ActionArgId = 1 });
+
+            var hit = WorldTestContext.Drain(client).Select(p => p.Message).OfType<CallMethodMessage>().Single();
+            Assert.AreEqual(struck.EntityId, hit.EntityId);
+            var announce = (AnnounceMapDamagePacket)hit.Packet;
+            Assert.AreEqual(0, announce.Amount, "nothing more dealt: its bars announced");
+            Assert.IsEmpty(announce.TargetEffectIds.ToList());
+
+            Unregister(struck);
+            Unregister(other);
+        }
+
+        [TestMethod]
         public void TheHitDoesNothingButNameTheEffects()
         {
             // Actor.Recv_AnnounceMapDamage(rawInfo): the 12-tuple, nothing dealt, nothing
@@ -113,6 +154,40 @@ namespace Rasa.Test.World
             shape(effect);
             GameEffectManager.Instance.Attach(world.Map, player, effect);
             return effect;
+        }
+
+        /// <summary>A hostile creature with 1000 health and no armour, in the map's cells.</summary>
+        private static Creature Spawn(WorldTestContext world)
+        {
+            var map = world.Map;
+            var creature = new Creature
+            {
+                Name = "Fixture",
+                TargetCategory = TargetCategory.Hostile,
+                MapContextId = map.MapInfo.MapContextId,
+                RuntimeMapChannel = map,
+                Position = new System.Numerics.Vector3(5, 0, 5),
+                EntityClass = 0,
+                State = CharacterState.Idle,
+                Level = 1,
+                AppearanceData = new Dictionary<EquipmentData, AppearanceData>()
+            };
+            creature.Attributes[Attributes.Health] = new ActorAttributes(Attributes.Health, 1000, 1000, 1000, 0, 0);
+            creature.Attributes[Attributes.Armor] = new ActorAttributes(Attributes.Armor, 0, 0, 0, 0, 0);
+            EntityManager.Instance.RegisterEntity(creature.EntityId, EntityType.Creature);
+            EntityManager.Instance.RegisterCreature(creature);
+
+            var seed = CellManager.Instance.GetCellSeed(creature.Position);
+            creature.Cells = CellManager.Instance.CreateCellMatrix(map, seed & 0xFFFF, seed >> 16);
+            CellManager.Instance.GetCell(map, seed & 0xFFFF, seed >> 16).CreatureList.Add(creature);
+
+            return creature;
+        }
+
+        private static void Unregister(Creature creature)
+        {
+            EntityManager.Instance.UnregisterCreature(creature.EntityId);
+            EntityManager.Instance.UnregisterEntity(creature.EntityId);
         }
 
         private static Client Player(WorldTestContext world)

@@ -110,6 +110,20 @@ namespace Rasa.Structures
         public bool AnnounceToNewcomers { get; set; } = true;
 
         /// <summary>
+        /// Whether a player whose own client cut short the recovery that was to announce this - they
+        /// moved before it had played - is shown it announced all the same (Managers.QuietLandings).
+        /// As <see cref="AnnounceToNewcomers"/> unless set: an announce that plays only on arrival,
+        /// a corpse rising, was still the caster's to see, having cast it.
+        /// </summary>
+        public bool AnnounceToCaster
+        {
+            get => _announceToCaster ?? AnnounceToNewcomers;
+            set => _announceToCaster = value;
+        }
+
+        private bool? _announceToCaster;
+
+        /// <summary>
         /// The client may ask for this effect to be removed (RequestDetachGameEffect) - a toggle
         /// like sprint, or any buff the player right-clicks away. Debuffs stay.
         /// </summary>

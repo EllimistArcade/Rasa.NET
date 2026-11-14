@@ -264,6 +264,7 @@ namespace Rasa.Managers
             effect.AllowDetach = false;
             effect.AnnounceOnAttach = announce;
             effect.AnnounceToNewcomers = false;     // the rising is for those who saw it
+            effect.AnnounceToCaster = true;         // which the caster did, whatever their client cut short
             effect.OnExpired = (map, actor, e) => EndReanimation(risen);
 
             GameEffectManager.Instance.Attach(mapChannel, risen, effect);

@@ -154,7 +154,8 @@ namespace Rasa.Structures
         /// <summary>
         /// Players and their summons may fight it, but no other creature seeks it out or turns on
         /// it: a public encounter's negotiator left free between runs (Overseer Skeev beside
-        /// Burke), who would otherwise be shot down by the AFS standing round him.
+        /// Burke), who would otherwise be shot down by the AFS standing round him; a FRIENDLY
+        /// mission NPC among hostile creatures (NpcsKeptFromCreatures).
         /// </summary>
         internal bool KeptFromCreatures { get; set; }
 

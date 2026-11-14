@@ -599,6 +599,7 @@ namespace Rasa.Managers
             var creature = (Creature)creatureEntry.Clone();
 
             creature.SpawnPool = spawnPool;
+            NpcsKeptFromCreatures.Apply(creature);
             if (spawnPool?.RuntimeMapChannel != null)
             {
                 var leases = (_missionManager ?? MissionApplication.Instance).PublicActors;

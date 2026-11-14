@@ -23,7 +23,8 @@ namespace Rasa.Services.Preloader.Missions.Plateau
     ///
     /// The hologram is safe ground (SpawnPoolManager.ValidatePools): the Tomb Miasmas' pool west of the tomb
     /// (PlateauTombMiasmasV1, 750025 at -700, 540) ranged 15 m, to the tomb's door, 12 m from the hologram.
-    /// Its radius narrows to 11 (ESTIMATE), 16 m off; Down puts 15 back.
+    /// Its radius narrows to 11 (ESTIMATE), 16 m off; Down puts 15 back. The hologram is NEUTRAL here, which players
+    /// could kill for experience; Vogren_hologram_friendly makes it FRIENDLY (PlateauVogrenHologramFriendlyV1).
     ///
     /// Both show their names through creature_actor_name (name id 0). Ids: creatures 750027-750028,
     /// pools 750039-750040, free before. Plain SQL, valid on SQLite and MySQL.

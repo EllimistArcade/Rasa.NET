@@ -48,8 +48,9 @@ namespace Rasa.Test.Missions.Plateau
             Assert.AreEqual(PlateauVogrenNpcsV1.HologramPackage, hologram.Npc.NpcPackageId);
             AssertStands(plateau, tendahi, PlateauVogrenNpcsV1.TendahiAt, "Tendahi in the hut");
             AssertStands(plateau, hologram, PlateauVogrenNpcsV1.HologramAt, "the hologram in the tomb");
-            Assert.AreEqual(TargetCategory.Neutral, hologram.TargetCategory, "no Tomb Miasma goes looking for it (to-fix #39)");
-            Assert.IsFalse(TargetCategories.Seeks(TargetCategory.Hostile, hologram.TargetCategory));
+            Assert.AreEqual(TargetCategory.Friendly, hologram.TargetCategory, "as every giver: no player may attack it");
+            Assert.IsFalse(CreatureManager.IsHostileTarget(plateau, harness.Client.Player, hologram), "a player's hit lands on nothing");
+            Assert.IsTrue(hologram.KeptFromCreatures, "no Tomb Miasma goes looking for it (to-fix #39)");
             foreach (var pool in harness.World.SpawnPoolEntries.AsNoTracking()
                 .Where(row => row.Id >= PlateauTombMiasmasV1.FirstPool && row.Id <= PlateauTombMiasmasV1.LastPool).ToArray())
                 foreach (var npc in new[] { tendahi, hologram })
@@ -120,6 +121,39 @@ namespace Rasa.Test.Missions.Plateau
             Assert.IsTrue(harness.Manager.AcceptOfferedMission(harness.Client, hologram.EntityId, LogosPast));
             harness.Drain();
             Assert.IsTrue(harness.Client.Player.Missions[LogosPast].Completeable, "the Logos the player has counts");
+        }
+
+        [TestMethod]
+        public void NoOneFightsTheHologramAndItFightsNoOne()
+        {
+            // NEUTRAL, a player killed it in a hit or two and had it back in two seconds: two levels in ten minutes.
+            // FRIENDLY, the Tomb Miasmas went for it as they did before it was made NEUTRAL (to-fix #39).
+            using var harness = WildernessRuntimeTestHarness.Create();
+            var plateau = EnterPlateau(harness);
+            var (_, hologram) = Npcs(plateau);
+            Spawn(plateau, PlateauTombMiasmasV1.FirstPool);
+            var miasma = Living(plateau).First(creature => creature.SpawnPool?.DbId == PlateauTombMiasmasV1.FirstPool);
+            Assert.AreEqual(TargetCategory.Hostile, miasma.TargetCategory);
+
+            var player = harness.Client.Player;
+            harness.MoveTo(hologram.Position);
+            harness.Drain();
+            Assert.IsFalse(TargetCategories.PlayerMayAttack(hologram.TargetCategory));
+            Assert.IsFalse(CreatureManager.IsHostileTarget(plateau, player, hologram), "a player's hit");
+
+            // A miasma at its side, the player out of the way: it does not pick the hologram, nor may it fight it.
+            harness.MoveTo(hologram.Position + new Vector3(200f, 0f, 0f));
+            harness.Drain();
+            miasma.Position = hologram.Position + new Vector3(3f, 0f, 0f);
+            Assert.AreNotEqual(hologram.EntityId, BehaviorManager.FindAttackableInRange(plateau, miasma, miasma.AggroRange));
+            Assert.IsFalse(BehaviorManager.MayFight(miasma, hologram.EntityId));
+
+            // Nor does the hologram, FRIENDLY, go for the miasma at its side.
+            Assert.AreEqual(0f, hologram.AggroRange);
+            Assert.AreEqual(0UL, BehaviorManager.FindAttackableInRange(plateau, hologram, hologram.AggroRange));
+
+            // Tendahi, a giver no miasma comes near, is as any other: kept from nothing.
+            Assert.IsFalse(NpcsKeptFromCreatures.Includes(PlateauVogrenNpcsV1.Tendahi));
         }
 
         /// <summary>Tendahi and the hologram, spawned from their pools.</summary>

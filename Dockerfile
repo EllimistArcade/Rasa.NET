@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.403 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.404 AS build
 
 WORKDIR /app
 

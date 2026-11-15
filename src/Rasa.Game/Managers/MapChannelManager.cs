@@ -487,6 +487,9 @@ namespace Rasa.Managers
                     // The Phanin Research Facility's mainframes, doors, consoles, crates and caged Atta, in each copy of it.
                     Guard("PhaninResearch.Worker", mapChannel, () => PhaninResearch.Worker(mapChannel));
 
+                    // The Brann Water Refinery's Lagda, locked doors, modules, bombs, skybridge, pods and chairs, in each copy of it.
+                    Guard("BrannWaterRefinery.Worker", mapChannel, () => BrannWaterRefinery.Worker(mapChannel));
+
                     // The Caves of Donn's story, in each copy of them.
                     Guard("CavesOfDonn.Worker", mapChannel, () => CavesOfDonn.Worker(mapChannel));
 

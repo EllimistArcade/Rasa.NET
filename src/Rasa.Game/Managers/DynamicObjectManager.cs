@@ -347,6 +347,12 @@ namespace Rasa.Managers
                 ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, phaninRefusal);
                 return;
             }
+            // The Brann Water Refinery's bombs (BrannWaterRefinery).
+            if (BrannWaterRefinery.Refusal(client, obj) is { } brannRefusal)
+            {
+                ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, brannRefusal);
+                return;
+            }
             if (obj.MissionUseAction != null &&
                 (!MissionUseAvailable(client, obj) ||
                  !(_missionManager ?? MissionApplication.Instance).Scenes.CanUseObject(client, obj, packet.ActionArgId)))

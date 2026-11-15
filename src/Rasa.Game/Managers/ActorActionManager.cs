@@ -224,6 +224,13 @@ namespace Rasa.Managers
                         break;
                     }
 
+                    // One of the Brann Water Refinery's bombs (BrannWaterRefinery), whatever its arg.
+                    if (BrannWaterRefinery.IsUseOf(mapChannel, action))
+                    {
+                        BrannWaterRefinery.UseRecovery(mapChannel, action);
+                        break;
+                    }
+
                     // A usable of the client's .map (MapUsables), whatever its arg: no object of
                     // the server's has its id.
                     if (MapUsables.IsUseOf(action))

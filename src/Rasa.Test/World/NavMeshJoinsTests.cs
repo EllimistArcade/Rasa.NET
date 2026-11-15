@@ -12,10 +12,12 @@ using Rasa.Test.TestSupport;
 
 namespace Rasa.Test.World
 {
+    using B = Rasa.Services.Preloader.BrannWaterRefineryContent;
+
     /// <summary>
     /// The navmeshes Rasa.NavMesh's MapNavFixes rebuilt, against the shipped files: the parts of a map
     /// that no path joined before - which an escort, a guard or a creature after a player could not cross -
-    /// are joined, both ways, and a creature walks the Retread Caves' two off-mesh links.
+    /// are joined, both ways, and a creature walks the Retread Caves' and the Brann Water Refinery's off-mesh links.
     /// </summary>
     [TestClass, DoNotParallelize]
     public class NavMeshJoinsTests
@@ -25,6 +27,22 @@ namespace Rasa.Test.World
         private const string RetreadCaves = "adv_foreas_valverde_pools_retread_caves";
         private const string Marshes = "adv_foreas_valverde_marshes";
         private const string VillageRuins = "adv_foreas_valverde_marshes_villageruins";
+        private const string WaterRefinery = "adv_arieki_torden_plains_brannwaterrefinery";
+
+        // Brann Water Refinery (2093): its missions' route, in order (BrannWaterRefineryContent), to the last crate
+        // and back to the way in; and the two links, each side.
+        private static readonly Vector3[] RefineryRoute =
+        {
+            B.Arrival, B.MelokanAt, B.KillroyAt, B.JenksAt, B.Modules[0].At, B.CaolotsAt, B.Modules[1].At, B.Modules[2].At,
+            B.ArbocAt, B.Bombs[0].At, B.Bombs[3].At, B.Bombs[6].At, B.Bombs[8].At, B.Bombs[9].At, B.CoenAt, B.NamistaiAt,
+            B.SkybridgeMiddle, B.NorthernQuarters, B.FalloraksAt, B.SouthernQuarters, B.IfilionAt, B.Greenhouse, B.KraxorAt,
+            new Vector3(-284f, 399.6f, -259f), B.Arrival
+        };
+        private static readonly (Vector3 East, Vector3 West)[] RefineryLinks =
+        {
+            (new Vector3(-40.0f, 399.6f, -278.2f), new Vector3(-41.8f, 399.6f, -278.6f)),
+            (new Vector3(-184.0f, 399.6f, -241.4f), new Vector3(-185.6f, 399.6f, -241.6f))
+        };
 
         // Valverde Marshes (1454): the zone's side and the crate area's side of the 1.2 m passage on the tile edge
         // z = 28.8; the crate area's side and the temple's upper floor's side of the passage between them.
@@ -139,6 +157,31 @@ namespace Rasa.Test.World
             foreach (var corner in route) { length += Vector3.Distance(at, corner); at = corner; }
             Assert.IsTrue(length is > 100f and < 130f, $"{length:0} m: through the village, not round it");
             Assert.IsGreaterThan(50000f, nav.RegionArea(nav.NearestInColumn(RuinsArrival, 4f).Value).Value, "not an 85 m² part of its own");
+        }
+
+        /// <summary>Every leg of the refinery's missions, from the way in through each room they send a player to, both ways.</summary>
+        [TestMethod]
+        public void BrannWaterRefineryRouteRunsFromTheWayInToTheLastCrate()
+        {
+            var nav = Query(WaterRefinery);
+
+            for (var i = 1; i < RefineryRoute.Length; i++)
+            {
+                AssertRoute(nav, RefineryRoute[i - 1], RefineryRoute[i]);
+                AssertRoute(nav, RefineryRoute[i], RefineryRoute[i - 1]);
+            }
+        }
+
+        /// <summary>A creature walks the refinery's two links: into the first hacking module's walk, and off the skybridge.</summary>
+        [TestMethod]
+        [DataRow(0, false)] [DataRow(0, true)]
+        [DataRow(1, false)] [DataRow(1, true)]
+        public void ACreatureWalksEachWaterRefineryLink(int link, bool back)
+        {
+            var nav = Query(WaterRefinery);
+            var (east, west) = RefineryLinks[link];
+
+            AssertWalks(nav, B.Refinery, WaterRefinery, nav.Nearest(back ? west : east).Value, nav.Nearest(back ? east : west).Value);
         }
 
         /// <summary>A creature sent across each link, by the server's own movement, arrives on the far side, and back.</summary>

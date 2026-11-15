@@ -27,6 +27,26 @@ namespace Rasa.NavMesh
 
         public static readonly MapNavFixes[] All =
         {
+            // Brann Water Refinery (2093). The 0.4 m grid broke the refinery's corridors into some forty parts at
+            // their ramps, stairs and jambs: the arrival, Melokan and Commander Killroy's operations room were on
+            // three, and 10 of the 16 legs of the missions' route (arrival, operations room, Captain Jenks, the
+            // hacking modules, Final Processing, the reservoir, maintenance, Scout Coen, the skybridge, the living
+            // quarters, the Greenhouse, the north way out) had no path. The fine grid over the building's tiles
+            // joins them but two: the first hacking module's walk, through a doorway at x = -40.7 that lies on the
+            // tile edge z = -278.4, with the client's floor at 399.52 and full headroom; and the skybridge's west
+            // end at x = -185, where the heightmap's cliff rises through the walkway and debris narrows it, the
+            // floor flat at 399.5 along z = -241. A link joins each. The tiles round the building are the
+            // ordinary build, tile for tile.
+            new MapNavFixes
+            {
+                Map = "adv_arieki_torden_plains_brannwaterrefinery",
+                FineTiles = Block(16, 24, 14, 22),
+                OffMeshLinks = new[]
+                {
+                    (new Vector3(-41.8f, 399.6f, -278.6f), new Vector3(-40.0f, 399.6f, -278.2f)),
+                    (new Vector3(-184.0f, 399.6f, -241.4f), new Vector3(-185.6f, 399.6f, -241.6f))
+                }
+            },
             // Velon Hollow (2136). Escort seams the 0.4 m cells leave open: across x = 102.4 and x = 0 and on the
             // hospital's ramp (the first seven, which the velon-hollow-seams-v2 profile rebuilt over the shipped
             // file), and seam G5 at (361.8, 34.6, 52.6) on the edge z = 51.2, which cut the hospital off from the
@@ -90,6 +110,10 @@ namespace Rasa.NavMesh
                 }
             }
         };
+
+        /// <summary>Every tile from (x0, z0) to (x1, z1), both included: a building's whole footprint.</summary>
+        private static (int X, int Z)[] Block(int x0, int x1, int z0, int z1) =>
+            Enumerable.Range(x0, x1 - x0 + 1).SelectMany(x => Enumerable.Range(z0, z1 - z0 + 1).Select(z => (x, z))).ToArray();
 
         public static MapNavFixes For(string map) =>
             All.FirstOrDefault(fix => string.Equals(fix.Map, map, StringComparison.OrdinalIgnoreCase));

@@ -166,6 +166,21 @@ namespace Rasa.Test.Missions.Plateau
                 Assert.AreEqual(PlateauMountainSpringToxinsV1.TowerRunningState, (uint)towers[index].StateId);
                 AssertStandsOnNavMesh(copy, towers[index].Position, 0.5f);
             }
+            // The charge at each tower's foot, where the bomb is set: on the ground, and out from under the tower's
+            // collision (6.8 m to either side of its middle), within the client's 6 m use range of where one stands.
+            var charges = Enumerable.Range(0, PlateauMountainSpringToxinsV1.Towers.Length)
+                .Select(index => SceneObject(harness, copy, MountainSpringToxins, PlateauMountainSpringToxinsV1.ChargeRole(index))).ToArray();
+            for (var index = 0; index < charges.Length; index++)
+            {
+                Assert.AreEqual(PlateauMountainSpringToxinsV1.ChargeClass, (uint)charges[index].EntityClassId);
+                Assert.AreEqual(PlateauMountainSpringToxinsV1.ChargeReadyState, (uint)charges[index].StateId);
+                AssertStandsOnNavMesh(copy, charges[index].Position, 0.5f);
+                var off = charges[index].Position - towers[index].Position;
+                Assert.IsGreaterThan(7.5f, System.Math.Abs(off.Z), $"charge {index + 1} out from under its tower");
+                Assert.IsLessThan(10f, new Vector2(off.X, off.Z).Length(), $"charge {index + 1} at its tower");
+            }
+            Use(harness, copy, charges[0]);
+            Assert.AreEqual(PlateauMountainSpringToxinsV1.ChargeReadyState, (uint)charges[0].StateId, "no charge before the source is found");
             Use(harness, copy, towers[0]);
             Assert.AreEqual(PlateauMountainSpringToxinsV1.TowerRunningState, (uint)towers[0].StateId, "no tower before the source is found");
             Assert.AreEqual(PlateauMountainSpringToxinsV1.Bombs, WildernessRanjaGorgeTests.Held(harness, PlateauMountainSpringToxinsV1.Bomb));
@@ -206,8 +221,11 @@ namespace Rasa.Test.Missions.Plateau
                 var objective = PlateauMountainSpringToxinsV1.Towers[index].Objective;
                 Assert.AreEqual(MissionObjectiveState.Incomplete, Objective(harness, MountainSpringToxins, objective));
                 Assert.AreEqual(MissionObjectiveState.Inactive, Objective(harness, MountainSpringToxins, PlateauMountainSpringToxinsV1.Overload));
-                Use(harness, copy, towers[index]);
+                Use(harness, copy, charges[index]);
                 Assert.AreEqual(PlateauMountainSpringToxinsV1.TowerDestroyedState, (uint)towers[index].StateId, $"tower {index + 1} blown");
+                Assert.AreEqual(PlateauMountainSpringToxinsV1.ChargeSetState, (uint)charges[index].StateId, $"charge {index + 1} set");
+                Assert.IsFalse(charges[index].IsEnabled, $"charge {index + 1} used once");
+                Assert.IsFalse(towers[index].IsEnabled, $"tower {index + 1} done");
                 Assert.AreEqual(MissionObjectiveState.Completed, Objective(harness, MountainSpringToxins, objective));
                 Assert.AreEqual(PlateauMountainSpringToxinsV1.Bombs - (uint)index - 1, WildernessRanjaGorgeTests.Held(harness, PlateauMountainSpringToxinsV1.Bomb));
             }

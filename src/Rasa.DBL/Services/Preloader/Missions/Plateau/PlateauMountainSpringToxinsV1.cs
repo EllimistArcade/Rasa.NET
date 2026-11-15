@@ -36,7 +36,12 @@ namespace Rasa.Services.Preloader.Missions.Plateau
     ///  - Russ gives four bombs on accept. The scene is bound to Velon Hollow (MissionSceneDefinition.BoundMapContextId):
     ///    its towers, engine and mixer come in the squad's copy when the player first arrives there, not on the
     ///    Plateau where Russ is. 1: done on walking up to the ponds before the outpost.
-    ///  - 2-5: each tower (personal, by the ponds, among pool 531225's Bane) is used: it takes a bomb and blows.
+    ///  - 2-5: each tower (personal, by the ponds, among pool 531225's Bane) is blown with a bomb set at the charge at its
+    ///    foot (UsableBombHumV01 7870, <see cref="Charges"/>): it takes a bomb, and the tower blows. The client measures a
+    ///    use to the model's DAMAGE1 point, and the tower has none (arch_bane_water_converter_tower_v01: HPS_VFX1-5,
+    ///    SPP_Arch, hps_lit2): it measures to the model's root instead, in the middle of a 40 by 16 m structure, out of
+    ///    the 6 m use range from anywhere a player would stand to use it (Mountain_spring_toxins_charges). The tower
+    ///    itself is still used the same way, for a scene that was started before the charges and has none.
     ///  - 6: open once the four are down (a hidden tally, objective <see cref="Tally"/>: 6's order in the
     ///    client is after them); the machine's controls, a Bane console (UsableTwoStateBaneConsoleSwitchV01 7468)
     ///    beside the engine in the control room, are used ("Use the controls to overload"): the engine blows and
@@ -90,6 +95,23 @@ namespace Rasa.Services.Preloader.Missions.Plateau
 
         public static string TowerRole(int index) => $"chemical-tower-{index + 1}";
 
+        /// <summary>The charge at a tower's foot, the bomb set at it: UsableBombHumV01 (prop_hum_bomb_acceptor_v01, its DAMAGE1 point at its foot).</summary>
+        public const uint ChargeClass = 7870, ChargeReadyState = 113, ChargeSetState = 115;   // USE_BOMB_STATE_DISARMED, _DETONATED
+
+        /// <summary>
+        /// Towers 1-4's charges, on the navmesh's ground 8.2 to 8.5 m out from the tower's middle, past the 6.8 m its
+        /// collision reaches to either side, on the side towards the ponds' road.
+        /// </summary>
+        public static readonly ScenePosition[] Charges =
+        {
+            new(299.7f, 35.01f, 36.8f),
+            new(340, 35.06f, 36.5f),
+            new(260, 31.73f, 28.5f),
+            new(330, 31.72f, -13.5f),
+        };
+
+        public static string ChargeRole(int index) => $"tower-charge-{index + 1}";
+
         public static void Up(MigrationBuilder migration)
         {
             var mission = new PlateauMissionDataV1(migration, MissionId, "Mountain Spring Toxins", 20823, Russ, Russ, Level);
@@ -132,6 +154,27 @@ namespace Rasa.Services.Preloader.Missions.Plateau
                 mission.Indicator(tower.Objective, tower.Objective, tower.At.X, tower.At.Y, tower.At.Z, ObjectRadius);
             mission.Indicator(Overload, Overload, ControlsAt.X, ControlsAt.Y, ControlsAt.Z, ObjectRadius);
 
+            mission.Evidence(1, MissionEvidenceSourceKind.Client, "native:missionobjective/1979",
+                "Native1 source 20906/20907, 2-5 towers 20908-20915, 6 machine 20916/20917, no counters, no objective " +
+                "conversation. Texts 20823-20827. Bomb class29316/template122243; towers 29148/29282/29286/29287 (states " +
+                "10000003, 10000001), engine 29146 (10000007, 10000008), mixer 29091 (usabledata). Outpost ponds and control room.");
+            mission.Evidence(2, MissionEvidenceSourceKind.Documentation, "https://tabularasa.fandom.com/wiki/Mountain_Spring_Toxins",
+                "Giver/receiver Outpost Cmdr. Russ, Wedge Rock Outpost; requirement Village Of The Damned; 90000XP, 6400 credits, " +
+                "Purifier Vest (Velon Hollow mission list).");
+            mission.Evidence(3, MissionEvidenceSourceKind.Reconstruction, "repository:PlateauMountainSpringToxinsV1",
+                "Level32. Four bombs on accept; 1 by the ponds before the outpost (area); 2-5 a personal tower each, used, takes " +
+                "a bomb, blows; 6 after the four (hidden tally 7): the controls (console7468) beside the engine used, the engine blows, the mixer stops (the engine itself is out of the client's use range: its DAMAGE1 point is 45 m up). " +
+                "Vests 122253-122256 without set module 900513 (no class set). Places are estimates. Indicators at the ponds, the towers and the controls.", 0.3);
+
+            mission.Enable(Scene());
+        }
+
+        /// <summary>
+        /// The mission's scene. Without <paramref name="charges"/>, as it was first written, with the towers used
+        /// themselves (Mountain_spring_toxins_charges puts the charges into a stored scene that is still as that was).
+        /// </summary>
+        public static MissionSceneDefinition Scene(bool charges = true)
+        {
             var scene = new MissionSceneDefinition
             {
                 Script = "data.sequence",
@@ -158,7 +201,7 @@ namespace Rasa.Services.Preloader.Missions.Plateau
                     InitialObjectState: TowerRunningState,
                     UseAction: new SceneObjectAction(MissionId, Towers[index].Objective, sequence, UseArgument));
                 scene.Sequences[0].World.Add(new EnsureActorIntent($"create-{role}", role));
-                scene.Sequences[sequence] = new SceneSequenceDefinition
+                var blow = new SceneSequenceDefinition
                 {
                     World =
                     {
@@ -172,6 +215,19 @@ namespace Rasa.Services.Preloader.Missions.Plateau
                         new SceneMissionSignal(MissionId, TowersDown, sequence)
                     }
                 };
+                scene.Sequences[sequence] = blow;
+
+                if (!charges)
+                    continue;
+
+                // The tower's charge, used to the same end; set once, by it or by the tower. A scene started before
+                // the charges has none, so the charge's own change is only made if it is there.
+                var charge = ChargeRole(index);
+                scene.Actors[charge] = new SceneActorDefinition(charge, SceneActorKind.Object, ChargeClass, Charges[index],
+                    InitialObjectState: ChargeReadyState,
+                    UseAction: new SceneObjectAction(MissionId, Towers[index].Objective, sequence, UseArgument));
+                scene.Sequences[0].World.Add(new EnsureActorIntent($"create-{charge}", charge));
+                blow.World.Add(new SetInteractionIntent($"done-{charge}", charge, false, ChargeSetState, IfPresent: true));
             }
 
             const uint overload = 11;
@@ -197,19 +253,7 @@ namespace Rasa.Services.Preloader.Missions.Plateau
                 Signals = { new SceneMissionSignal(MissionId, Overloaded, 1) }
             };
 
-            mission.Evidence(1, MissionEvidenceSourceKind.Client, "native:missionobjective/1979",
-                "Native1 source 20906/20907, 2-5 towers 20908-20915, 6 machine 20916/20917, no counters, no objective " +
-                "conversation. Texts 20823-20827. Bomb class29316/template122243; towers 29148/29282/29286/29287 (states " +
-                "10000003, 10000001), engine 29146 (10000007, 10000008), mixer 29091 (usabledata). Outpost ponds and control room.");
-            mission.Evidence(2, MissionEvidenceSourceKind.Documentation, "https://tabularasa.fandom.com/wiki/Mountain_Spring_Toxins",
-                "Giver/receiver Outpost Cmdr. Russ, Wedge Rock Outpost; requirement Village Of The Damned; 90000XP, 6400 credits, " +
-                "Purifier Vest (Velon Hollow mission list).");
-            mission.Evidence(3, MissionEvidenceSourceKind.Reconstruction, "repository:PlateauMountainSpringToxinsV1",
-                "Level32. Four bombs on accept; 1 by the ponds before the outpost (area); 2-5 a personal tower each, used, takes " +
-                "a bomb, blows; 6 after the four (hidden tally 7): the controls (console7468) beside the engine used, the engine blows, the mixer stops (the engine itself is out of the client's use range: its DAMAGE1 point is 45 m up). " +
-                "Vests 122253-122256 without set module 900513 (no class set). Places are estimates. Indicators at the ponds, the towers and the controls.", 0.3);
-
-            mission.Enable(scene);
+            return scene;
         }
 
         public static void Down(MigrationBuilder migration) => PlateauMissionDataV1.Remove(migration, MissionId);

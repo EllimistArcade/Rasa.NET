@@ -279,3 +279,34 @@ curl -H "X-API-Key: <key>" http://127.0.0.1:8104/lootpools
 curl -X POST -H "X-API-Key: <key>" -H "Content-Type: application/json" --data-binary @loot-tables.json http://127.0.0.1:8104/updatelootpools
 curl -X POST -H "X-API-Key: <key>" -H "Content-Type: application/json" --data-binary @creature_flags.json http://127.0.0.1:8104/updatemonsterflags
 ```
+
+## Checking a MySQL server's migrations
+
+`check-mysql-migrations.ps1` (Windows) and `check-mysql-migrations.sh` (Linux) check that every MySQL migration in the
+checked-out repository has been applied to the Auth, Char and World databases. They only read: each takes the
+migration ids from `src/Rasa.DBL/Migrations/MySqlAuth`, `MySqlChar` and `MySqlWorld` and compares them with the
+database's `__EFMigrationsHistory`. Pull first, so the checkout has the migrations you mean to check against.
+
+```
+powershell -ExecutionPolicy Bypass -File gametools\check-mysql-migrations.ps1
+gametools/check-mysql-migrations.sh
+```
+
+For each database they list what is **pending** (in the repository, not applied; flagged when it is older than the
+newest applied one, which a migration landed with an earlier timestamp is) and what is **unknown** (applied, not in
+this checkout: a newer branch's, or an id a later migration renamed). The exit code is 0 when all are applied, 1 when
+something is pending and 2 when a database could not be checked.
+
+The connection is read as the servers read it: `databasesettings.json`, then `databasesettings.env.json`, then
+`Databases__World__Password`-style environment variables. The settings folder is `out/game` if it has the file,
+else `src/Rasa.DBL`.
+
+| Windows | Linux | |
+|---|---|---|
+| `-SettingsDir <dir>` | `--settings <dir>` | The folder holding `databasesettings.json` (your server's own). |
+| `-MySql <path>` | `--mysql <path>` | The mysql client, if it is not on PATH (Windows also looks under Program Files\MySQL and \MariaDB). |
+| `-Databases World` | `--databases World` | Only some of Auth, Char and World. |
+| `-RepoRoot <dir>` | `--repo <dir>` | The checkout, if not run from it. |
+
+The Linux script reads the JSON files with `jq` or `python3`; settings given wholly as environment variables need
+neither.

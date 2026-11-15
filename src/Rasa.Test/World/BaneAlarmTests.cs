@@ -140,6 +140,12 @@ namespace Rasa.Test.World
                 Assert.AreSame(intruder.Player, alarm.Intruder);
                 Assert.AreEqual(UseObjectState.TsState1, light.State, "the light on");
                 Assert.AreEqual(UseObjectState.TsState1, siren.State, "the siren on");
+                var told = Told(intruder);
+                Assert.IsTrue(told.Any(entry => entry.EntityId == light.Object.EntityId &&
+                                                entry.Packet is Rasa.Packets.MapChannel.Server.UsePacket { CurState: UseObjectState.TsState1 }),
+                    "the light comes on by Use: the client plays its coming on");
+                Assert.IsFalse(told.Any(entry => (entry.EntityId == light.Object.EntityId || entry.EntityId == siren.Object.EntityId) &&
+                                                 entry.Packet is Rasa.Packets.MapChannel.Server.ForceStatePacket), "neither put in its state");
                 Assert.AreEqual(2, BaneArrivals.Pending(map), "two teleporters working");
                 Assert.AreEqual(2, pools[0].QueuedCreatures);
                 Assert.AreEqual(2, pools[1].QueuedCreatures);
@@ -290,6 +296,10 @@ namespace Rasa.Test.World
         {
             Id = id, MapContextId = Wilderness, ClassId = (uint)classId, PosX = x, PosY = 2, PosZ = z, Rotation = 0, State = 0, Usable = 0, Comment = "fixture"
         };
+
+        private static List<(ulong EntityId, Rasa.Packets.PythonPacket Packet)> Told(Client client) =>
+            WorldTestContext.Drain(client).Select(packet => packet.Message).OfType<Rasa.Packets.Protocol.CallMethodMessage>()
+                .Select(message => (message.EntityId, message.Packet)).ToList();
 
         private static Client Stand(WorldTestContext world, Vector3 at)
         {

@@ -63,6 +63,13 @@ namespace Rasa.Managers
         public const long NyllaBackMs = 30_000;
         public const int UseWindupMs = 2_000;
 
+        /// <summary>
+        /// The keypass scanner (UsableTwoStateBaneDoorKeypassScanner): waiting for a keypass in state 1 (TS_STATE_1, its
+        /// idle loop); a keypass shown, it plays its scan with its effect going to state 0 (TS_STATE_0), and is off
+        /// (usabledata animation and specialFX). It stood off and went to its waiting loop when used.
+        /// </summary>
+        public const UseObjectState ScannerWaiting = UseObjectState.TsState1, ScannerDone = UseObjectState.TsState0;
+
         /// <summary>One copy of the facility, as it stands.</summary>
         internal sealed class State
         {
@@ -142,7 +149,7 @@ namespace Rasa.Managers
             if (state.Field?.Field != null)
                 state.Field.Field.Sealed = true;
 
-            state.Scanner = Usable(map, "pravus:keypass-scanner", P.KeypassScannerClass, Ground(map, P.Scanner), P.ScannerYaw, UseObjectState.TsState0);
+            state.Scanner = Usable(map, "pravus:keypass-scanner", P.KeypassScannerClass, Ground(map, P.Scanner), P.ScannerYaw, ScannerWaiting);
             state.Capsule = PlacedDestructibles.PutDown(map, (EntityClasses)P.CapsuleClass, Ground(map, P.Capsule), 0, P.CapsuleHitPoints);
 
             for (var dish = 0; dish < P.Dishes.Length; dish++)
@@ -238,8 +245,8 @@ namespace Rasa.Managers
 
             KeepDown(state);
 
-            state.Scanner.StateId = UseObjectState.TsState1;
-            CellManager.Instance.CellCallMethod(map, state.Scanner, new UsePacket(by, UseObjectState.TsState1, 0));
+            state.Scanner.StateId = ScannerDone;
+            CellManager.Instance.CellCallMethod(map, state.Scanner, new UsePacket(by, ScannerDone, 0));
         }
 
         #endregion

@@ -233,6 +233,7 @@ namespace Rasa.Test.Missions
             Assert.IsTrue(ForceFields.StopsPlayer(gate));
             Assert.IsFalse(ForceFields.MayShoot(gate, harness.Client.Player), "shots do nothing to it");
             Assert.IsTrue(Vector3.Distance(scanner.Position, P.Gate) < 25);
+            Assert.AreEqual(PravusResearchFacility.ScannerWaiting, scanner.StateId, "waiting for a keypass: its idle loop");
 
             // Without the keypass the scanner refuses.
             Use(harness, scanner);
@@ -244,6 +245,7 @@ namespace Rasa.Test.Missions
             Assert.IsTrue(PravusResearchFacility.GateOpen(harness.Map));
             Assert.IsFalse(ForceFields.StopsPlayer(gate));
             Assert.AreEqual(1L, Held(harness, P.KeypassTemplate), "the keypass is not taken");
+            Assert.AreEqual(PravusResearchFacility.ScannerDone, scanner.StateId, "scanned: the scan played, and off");
 
             // And it stays open.
             _destructiblesNow += 3_600_000;

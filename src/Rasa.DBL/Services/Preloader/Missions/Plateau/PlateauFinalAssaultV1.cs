@@ -39,7 +39,9 @@ namespace Rasa.Services.Preloader.Missions.Plateau
     ///    down for good in the player's copy (TakeDownField). The core's use belongs to objective 2, as every
     ///    scene object's use belongs to its objective; the field, not the core, now keeps the player out.
     ///  - The core: a personal UsableTwoStateBaneIndustrialReactorRoomSunV01 (4231) in the control room,
-    ///    used once with the detonator (state 55 to 56, use argument 1: the client's usabledata gives none).
+    ///    used once with the detonator (state 56 to 55, use argument 1: the client's usabledata gives none). Its
+    ///    model's running sun is state 56 (TS_STATE_1), the change to 55 (TS_STATE_0) its destruction, with its
+    ///    effect, and 55 the destroyed core (usabledata animation and specialFX; FinalAssaultCore).
     ///  - The weapons as the Uncommon base templates of the bands that hold level 30, no manufacturer
     ///    ("Pulse" read as EMP, as The Beer Hunter's Pulse Disperser).
     ///  - Indicators (in the instance too): 1, 3 and 4 at their stations; 2 at the core and at the facility's service
@@ -56,7 +58,7 @@ namespace Rasa.Services.Preloader.Missions.Plateau
         public const string DetonatorKey = "sacrifice-detonator";
         public const uint StationHitPoints = 100, IntactState = 110, DestroyedState = 2;
         public const uint CoreClass = 4231;             // UsableTwoStateBaneIndustrialReactorRoomSunV01
-        public const uint UseArgument = 1, CoreReadyState = 55, CoreSetState = 56;
+        public const uint UseArgument = 1, CoreReadyState = 56, CoreSetState = 55;
         public const uint CoreSequence = 4;
         public const string CoreRole = "power-core";
 

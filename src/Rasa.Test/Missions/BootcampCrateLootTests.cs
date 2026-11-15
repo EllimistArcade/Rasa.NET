@@ -34,6 +34,10 @@ namespace Rasa.Test.Missions
             var packets = harness.Drain();
             Assert.AreEqual(1, packets.OfType<LootCorpsePacket>().Count(),
                 "Right-click must open the existing loot menu.");
+            Assert.IsTrue(packets.OfType<UsePacket>().Any(use => use.CurState == UseObjectState.TdStateOpened),
+                "The crate opens by Use, so the client plays its lid opening.");
+            Assert.IsFalse(packets.OfType<ForceStatePacket>().Any(force => force.State == UseObjectState.TdStateOpened),
+                "The crate is not put open.");
             var menuIndex = packets.ToList().FindIndex(packet => packet is LootCorpsePacket);
             var recoveryIndex = packets.ToList().FindIndex(packet =>
                 packet is PerformRecoveryPacket recovery &&

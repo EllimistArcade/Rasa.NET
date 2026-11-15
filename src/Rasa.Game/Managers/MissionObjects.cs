@@ -85,7 +85,26 @@ namespace Rasa.Managers
                     client.MissionObjects.Remove(obj.EntityId);
             }
 
-            return new UsableInfoPacket(enabled, obj.StateId, obj.NameOverrideId, windupTime, activation);
+            return new UsableInfoPacket(enabled, StateFor(client, obj), obj.NameOverrideId, windupTime, activation);
+        }
+
+        /// <summary>The state this client is shown the object in: open, a closed dispenser its player has searched (<see cref="OpenFor"/>).</summary>
+        public static UseObjectState StateFor(Client client, DynamicObject obj) =>
+            obj.StateId == UseObjectState.TdStateClosed && client?.Player != null && obj.OpenedFor.Contains(client.Player.Id)
+                ? UseObjectState.TdStateOpened
+                : obj.StateId;
+
+        /// <summary>
+        /// A closed treasure dispenser - a mission's corpse, bin or crate - searched by this player: it opens for them,
+        /// by Use, so their client plays its opening (a corpse searched, a crate's lid), and stays open to them. To
+        /// everyone else it is as it was: each searches it for themselves. Nothing for one open to everyone already.
+        /// </summary>
+        public static void OpenFor(Client client, DynamicObject obj)
+        {
+            if (client?.Player == null || obj == null || obj.StateId != UseObjectState.TdStateClosed || !obj.OpenedFor.Add(client.Player.Id))
+                return;
+
+            client.CallMethod(obj.EntityId, UsePacket.For(obj, client.Player.EntityId, UseObjectState.TdStateOpened, 0));
         }
 
         /// <summary>
@@ -125,7 +144,7 @@ namespace Rasa.Managers
                     if (!enabled)
                     {
                         client.MissionObjects.Remove(obj.EntityId);
-                        client.CallMethod(obj.EntityId, new UsableInfoPacket(false, obj.StateId, obj.NameOverrideId, obj.WindupTime, 0));
+                        client.CallMethod(obj.EntityId, new UsableInfoPacket(false, StateFor(client, obj), obj.NameOverrideId, obj.WindupTime, 0));
                         continue;
                     }
                 }
@@ -136,14 +155,14 @@ namespace Rasa.Managers
                 if (activation != 0 && !told)
                 {
                     client.MissionObjects.Add(obj.EntityId);
-                    client.CallMethod(obj.EntityId, new UsableInfoPacket(obj.IsEnabled, obj.StateId, obj.NameOverrideId, obj.WindupTime, activation));
+                    client.CallMethod(obj.EntityId, new UsableInfoPacket(obj.IsEnabled, StateFor(client, obj), obj.NameOverrideId, obj.WindupTime, activation));
                 }
                 else if (activation == 0 && told)
                 {
                     client.MissionObjects.Remove(obj.EntityId);
 
                     // Out of service takes the effect off; in service again without it.
-                    client.CallMethod(obj.EntityId, new UsableInfoPacket(false, obj.StateId, obj.NameOverrideId, obj.WindupTime, 0));
+                    client.CallMethod(obj.EntityId, new UsableInfoPacket(false, StateFor(client, obj), obj.NameOverrideId, obj.WindupTime, 0));
 
                     if (obj.IsEnabled)
                         client.CallMethod(obj.EntityId, new SetUsablePacket(true));

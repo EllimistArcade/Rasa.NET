@@ -325,6 +325,7 @@ namespace Rasa.Managers
                 case Kind.Crate:
                     state.Looted.Add((client.Player.Id, usable.Index));
                     Give(client, P.MedicalTemplate);
+                    MissionObjects.OpenFor(client, usable.Object);
                     break;
             }
         }

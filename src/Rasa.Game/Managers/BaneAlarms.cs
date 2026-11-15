@@ -308,7 +308,7 @@ namespace Rasa.Managers
             alarm.Sounding = true;
 
             foreach (var light in Lights(map))
-                PlacedUsables.SetState(light, UseObjectState.TsState1, 0);
+                PlacedUsables.Switch(light, UseObjectState.TsState1, 0);
         }
 
         /// <summary>The lights and sirens off.</summary>
@@ -317,7 +317,7 @@ namespace Rasa.Managers
             alarm.Sounding = false;
 
             foreach (var light in Lights(map))
-                PlacedUsables.SetState(light, UseObjectState.TsState0, 0);
+                PlacedUsables.Switch(light, UseObjectState.TsState0, 0);
         }
 
         /// <summary>The alarm lights and sirens placed on the map channel.</summary>

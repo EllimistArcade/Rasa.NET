@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Numerics;
@@ -509,7 +509,7 @@ namespace Rasa.Managers
                         actionData.SourceId = obj.EntityId;
 
                         client.CallMethod(client.Player.EntityId, new PerformWindupPacket(PerformType.ThreeArgs, packet.ActionId, packet.ActionArgId, obj.EntityId));
-                        client.CallMethod(packet.EntityId, new UsePacket(client.Player.EntityId, obj.StateId, (int)windupTime));
+                        client.CallMethod(packet.EntityId, new UsePacket(client.Player.EntityId, MissionObjects.StateFor(client, obj), (int)windupTime));
                         client.Player.MapChannel.PerformRecovery.Add(actionData);
 
                         if (!obj.TriggeredByPlayers.Contains(client))
@@ -1486,6 +1486,9 @@ namespace Rasa.Managers
                     }
 
                     SendUsableInfo(mapChannel, obj, obj.WindupTime == 0 ? DefaultScenarioUseWindupMs : obj.WindupTime);
+
+                    // A corpse, bin or crate a mission wants searched: open to the searcher.
+                    MissionObjects.OpenFor(client, obj);
 
                     (_missionManager ?? MissionApplication.Instance).RecordProgress(
                         client,

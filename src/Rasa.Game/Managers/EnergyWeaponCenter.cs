@@ -564,7 +564,7 @@ namespace Rasa.Managers
             var state = on ? UseObjectState.TsState1 : UseObjectState.TsState0;
 
             if (tube.Light != null && tube.Light.State != state)
-                PlacedUsables.SetState(tube.Light, state, 0);
+                PlacedUsables.Switch(tube.Light, state, 0);
         }
 
         /// <summary>The reactor fires down its tube: its fire, and the beam on every living player in it.</summary>

@@ -1089,10 +1089,12 @@ namespace Rasa.Managers
                     if (!TryGetLoot(client, packet.EntityId, out var loot))
                         return;
 
+                    // Opened by Use, not ForceState: the client plays the container's opening (a crate's
+                    // lid, a corpse searched) only for a Use.
                     if (loot.AttachedObject is { } obj && obj.StateId != UseObjectState.TdStateOpened)
                     {
                         obj.StateId = UseObjectState.TdStateOpened;
-                        CellManager.Instance.CellCallMethod(obj, new ForceStatePacket(obj.StateId, 0));
+                        CellManager.Instance.CellCallMethod(obj, UsePacket.For(obj, client.Player.EntityId, obj.StateId, 0));
                     }
 
                     // LootCorpse posts UI_SHOW_CORPSELOOT, which also opens the backpack even
@@ -1544,10 +1546,14 @@ namespace Rasa.Managers
                 loot.CurrentLooter = 0;
                 if (loot.AttachedObject is { } obj)
                 {
+                    // Not opened yet (taken without the window): it opens, as when its looting starts.
+                    var opening = obj.StateId != UseObjectState.TdStateOpened;
                     obj.StateId = UseObjectState.TdStateOpened;
                     obj.IsEnabled = false;
                     MissionApplication.TryPublish(
-                        () => CellManager.Instance.CellCallMethod(obj, new ForceStatePacket(obj.StateId, 0)),
+                        () => CellManager.Instance.CellCallMethod(obj, opening
+                            ? UsePacket.For(obj, client.Player.EntityId, obj.StateId, 0)
+                            : new ForceStatePacket(obj.StateId, 0)),
                         $"object {obj.EntityId} opened state");
                     MissionApplication.TryPublish(
                         () => DynamicObjectManager.Instance.SetScenarioInteractionEnabled(loot.Map, obj, false),

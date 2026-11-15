@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace Rasa.Structures
@@ -77,6 +77,12 @@ namespace Rasa.Structures
 
         public bool IsInWorld = false;
         public UseObjectState StateId = 0;
+
+        /// <summary>
+        /// The characters a closed treasure dispenser has been searched by and is shown open to (MissionObjects.OpenFor):
+        /// a mission's corpse, bin or crate is searched by each player for themselves, so it opens for them alone.
+        /// </summary>
+        public readonly HashSet<uint> OpenedFor = new();
         public bool IsEnabled = true;
         public uint WindupTime { get; internal set; }
         public uint ActivateMission { get; internal set; }

@@ -383,6 +383,7 @@ namespace Rasa.Managers
                     BlowCaveIn(map, state, usable, client, now);
                     break;
                 case Kind.FallenSoldier:
+                    MissionObjects.OpenFor(client, obj);
                     if (Wants(client.Player, D.WhatEvilLurks, 4) && Bombs(client) == 0)
                         GiveBombs(client, 1);
                     else
@@ -399,6 +400,9 @@ namespace Rasa.Managers
                     break;
                 case Kind.Statue:
                     FindStatue(map, state, usable, now);
+                    // Found for the copy: open to everyone.
+                    if (obj.StateId == UseObjectState.TdStateClosed)
+                        Show(map, obj, UseObjectState.TdStateOpened, client.Player.EntityId);
                     break;
                 case Kind.Reliquary:
                     if (!state.ReliquaryOpened)

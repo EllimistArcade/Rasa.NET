@@ -692,7 +692,7 @@ namespace Rasa.Managers
         private static void SetUsable(MapChannel map, uint id, UseObjectState state)
         {
             if (PlacedUsables.LiveOf(map, id) is { } live && live.State != state)
-                PlacedUsables.SetState(live, state, 0);
+                PlacedUsables.Switch(live, state, 0);
         }
 
         private static void Tell(MapChannel map, string text)

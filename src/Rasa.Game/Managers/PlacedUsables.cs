@@ -984,6 +984,23 @@ namespace Rasa.Managers
             CellManager.Instance.CellCallMethod(live.Map, live.Object, new ForceStatePacket(state, 0));
         }
 
+        /// <summary>
+        /// A script's change (BaneAlarms, TorcastraPrison, TimoraMines, EnergyWeaponCenter): the state, to everyone in
+        /// range, by Use, so the client plays the class's change - an alarm light coming on or going off, a switch
+        /// thrown - with its effect, where <see cref="SetState"/>'s ForceState only puts it there. Anything due is
+        /// forgotten.
+        /// </summary>
+        public static void Switch(Live live, UseObjectState state, ulong actorId)
+        {
+            if (live == null)
+                return;
+
+            live.ResetAt = 0;
+            live.FuseAt = 0;
+            live.Object.StateId = state;
+            CellManager.Instance.CellCallMethod(live.Map, live.Object, UsePacket.For(live.Object, actorId, state, 0));
+        }
+
         /// <summary>Its state, to everyone in range, by Use: each of these has the transition.</summary>
         private static void Show(Live live, UseObjectState state, ulong actorId)
         {

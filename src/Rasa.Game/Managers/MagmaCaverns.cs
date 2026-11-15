@@ -688,6 +688,7 @@ namespace Rasa.Managers
 
                 case Kind.Treasure:
                     state.TreasureTakenBy.Add(client.Player.Id);
+                    MissionObjects.OpenFor(client, obj);
                     ManifestationManager.Instance.GainCredits(client, TreasureCredits);
                     CommunicatorManager.Instance.SystemMessage(client, "You take your share of Ember's hoard.");
                     break;

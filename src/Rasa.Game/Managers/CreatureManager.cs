@@ -387,8 +387,12 @@ namespace Rasa.Managers
             // sitting there the next time it died to something that was not a player, and that
             // player would be handed a corpse they did not earn.
             // A turret or a pet another creature brought in is nothing to loot or harvest
-            // (CreatureSummons): only its experience is earned.
-            var summoned = CreatureSummons.IsSummoned(creature);
+            // (CreatureSummons): only its experience is earned. Nor is a creature made with no
+            // creature row of its own (DbId 0): an Amoeboid's spawn (AmoeboidVomit), a Juggernaut's
+            // black hole, a player's clone or bot. Ordinary loot is bound to creature rows, and on
+            // a map that requires a binding for every kill (OrdinaryLootCatalog.Resolve) the
+            // corpse's loot failed for it.
+            var summoned = CreatureSummons.IsSummoned(creature) || creature.DbId == 0;
             var earned = canReward && client != null && !summoned;
 
             creature.HarvestOwnerEntityId = earned ? client.Player.EntityId : 0;

@@ -555,6 +555,31 @@ namespace Rasa.Test.Missions.Wilderness
             rolls.AssertExhausted();
         }
 
+        /// <summary>
+        /// A creature with no creature row (DbId 0) killed on the Wilderness, which requires a loot binding for every
+        /// kill: an Amoeboid's spawn, a Juggernaut's black hole. Its experience is paid; there is no corpse loot to
+        /// make and nothing to harvest, rather than a failed loot generation on every such kill.
+        /// </summary>
+        [TestMethod]
+        public void ACreatureWithNoRowIsKilledWithNothingToLootOrHarvest()
+        {
+            using var harness = WildernessRuntimeTestHarness.Create();
+            Assert.ThrowsExactly<GameplayRejectionException>(() => OrdinaryLootCatalog.Current.Resolve(1220, 0),
+                "the Wilderness has no loot for a creature with no row");
+            var creature = Spawn(harness, 580023, 57);
+            creature.DbId = 0;   // as AmoeboidVomit.Birth makes one: no creature row
+            var experience = harness.Client.Player.Experience;
+
+            Hit(harness, creature, 100000);
+
+            Assert.AreEqual(CharacterState.Dead, creature.State);
+            Assert.IsTrue(harness.Client.Player.Experience > experience, "its experience is paid");
+            Assert.AreEqual(0UL, creature.CorpseLootEntityId, "no corpse loot");
+            Assert.IsFalse(harness.Map.LootDispensers.Values.Any(loot => ReferenceEquals(loot.Corpse, creature)));
+            Assert.AreEqual(0UL, creature.HarvestOwnerEntityId, "nobody's to harvest");
+            Assert.AreEqual(0, creature.HarvestAttemptsLeft);
+        }
+
         [TestMethod]
         public void RealMultiItemClaimRollsBackPersistenceFailureAndRetriesWithoutRerolling()
         {

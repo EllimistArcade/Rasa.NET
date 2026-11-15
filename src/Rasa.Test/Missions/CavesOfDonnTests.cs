@@ -600,6 +600,63 @@ namespace Rasa.Test.Missions
             Assert.IsTrue(harness.Client.Player.Missions[D.BuggedToDeath].Completeable);
         }
 
+        /// <summary>
+        /// The Chantry tunnel past its cave-in, from the cave-in to Undone Fairway, stays open with every egg cluster of
+        /// it shot down: a wreck (arch_forean_fithiceggcluster_v01_destroyed_v01) keeps a collision x -4.35 to 4.41,
+        /// z -3.10 to 4.20 about its spot, widened here by the agent's 0.6 m and a metre to spare. The cluster that stood
+        /// in the narrows at (-60, 14.39, -293) closed it (DonnEggClusterNarrows).
+        /// </summary>
+        [TestMethod]
+        public void NoWreckClosesTheChantryTunnel()
+        {
+            using var harness = Create();
+            var mesh = harness.Map.NavMesh;
+            const float step = 0.25f, x0 = -85, x1 = -25, z0 = -305, z1 = -275, floor = 16;
+            var open = new HashSet<(int, int)>();
+            for (var i = 0; i <= (int)((x1 - x0) / step); i++)
+                for (var j = 0; j <= (int)((z1 - z0) / step); j++)
+                {
+                    var at = new Vector3(x0 + i * step, floor, z0 + j * step);
+                    var near = mesh.Nearest(at);
+                    if (near.HasValue && Vector2.Distance(new(near.Value.X, near.Value.Z), new(at.X, at.Z)) < 0.05f &&
+                        Math.Abs(near.Value.Y - floor) < 6)
+                        open.Add((i, j));
+                }
+            // The tunnel's floor nearest the cave-in's east side and the way on to Undone Fairway, as a path takes it.
+            (int, int) Floor(float x, float z) => open.OrderBy(cell =>
+                Vector2.Distance(new(x0 + cell.Item1 * step, z0 + cell.Item2 * step), new(x, z))).First();
+            var from = Floor(-79.2f, -295.6f);
+            var to = Floor(-32f, -281.2f);
+
+            bool Passable(IEnumerable<(double X, double Z)> wrecks)
+            {
+                const float spare = 0.6f + 1f;
+                var shut = new HashSet<(int, int)>(open.Where(cell => wrecks.Any(w =>
+                {
+                    var x = x0 + cell.Item1 * step - w.X;
+                    var z = z0 + cell.Item2 * step - w.Z;
+                    return x >= -4.35 - spare && x <= 4.41 + spare && z >= -3.10 - spare && z <= 4.20 + spare;
+                })));
+                var seen = new HashSet<(int, int)> { from };
+                var queue = new Queue<(int, int)>(seen);
+                while (queue.Count > 0)
+                {
+                    var (i, j) = queue.Dequeue();
+                    if ((i, j) == to)
+                        return true;
+                    foreach (var next in new[] { (i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1) })
+                        if (open.Contains(next) && !shut.Contains(next) && seen.Add(next))
+                            queue.Enqueue(next);
+                }
+                return false;
+            }
+
+            Assert.IsTrue(open.Count > 1000, "the tunnel's floor");
+            Assert.IsTrue(Passable(Array.Empty<(double, double)>()), "the tunnel, open");
+            Assert.IsFalse(Passable(new[] { (DonnEggClusterNarrows.Was.X, DonnEggClusterNarrows.Was.Z) }), "the old spot closes it");
+            Assert.IsTrue(Passable(D.EggClusters.Select(egg => (egg.X, egg.Z))), "every wreck down, still open");
+        }
+
         [TestMethod]
         public void EverythingStandsOnTheNavmesh()
         {

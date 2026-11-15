@@ -299,13 +299,18 @@ namespace Rasa.Services.Preloader
         /// <summary>An egg cluster: its world_destructible row and where it stands.</summary>
         public sealed record EggCluster(uint Id, double X, double Y, double Z, string Comment);
 
-        /// <summary>Bugged to Death's six: two in each tunnel. Its event is its place in this list, from 1.</summary>
+        /// <summary>
+        /// Bugged to Death's six: two in each tunnel. Its event is its place in this list, from 1. Each stands where its
+        /// wreck leaves its tunnel open: a destroyed cluster (arch_forean_fithiceggcluster_v01_destroyed_v01) keeps a
+        /// collision 8.8 by 7.3 m and 3.9 m high, nearly twice the living one's. The Chantry tunnel's second stood at
+        /// (-60, 14.39, -293), in the narrows before Undone Fairway: shot down, it closed them (DonnEggClusterNarrows).
+        /// </summary>
         public static readonly EggCluster[] EggClusters =
         {
             new(566501, -200.29, 9.19, -188.82, "Spirit Cave"),
             new(566502, -221, 15.54, -238, "Spirit Cave's southern passage"),
             new(566503, -123, 16.08, -289, "the Chantry tunnel"),
-            new(566504, -60, 14.39, -293, "the Chantry tunnel, past the cave-in"),
+            new(566504, -42, 15.87, -287, "the Chantry tunnel, past the cave-in"),
             new(566505, 88.8, 19.59, -248, "the shrine tunnel"),
             new(566506, 106, 6.25, -259.6, "the shrine tunnel")
         };

@@ -55,7 +55,10 @@ namespace Rasa.Test.World
                 Assert.IsGreaterThan(NavMeshManager.UnstickPocketArea, nav.RegionArea(here) ?? 0f, $"{stuck}: no pocket, a floor to walk");
 
                 var destination = NavMeshManager.UnstickDestination(map, stuck).Value;
-                Assert.IsTrue(nav.IsUnderground(destination), $"{stuck}: still in the tunnel, not up on the shell: {destination}");
+                // In the tunnel: well under the shell and on the tunnel's own floor. Not the Underground flag: the fine
+                // grid's tunnel runs on under the cave-in, where the heightmap has a hole and nothing is over the floor.
+                Assert.IsTrue(destination.Y < shell.Y - 10f && nav.Reachable(here, destination) == true,
+                    $"{stuck}: still in the tunnel, not up on the shell: {destination}");
                 Assert.IsLessThan(2f, Math.Abs(destination.Y - here.Y), $"{stuck}: on its floor: {destination}");
                 Assert.IsLessThan(NavMeshManager.UnstickFarthest + 0.1f, Vector3.Distance(here, destination), $"{stuck}: {destination}");
             }

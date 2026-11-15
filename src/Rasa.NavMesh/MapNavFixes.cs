@@ -47,6 +47,49 @@ namespace Rasa.NavMesh
                     (new Vector3(-184.0f, 399.6f, -241.4f), new Vector3(-185.6f, 399.6f, -241.6f))
                 }
             },
+            // Caves of Donn (1506). The 0.4 m grid cut the caves into four parts at their narrows: the map link's
+            // arrival and 5 pools on one, 17, 11 and 7 pools on the others. The fine grid over the caves joins all 40.
+            new MapNavFixes
+            {
+                Map = "adv_foreas_concordia_wilderness_cavesofdonn02",
+                FineTiles = Block(1, 16, 1, 9)
+            },
+            // Devil's Den (1394). The arrival stood on a 79 m² part of its own and the den's 52 pools on pieces of
+            // 34 000, 33 000, 18 000 and 3 000 m²: 24 on the largest. The fine grid over the den puts the arrival
+            // and 45 of them on one.
+            new MapNavFixes
+            {
+                Map = "adv_foreas_concordia_palisades_devilsden",
+                FineTiles = Block(10, 22, 5, 29)
+            },
+            // Crater Lake Research Facility (1721). Three pools on a 5 400 m² part the 0.4 m grid split off; on the
+            // fine grid they are on the facility's own, with 21 others.
+            new MapNavFixes
+            {
+                Map = "adv_foreas_concordia_wilderness_clrf",
+                FineTiles = Block(3, 13, 5, 15)
+            },
+            // Purgas Station (1806): 5 of its 16 pools on the arrival's part, the others on parts of 20 000 and
+            // 11 000 m² and smaller; 13 on one on the fine grid. The station covers the whole map.
+            new MapNavFixes
+            {
+                Map = "adv_foreas_concordia_divide_purgasstation2",
+                Fine = true
+            },
+            // Rivasa Atta Colony (2112): 6 of its pools on a 63 000 m² part of their own; one with the arrival's on
+            // the fine grid (13 of 16). The colony's tunnels cover most of the map.
+            new MapNavFixes
+            {
+                Map = "adv_arieki_ligo_thunderhead_rivasaattacolony",
+                Fine = true
+            },
+            // Indra Caverns (2055): the arrival on a 320 m² part of its own and the caverns' pools on three; on the
+            // fine grid the arrival and 6 of the 7 on-mesh pools are on one. The caverns cover most of the map.
+            new MapNavFixes
+            {
+                Map = "adv_arieki_ligo_ashendesert_indracaverns",
+                Fine = true
+            },
             // Velon Hollow (2136). Escort seams the 0.4 m cells leave open: across x = 102.4 and x = 0 and on the
             // hospital's ramp (the first seven, which the velon-hollow-seams-v2 profile rebuilt over the shipped
             // file), and seam G5 at (361.8, 34.6, 52.6) on the edge z = 51.2, which cut the hospital off from the

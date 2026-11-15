@@ -17,7 +17,8 @@ namespace Rasa.Test.World
     /// <summary>
     /// The navmeshes Rasa.NavMesh's MapNavFixes rebuilt, against the shipped files: the parts of a map
     /// that no path joined before - which an escort, a guard or a creature after a player could not cross -
-    /// are joined, both ways, and a creature walks the Retread Caves' and the Brann Water Refinery's off-mesh links.
+    /// are joined, both ways, and a creature walks the Retread Caves' and the Brann Water Refinery's off-mesh links;
+    /// and six private instances the 0.4 m grid cut apart between their rooms are one walkable region each.
     /// </summary>
     [TestClass, DoNotParallelize]
     public class NavMeshJoinsTests
@@ -38,6 +39,24 @@ namespace Rasa.Test.World
             B.SkybridgeMiddle, B.NorthernQuarters, B.FalloraksAt, B.SouthernQuarters, B.IfilionAt, B.Greenhouse, B.KraxorAt,
             new Vector3(-284f, 399.6f, -259f), B.Arrival
         };
+        // Private instances the 0.4 m grid cut apart between their rooms, joined by the fine grid alone: the map link's
+        // arrival, then one pool from each part that held pools on the shipped mesh.
+        private static readonly Dictionary<string, Vector3[]> FineJoined = new()
+        {
+            ["adv_foreas_concordia_wilderness_cavesofdonn02"] = new Vector3[]
+                { new(-275.6f, 24.25f, -374.1f), new(-160.0f, 32.45f, -307.0f), new(-84.0f, 17.87f, -296.0f), new(150.0f, 1.51f, -302.0f) },
+            ["adv_foreas_concordia_palisades_devilsden"] = new Vector3[]
+                { new(16.8f, 122.93f, -398.2f), new(-80.3f, 169.96f, 327.5f), new(310.4f, 128.02f, 461.4f), new(14.6f, 107.49f, -376.5f), new(48.0f, 78.35f, -100.0f) },
+            ["adv_foreas_concordia_divide_purgasstation2"] = new Vector3[]
+                { new(87.8f, 65.93f, 221.6f), new(-268.9f, 32.13f, -147.2f), new(-159.5f, 8.53f, -218.2f) },
+            ["adv_arieki_ligo_thunderhead_rivasaattacolony"] = new Vector3[]
+                { new(36.8f, 152.40f, -453.9f), new(-60.8f, 65.36f, 392.2f) },
+            ["adv_foreas_concordia_wilderness_clrf"] = new Vector3[]
+                { new(8.5f, 140.24f, 158.3f), new(67.6f, 127.05f, -136.8f) },
+            ["adv_arieki_ligo_ashendesert_indracaverns"] = new Vector3[]
+                { new(-40.7f, 9.18f, -421.6f), new(-320.7f, 128.98f, -22.6f), new(-85.8f, 65.23f, -117.7f) }
+        };
+
         private static readonly (Vector3 East, Vector3 West)[] RefineryLinks =
         {
             (new Vector3(-40.0f, 399.6f, -278.2f), new Vector3(-41.8f, 399.6f, -278.6f)),
@@ -169,6 +188,36 @@ namespace Rasa.Test.World
             {
                 AssertRoute(nav, RefineryRoute[i - 1], RefineryRoute[i]);
                 AssertRoute(nav, RefineryRoute[i], RefineryRoute[i - 1]);
+            }
+        }
+
+        /// <summary>
+        /// Caves of Donn, Devil's Den, Purgas Station, Rivasa Atta Colony, the Crater Lake Research Facility and Indra
+        /// Caverns: from the arrival, each part that held pools is on the arrival's walkable region now, and back.
+        /// </summary>
+        [TestMethod]
+        [DataRow("adv_foreas_concordia_wilderness_cavesofdonn02")]
+        [DataRow("adv_foreas_concordia_palisades_devilsden")]
+        [DataRow("adv_foreas_concordia_divide_purgasstation2")]
+        [DataRow("adv_arieki_ligo_thunderhead_rivasaattacolony")]
+        [DataRow("adv_foreas_concordia_wilderness_clrf")]
+        [DataRow("adv_arieki_ligo_ashendesert_indracaverns")]
+        public void TheFineGridJoinsTheInstancesRooms(string map)
+        {
+            var nav = Query(map);
+            var places = FineJoined[map];
+            var arrival = nav.NearestInColumn(places[0], 4f);
+
+            Assert.IsNotNull(arrival, $"{map}: the arrival is on the mesh");
+            Assert.IsGreaterThan(1000f, nav.RegionArea(arrival.Value).Value, $"{map}: the arrival is not on a pocket of its own");
+
+            foreach (var place in places.Skip(1))
+            {
+                var at = nav.NearestInColumn(place, 4f);
+
+                Assert.IsNotNull(at, $"{map}: {place} is on the mesh");
+                Assert.AreEqual(true, nav.Reachable(arrival.Value, at.Value), $"{map}: the arrival reaches {place}");
+                Assert.AreEqual(true, nav.Reachable(at.Value, arrival.Value), $"{map}: {place} reaches the arrival");
             }
         }
 

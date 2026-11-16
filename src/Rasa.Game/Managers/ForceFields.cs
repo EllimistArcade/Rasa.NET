@@ -116,7 +116,11 @@ namespace Rasa.Managers
 
             // A door, not a field: arch_brann_corridor_door_01_4m_v01.geo's collision box (mesh01.glm),
             // for the Brann corridor jambs (ArchBrannCorridorJamb014mV01).
-            new FieldClass("branndoor", 10749, Kind.Door, new Vector3(-3.52f, 0.42f, -0.55f), new Vector3(3.52f, 6.12f, 0.55f), "Brann corridor door (UsableDoorBrannCorridor04mV01)")
+            new FieldClass("branndoor", 10749, Kind.Door, new Vector3(-3.52f, 0.42f, -0.55f), new Vector3(3.52f, 6.12f, 0.55f), "Brann corridor door (UsableDoorBrannCorridor04mV01)"),
+
+            // vfx_arch_eloh_door_v01.geo's collision box (mesh06.glm), in the opening of an Eloh door jamb
+            // (ArchElohDoorJamb): Guardian Prominence's Chamber of Eternity (GuardianProminence).
+            new FieldClass("elohdoor", 10605, Kind.Door, new Vector3(-3.21f, 0f, -0.1f), new Vector3(3.19f, 4.8f, 0.07f), "Eloh door (UsableDoorElohV01)")
         };
 
         /// <summary>The ownable field's hue for each side, 0-255 red, green, blue, alpha: ours.</summary>

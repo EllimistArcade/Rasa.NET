@@ -68,7 +68,8 @@ namespace Rasa.Test.Missions.Wilderness
             [2093] = ("adv_arieki_torden_plains_brannwaterrefinery", 209, new Vector3(-34.0558f, 423.6f, -78.5776f)),
             [1397] = ("adv_foreas_concordia_palisades_treebackcamp", 286, new Vector3(-337.4749f, 103.7221f, 398.6607f)),
             [2125] = ("adv_arieki_torden_mires_tahrendrabase", 96, new Vector3(196f, 120.6f, 10.5f)),
-            [1806] = ("adv_foreas_concordia_divide_purgasstation2", 298, new Vector3(87.8f, 65.93f, 221.6f))
+            [1806] = ("adv_foreas_concordia_divide_purgasstation2", 298, new Vector3(87.8f, 65.93f, 221.6f)),
+            [1416] = ("adv_foreas_concordia_wilderness_guardianprom", 232, new Vector3(163.4648f, 314.3326f, 200.2778f))
         };
 
         private uint _mapContextId = 1220;

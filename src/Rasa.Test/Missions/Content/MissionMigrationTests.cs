@@ -97,7 +97,7 @@ namespace Rasa.Test.Missions.Content
             // eight, Pravus Research's six, Torcastra Prison's five, Minos Caverns' four, Crater Lake's ten, the Energy Weapon Center's five,
             // Timora Mines' six and Stolen History, Magma Caverns' five, Warnet Caverns' eight, the Kardash Atta Colony's ten, the
             // Phanin Research Facility's seven, the Brann Water Refinery's five, the Treeback Camp's thirteen, Tahrendra Base's
-            // three, Purgas Station's five, the Plateau missions and the Valverde Pools missions.
+            // three, Purgas Station's five, Guardian Prominence's four, the Plateau missions and the Valverde Pools missions.
             var targets = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
                 .Concat(Rasa.Test.Missions.Plateau.PlateauMissionTests.MissionIds)
                 .Concat(Rasa.Test.Missions.Pools.PoolsMissionTests.MissionIds).ToArray();
@@ -121,7 +121,8 @@ namespace Rasa.Test.Missions.Content
                     .Concat(Rasa.Services.Preloader.TreebackCampContent.Missions)
                     .Concat(Rasa.Services.Preloader.TahrendraBaseContent.Missions)
                     .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.All)
-                    .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1.All).Distinct().ToArray(),
+                    .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1.All)
+                    .Concat(Rasa.Services.Preloader.GuardianProminenceContent.Missions).Distinct().ToArray(),
                 harness.WorldContext.MissionContentDefinitionEntries.Where(entry => entry.Enabled)
                     .Select(entry => entry.MissionId).ToArray());
             Assert.IsTrue(expected.All(id => harness.Manager.LoadedMissions[id].IsOperational));

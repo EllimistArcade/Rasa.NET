@@ -496,6 +496,9 @@ namespace Rasa.Managers
                     // Tahrendra Base's barracks, crates, teleporters, Warden Bots, Donnaway and the wormhole, in each copy of it.
                     Guard("TahrendraBase.Worker", mapChannel, () => TahrendraBase.Worker(mapChannel));
 
+                    // Guardian Prominence's jamming towers, the Chamber of Eternity's door, the Juggernauts and the reinforcements, in each copy of it.
+                    Guard("GuardianProminence.Worker", mapChannel, () => GuardianProminence.Worker(mapChannel));
+
                     // The Caves of Donn's story, in each copy of them.
                     Guard("CavesOfDonn.Worker", mapChannel, () => CavesOfDonn.Worker(mapChannel));
 

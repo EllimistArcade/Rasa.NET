@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Rasa.Managers
 {
@@ -14,10 +15,13 @@ namespace Rasa.Managers
     ///   Tomb Miasmas roam 16 m from it, inside their 18 m aggro range, and killed it again and again (to-fix #39).
     ///   It was made NEUTRAL for that, which let players kill it for experience every two seconds
     ///   (PlateauVogrenHologramFriendlyV1).
+    /// - Guardian Prominence's people who are not soldiers (GuardianProminenceContent.KeptFromCreatures): the Anands,
+    ///   Ranger Tomnel, Lieutenant Danchekker and Communications Officer Cronauer, with the Bane of the mountain all round.
     /// </summary>
     internal static class NpcsKeptFromCreatures
     {
-        private static readonly HashSet<uint> Kept = new() { PlateauVogrenNpcsV1.Hologram };
+        private static readonly HashSet<uint> Kept = new(new[] { PlateauVogrenNpcsV1.Hologram }
+            .Concat(Services.Preloader.GuardianProminenceContent.KeptFromCreatures));
 
         internal static bool Includes(uint creatureId) => Kept.Contains(creatureId);
 

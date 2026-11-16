@@ -126,6 +126,12 @@ namespace Rasa.Services.Preloader.Missions
                 ("required_mission_id", mission), ("required_mission_state", (byte)MissionState.Completed),
                 ("comment", $"Requires completed mission {mission}"));
 
+        /// <summary>Offered only from <paramref name="level"/> on (MissionPrerequisiteKind.PlayerLevelAtLeast).</summary>
+        public void LevelAtLeast(uint level, uint id = 1) =>
+            Insert("mission_prerequisite",
+                ("prerequisite_id", id), ("kind", (byte)MissionPrerequisiteKind.PlayerLevelAtLeast),
+                ("required_level", level), ("comment", $"Requires level {level}"));
+
         /// <summary>A reward item: its template, how many, and the module in its first slot (0 for none).</summary>
         public sealed record RewardItem(uint TemplateId, uint Quantity, uint Module = 0);
 

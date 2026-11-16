@@ -31,8 +31,8 @@ namespace Rasa.Test.Missions.Wilderness
             // Stolen History (TimoraMinesMissionsV1), Warnet Caverns' eight (WarnetCavernsMissions), the Kardash Atta
             // Colony's ten (KardashAttaColonyContent), the Phanin Research Facility's seven (PhaninResearchContent), the
             // Brann Water Refinery's five (BrannWaterRefineryContent), the Treeback Camp's thirteen (TreebackCampContent),
-            // Tahrendra Base's three (TahrendraBaseContent) and Purgas Station's five (PurgasStationMissionsV1,
-            // PurgasStationDepthsMissionsV1),
+            // Tahrendra Base's three (TahrendraBaseContent), Purgas Station's five (PurgasStationMissionsV1,
+            // PurgasStationDepthsMissionsV1) and Guardian Prominence's four (GuardianProminenceContent),
             // which are instances'. And the Plateau and Valverde Pools ones.
             var battlefields = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
                 .Concat(Plateau.PlateauMissionTests.MissionIds).Concat(Pools.PoolsMissionTests.MissionIds).ToArray();
@@ -53,7 +53,8 @@ namespace Rasa.Test.Missions.Wilderness
                 .Concat(Rasa.Services.Preloader.TreebackCampContent.Missions)
                 .Concat(Rasa.Services.Preloader.TahrendraBaseContent.Missions)
                 .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.All)
-                .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1.All).ToArray();
+                .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1.All)
+                .Concat(Rasa.Services.Preloader.GuardianProminenceContent.Missions).ToArray();
             CollectionAssert.AreEquivalent(expected.Concat(WildernessMissionCases.ProtectedBootcampMissionIds)
                     .Concat(battlefields).Concat(ojasa).Concat(donn).Concat(den).Concat(pravus).Concat(minos).Concat(craterLake).Concat(ewc).Concat(kardash).Concat(phanin).ToArray(),
                 enabled.Select(entry => entry.MissionId).ToArray());
@@ -86,10 +87,12 @@ namespace Rasa.Test.Missions.Wilderness
                     $"Native mission {id} must keep its evidence-backed boundary disposition.");
                 // A mission of another zone may be enabled with that zone's content (A Mystery Unearthed and
                 // Symbolism with the Plateau's), never as a Wilderness quest. The Final Assault (1167) is enabled
-                // with the Plateau's Temporal Chamber instance content.
+                // with the Plateau's Temporal Chamber instance content, The Fate Of The Callisto (706) with Guardian
+                // Prominence's (GuardianProminenceContent).
                 Assert.IsFalse(harness.World.MissionContentDefinitionEntries.Any(entry => entry.Enabled && entry.MissionId == id &&
                         !((disposition == WildernessDisposition.OtherZone || id == 1167U) &&
-                          entry.ContentRevision == Rasa.Services.Preloader.Missions.Plateau.PlateauMissionDataV1.Revision)),
+                          entry.ContentRevision == Rasa.Services.Preloader.Missions.Plateau.PlateauMissionDataV1.Revision) &&
+                        !(id == 706U && entry.ContentRevision == Rasa.Services.Preloader.GuardianProminenceContent.Revision)),
                     $"Excluded or conditional mission {id} must not become an ordinary enabled quest.");
             }
         }

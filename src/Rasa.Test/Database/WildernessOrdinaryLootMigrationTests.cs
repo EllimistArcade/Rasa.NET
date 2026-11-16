@@ -259,9 +259,10 @@ namespace Rasa.Test.Database
             // Twin_pillars_npcs adds.
             // Landing_zone_bane_occupation binds the private, sergeant and boss after the frozen
             // content migration. They are also required by the current runtime when bindings vanish.
+            // Guardian_prominence binds the three level 38 guards at the instance's entrance.
             CollectionAssert.AreEqual(RequiredCreatures.Append(ControlPointTurretLoot.Creature).Append(BaneMortars.LootCreature)
                 .Concat(TwinPillarsNpcs.LootedCreatures)
-                .Concat(LandingZoneOccupationCreatures).OrderBy(id => id).ToArray(), missing);
+                .Concat(LandingZoneOccupationCreatures).Append(GuardianProminenceContent.Soldier).OrderBy(id => id).ToArray(), missing);
             StringAssert.Contains(error.Message, "mission 682@");
             StringAssert.Contains(error.Message, "actor xanx-1, map 1220, creature 87");
             StringAssert.Contains(error.Message, "control point 3");
@@ -446,13 +447,15 @@ namespace Rasa.Test.Database
             rows.Groups.Where(row => row.ProfileKey.StartsWith("wilderness_v1_", StringComparison.Ordinal)),
             rows.Items.Where(row => row.ProfileKey.StartsWith("wilderness_v1_", StringComparison.Ordinal)),
             // Only the 36 bindings owned by the original frozen v1 migration. Later migrations
-            // (control-point turrets, mortars, Twin Pillars and Landing Zone occupation) add
-            // valid bindings that must remain installed, but are not part of this golden snapshot.
+            // (control-point turrets, mortars, Twin Pillars, Landing Zone occupation and Guardian
+            // Prominence's gate guards) add valid bindings that must remain installed, but are not
+            // part of this golden snapshot.
             rows.Bindings.Where(row => row.MapContextId == 1220 &&
                 !(row.MapContextId == ControlPointTurretLoot.Map && row.CreatureId == ControlPointTurretLoot.Creature) &&
                 !(row.MapContextId == BaneMortars.LootMap && row.CreatureId == BaneMortars.LootCreature) &&
                 !(row.MapContextId == TwinPillarsNpcs.Map && TwinPillarsNpcs.LootedCreatures.Contains(row.CreatureId)) &&
-                !(row.MapContextId == LandingZoneAssaultContent.MapId && LandingZoneOccupationCreatures.Contains(row.CreatureId))),
+                !(row.MapContextId == LandingZoneAssaultContent.MapId && LandingZoneOccupationCreatures.Contains(row.CreatureId)) &&
+                !(row.MapContextId == GuardianProminenceContent.Wilderness && row.CreatureId == GuardianProminenceContent.Soldier)),
             rows.MapPolicies.Where(row => row.MapContextId == 1220));
 
         private static string Serialize(OrdinaryLootContentSnapshot rows) => JsonSerializer.Serialize(rows);

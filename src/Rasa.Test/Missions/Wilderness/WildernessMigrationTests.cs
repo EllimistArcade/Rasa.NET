@@ -49,8 +49,8 @@ namespace Rasa.Test.Missions.Wilderness
         /// Magma Caverns' five (Magma_caverns), Warnet Caverns' eight (Warnet_caverns), the
         /// Kardash Atta Colony's ten (Kardash_atta_colony), the Phanin Research Facility's seven
         /// (Phanin_research), the Brann Water Refinery's five (Brann_water_refinery), the Treeback
-        /// Camp's thirteen (Treeback_camp), Tahrendra Base's three (Tahrendra_base) and Purgas Station's
-        /// five (Purgas_station_level_one, Purgas_station_lower_levels).
+        /// Camp's thirteen (Treeback_camp), Tahrendra Base's three (Tahrendra_base), Purgas Station's
+        /// five (Purgas_station_level_one, Purgas_station_lower_levels) and Guardian Prominence's four (Guardian_prominence).
         /// </summary>
         private static readonly uint[] LaterMissions = BattlefieldMissions.Concat(OjasaHiveContent.Missions)
             .Concat(CavesOfDonnContent.Missions).Concat(DevilsDenContent.Missions).Concat(PravusResearchContent.Missions)
@@ -60,7 +60,8 @@ namespace Rasa.Test.Missions.Wilderness
             .Concat(WarnetCavernsMissions.Missions)
             .Concat(KardashAttaColonyContent.Missions).Concat(PhaninResearchContent.Missions)
             .Concat(BrannWaterRefineryContent.Missions).Concat(TreebackCampContent.Missions).Concat(TahrendraBaseContent.Missions)
-            .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.All).Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1.All).ToArray();
+            .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.All).Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1.All)
+            .Concat(GuardianProminenceContent.Missions).ToArray();
 
         [TestMethod]
         [DataRow(typeof(SqliteWorldContext))]
@@ -618,7 +619,7 @@ namespace Rasa.Test.Missions.Wilderness
         /// <summary>
         /// The evidence of Bootcamp and the Wilderness missions. The battlefields' missions, the
         /// Ojasa hive's, the Caves of Donn's, the Devil's Den's, Pravus Research's, Torcastra's,
-        /// Minos Caverns', Crater Lake's, the Energy Weapon Center's, Timora Mines', Magma Caverns', Warnet Caverns', the Kardash Atta Colony's, the Phanin Research Facility's, the Brann Water Refinery's, the Treeback Camp's, Tahrendra Base's, Purgas Station's and the Plateau's have theirs from migrations dated after these, which come and go with a
+        /// Minos Caverns', Crater Lake's, the Energy Weapon Center's, Timora Mines', Magma Caverns', Warnet Caverns', the Kardash Atta Colony's, the Phanin Research Facility's, the Brann Water Refinery's, the Treeback Camp's, Tahrendra Base's, Purgas Station's, Guardian Prominence's and the Plateau's have theirs from migrations dated after these, which come and go with a
         /// rollback to one of them.
         /// </summary>
         private static string[] EvidenceRows(WildernessRuntimeTestHarness harness) =>
@@ -638,6 +639,7 @@ namespace Rasa.Test.Missions.Wilderness
                     entry.ContentRevision != TreebackCampContent.Revision &&
                     entry.ContentRevision != TahrendraBaseContent.Revision &&
                     entry.ContentRevision != Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.Revision &&
+                    entry.ContentRevision != GuardianProminenceContent.Revision &&
                     entry.ContentRevision != PlateauMissionDataV1.Revision &&
                     entry.ContentRevision != Rasa.Services.Preloader.Missions.Pools.PoolsMissionDataV1.Revision)
                 // Wilderness_reward_consumables and Wilderness_reward_modules, dated after the
@@ -663,7 +665,8 @@ namespace Rasa.Test.Missions.Wilderness
             // (MagmaCavernsTests), Warnet Caverns' (WarnetCavernsTests), the Kardash Atta Colony's
             // (KardashAttaColonyTests), the Phanin Research Facility's (PhaninResearchTests), the Brann Water
             // Refinery's (BrannWaterRefineryTests), the Treeback Camp's (TreebackCampTests), Tahrendra Base's
-            // (TahrendraBaseTests) and Purgas Station's (PurgasStationTests, PurgasStationDepthsTests).
+            // (TahrendraBaseTests), Purgas Station's (PurgasStationTests, PurgasStationDepthsTests) and
+            // Guardian Prominence's (GuardianProminenceTests).
             var rows = harness.World.MissionIndicatorEntries.AsNoTracking().AsEnumerable()
                 .Where(row => row.ContentRevision != OjasaHiveContent.Revision && row.ContentRevision != CavesOfDonnContent.Revision &&
                     row.ContentRevision != DevilsDenContent.Revision && row.ContentRevision != PravusResearchContent.Revision &&
@@ -678,7 +681,8 @@ namespace Rasa.Test.Missions.Wilderness
                     row.ContentRevision != BrannWaterRefineryContent.Revision &&
                     row.ContentRevision != TreebackCampContent.Revision &&
                     row.ContentRevision != TahrendraBaseContent.Revision &&
-                    row.ContentRevision != Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.Revision).ToArray();
+                    row.ContentRevision != Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.Revision &&
+                    row.ContentRevision != GuardianProminenceContent.Revision).ToArray();
             var bootcamp = rows.Where(row => row.ContentRevision == "deployment_11").ToArray();
             var wilderness = rows.Where(row => row.ContentRevision == WildernessMissionDataV1.Revision).ToArray();
             var plateau = rows.Where(row => row.ContentRevision == PlateauMissionDataV1.Revision).ToArray();

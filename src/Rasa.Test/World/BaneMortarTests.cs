@@ -107,6 +107,9 @@ namespace Rasa.Test.World
         /// <summary>
         /// The mortars on their pads. The Devil's Den's two are its level 20 Bane Light Howitzers
         /// once Devils_den has run (DevilsDenContent), as the rest of its pools are its own rows.
+        /// Purgas Station's seven are the Thunderhead's level 43 mortar once Purgas_station_level_one
+        /// has run (PurgasStationContent), the station being for squads in their 40s; Tahrendra Base's
+        /// its own Bane Mortar once Tahrendra_base has (TahrendraBaseContent.Recast).
         /// </summary>
         private static void AssertMortars(WorldContext world, bool denRetuned)
         {
@@ -135,7 +138,9 @@ namespace Rasa.Test.World
 
                 Assert.IsTrue(maps.Contains(pool.MapContextId), $"pool {pool.Id} on a map of the world");
                 Assert.AreEqual((mortar.Map, mortar.X, mortar.Y, mortar.Z, mortar.Rotation), (pool.MapContextId, (double)pool.PosX, (double)pool.PosY, (double)pool.PosZ, (double)pool.Rotation), $"pool {pool.Id}");
-                var creature = denRetuned && pool.MapContextId == DevilsDenContent.Den ? DevilsDenContent.Howitzer : zone.Creature;
+                var creature = denRetuned && pool.MapContextId == DevilsDenContent.Den ? DevilsDenContent.Howitzer
+                    : denRetuned && pool.MapContextId == PurgasStationContent.Map ? PurgasStationContent.StationMortar
+                    : denRetuned && pool.MapContextId == TahrendraBaseContent.Tahrendra ? TahrendraBaseContent.Mortar : zone.Creature;
                 Assert.AreEqual((creature, (byte)1, (byte)1, 0u), (pool.Creature1Id, pool.Creature1MinCount, pool.Creature1MaxCount, pool.Creature2Id), $"pool {pool.Id}: one mortar");
                 Assert.AreEqual(0.0, pool.Radius, $"pool {pool.Id}: where its pad is");
                 Assert.AreEqual(BaneMortars.Respawn, pool.RespawnTime);

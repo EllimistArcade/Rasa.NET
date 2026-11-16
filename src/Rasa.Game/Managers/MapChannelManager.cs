@@ -519,6 +519,9 @@ namespace Rasa.Managers
 
                     // Timora Mines' drills, fuel lakes, security, escort and ambush, in each copy of it.
                     Guard("TimoraMines.Worker", mapChannel, () => TimoraMines.Worker(mapChannel));
+
+                    // Purgas Station's holding room, waypoint, Taylor's crew and Deathtribe, in each copy of it.
+                    Guard("PurgasStation.Worker", mapChannel, () => PurgasStation.Worker(mapChannel));
                     Guard("NpcSquads.Worker", mapChannel, () => NpcSquads.Worker(mapChannel));
 
                     // Players held in a corner the client's collision will not let them out of are taken out.

@@ -30,8 +30,8 @@ namespace Rasa.Test.Missions.Wilderness
             // (CraterLakeContent), the Energy Weapon Center's five (EnergyWeaponCenterContent), Timora Mines' six and
             // Stolen History (TimoraMinesMissionsV1), Warnet Caverns' eight (WarnetCavernsMissions), the Kardash Atta
             // Colony's ten (KardashAttaColonyContent), the Phanin Research Facility's seven (PhaninResearchContent), the
-            // Brann Water Refinery's five (BrannWaterRefineryContent), the Treeback Camp's thirteen (TreebackCampContent)
-            // and Tahrendra Base's three (TahrendraBaseContent),
+            // Brann Water Refinery's five (BrannWaterRefineryContent), the Treeback Camp's thirteen (TreebackCampContent),
+            // Tahrendra Base's three (TahrendraBaseContent) and Purgas Station's three (PurgasStationMissionsV1),
             // which are instances'. And the Plateau and Valverde Pools ones.
             var battlefields = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
                 .Concat(Plateau.PlateauMissionTests.MissionIds).Concat(Pools.PoolsMissionTests.MissionIds).ToArray();
@@ -50,7 +50,8 @@ namespace Rasa.Test.Missions.Wilderness
             var phanin = Rasa.Services.Preloader.PhaninResearchContent.Missions
                 .Concat(Rasa.Services.Preloader.BrannWaterRefineryContent.Missions)
                 .Concat(Rasa.Services.Preloader.TreebackCampContent.Missions)
-                .Concat(Rasa.Services.Preloader.TahrendraBaseContent.Missions).ToArray();
+                .Concat(Rasa.Services.Preloader.TahrendraBaseContent.Missions)
+                .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.All).ToArray();
             CollectionAssert.AreEquivalent(expected.Concat(WildernessMissionCases.ProtectedBootcampMissionIds)
                     .Concat(battlefields).Concat(ojasa).Concat(donn).Concat(den).Concat(pravus).Concat(minos).Concat(craterLake).Concat(ewc).Concat(kardash).Concat(phanin).ToArray(),
                 enabled.Select(entry => entry.MissionId).ToArray());

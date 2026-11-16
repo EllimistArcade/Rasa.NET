@@ -636,6 +636,10 @@ namespace Rasa.Managers
             if (TimoraMines.RefusalOf(client, live) is { } timora)
                 return timora;
 
+            // Purgas Station's Force Field Controller and Waypoint Activation Terminal (PurgasStation).
+            if (PurgasStation.RefusalOf(client, live) is { } purgas)
+                return purgas;
+
             // Warnet Caverns' lure stand and metal container wait on their missions (WarnetCaverns).
             if (WarnetCaverns.RefusalOf(client, live) is { } warnet)
                 return warnet;
@@ -781,6 +785,9 @@ namespace Rasa.Managers
 
             // What it does in Timora Mines (TimoraMines).
             TimoraMines.Used(client, live, next);
+
+            // And in Purgas Station (PurgasStation): the holding room's field, the waypoint.
+            PurgasStation.Used(client, live, next);
 
             // And in Warnet Caverns (WarnetCaverns): the Queen Lure placed.
             WarnetCaverns.Used(client, live, next);

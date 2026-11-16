@@ -293,7 +293,7 @@ namespace Rasa.Managers
             RegisterCommand(".torcastra", GmLevel.GameMaster, TorcastraCommand, "alarm | strike | secure <n|all> | gate | unlock <n|all> | reset");
             RegisterCommand(".ewc", GmLevel.GameMaster, EnergyWeaponCenterCommand, "generator | invert | tanks | casso");
             RegisterCommand(".timora", GmLevel.GameMaster, TimoraCommand, "drills | pumps | security | disarm | burn | pump | reset");
-            RegisterCommand(".purgas", GmLevel.GameMaster, PurgasCommand, "release | crew | waypoint | deathtribe <n|all>");
+            RegisterCommand(".purgas", GmLevel.GameMaster, PurgasCommand, "release | crew | waypoint | deathtribe | basins | pumps <n|all> | pedestals | pod | overdrive | trip <n|all>");
             RegisterCommand(".warnet", GmLevel.GameMaster, WarnetCommand, "way | camp | lure | station | reset");
             RegisterCommand(".squad", GmLevel.GameMaster, SquadCommand, "[types|paths|spawns|export] | type ... | path ... | point [pause] | spawn ...");
             RegisterCommand(".worldcontainer", GmLevel.GameMaster, WorldContainerCommand, "action", "arg1", "arg2", "arg3", "arg4", "arg5", "arg6");

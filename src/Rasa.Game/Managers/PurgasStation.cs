@@ -14,6 +14,9 @@ namespace Rasa.Managers
     using P = Services.Preloader.PurgasStationContent;
     using M = Services.Preloader.Missions.Purgas.PurgasStationMissionsV1;
     using E = Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.Events;
+    using D = Services.Preloader.PurgasStationDepthsContent;
+    using L = Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1;
+    using LE = Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1.Events;
 
     /// <summary>
     /// What Purgas Station's top floor does, in each copy of it (map 1806, a squad instance), on what
@@ -35,6 +38,21 @@ namespace Rasa.Managers
     ///    explored the facility further.
     ///  - The five Thrax Deathtribe Soldiers: each killed counts for the copy, and goes to everyone
     ///    in it with Chain Reaction - who is offered it by radio once one is dead.
+    ///
+    /// And below it (PurgasStationDepthsContent, PurgasStationDepthsMissionsV1):
+    ///
+    ///  - The seven fuel basins and the reactor's four fuel pumps: each shot down stays down in the copy
+    ///    and counts for everyone in it with A Means to an End, or Reactor Overload. The stabilization
+    ///    module's control, worked by one whose Reactor Overload waits on it, overdrives the reactor.
+    ///    A Means to an End is offered by radio here once Off Grid is done; Reactor Overload once A
+    ///    Means to an End is.
+    ///  - The pedestal room. Its five pedestals pressed in the order 1 3 4 2 5 take the field across its
+    ///    east doorway down for good; any other press puts them all out and calls the room's Bane
+    ///    security. Past it the sleeping pods: the live one shot open lets the second Thrax Deathtribe
+    ///    Soldier out.
+    ///  - The trip wires. A living player crossing one's beams - on the floor, a foot below the beam;
+    ///    a stack, at any height - trips it: its beams go out and its Bane come to it. It is set again
+    ///    <see cref="WireRearmMs"/> after, once what it called is dead.
     ///
     /// What the world has done goes to every player in the copy whose mission is waiting on it, once
     /// a second, so a player who takes a mission up later - or joins the squad - is caught up. Kept by
@@ -59,6 +77,17 @@ namespace Rasa.Managers
         /// <summary>How long before a mission is offered again to someone who did not take it.</summary>
         public const long OfferAgainMs = 60_000;
 
+        /// <summary>How long a tripped wire stays out, at the least, before it is set again.</summary>
+        public const long WireRearmMs = 60_000;
+
+        /// <summary>How far over a floor beam a foot has to be to clear it: a jump's, not a step's.</summary>
+        public const float BeamClearance = 0.35f;
+
+        /// <summary>The longest step between two looks that is walked or run rather than a teleport.</summary>
+        public const float LongestStep = 15f;
+
+        public enum WirePhase { Armed, Tripped }
+
         public sealed class State
         {
             internal bool Set;
@@ -67,6 +96,17 @@ namespace Rasa.Managers
             public bool CrewCalled { get; internal set; }
             public bool[] DeathtribeDown { get; } = new bool[P.DeathtribeSpots.Length];
 
+            public bool[] BasinsDown { get; } = new bool[D.Basins.Length];
+            public bool[] PumpsDown { get; } = new bool[D.ReactorPumps.Length];
+            public bool Overdriven { get; internal set; }
+            public bool PedestalsSolved { get; internal set; }
+            public List<uint> Pressed { get; } = new();
+            public bool PodOpened { get; internal set; }
+            public WirePhase[] Wires { get; } = new WirePhase[D.Wires.Length];
+            internal readonly long[] TrippedAt = new long[D.Wires.Length];
+
+            internal readonly Dictionary<uint, Vector3> LastAt = new();
+            internal readonly HashSet<uint> OneShot = new();
             internal readonly HashSet<uint> SeenAlive = new();
             internal readonly HashSet<string> Told = new();
             internal readonly Dictionary<(uint Character, uint Mission), long> OfferedAt = new();
@@ -104,7 +144,11 @@ namespace Rasa.Managers
             var members = Members(map);
 
             Arrivals(state, members);
+            TripWires(map, state, members, now);
             WatchWorld(map, state);
+            WatchDepths(map, state);
+            Rearm(map, state, now);
+            OneShots(map, state);
 
             if (now >= state.NextCatchUpAt)
             {
@@ -120,6 +164,9 @@ namespace Rasa.Managers
             // A row's sealed field takes nothing from shots; the controller is what drops it.
             if (PlacedDestructibles.LiveOf(map, P.CellField)?.Field is { } field)
                 field.Sealed = true;
+
+            if (PlacedDestructibles.LiveOf(map, D.PodField)?.Field is { } podField)
+                podField.Sealed = true;
         }
 
         /// <summary>Who has come up to the holding room, the CommLink, the far side.</summary>
@@ -216,11 +263,30 @@ namespace Rasa.Managers
                         if (state.DeathtribeDown[n - 1])
                             Emit(client, M.ChainReaction, E.Deathtribe, n, once: true, state);
 
+                if (Wants(player, L.MeansToAnEnd, 1))
+                    for (uint n = 1; n <= state.BasinsDown.Length; n++)
+                        if (state.BasinsDown[n - 1])
+                            Emit(client, L.MeansToAnEnd, LE.Basins, n, once: true, state);
+
+                if (Wants(player, L.ReactorOverload, 1))
+                    for (uint n = 1; n <= state.PumpsDown.Length; n++)
+                        if (state.PumpsDown[n - 1])
+                            Emit(client, L.ReactorOverload, LE.Pumps, n, once: true, state);
+
+                if (state.Overdriven && Wants(player, L.ReactorOverload, 2))
+                    Emit(client, L.ReactorOverload, LE.Module, LE.Overdriven, once: true, state);
+
                 if (anyDeathtribe)
                     Offer(client, state, now, M.ChainReaction, M.ChainReactionOfferKey);
 
                 if (Done(player, M.NewPlanOfAttack))
                     Offer(client, state, now, M.OffGrid, M.OffGridOfferKey);
+
+                if (Done(player, M.OffGrid))
+                    Offer(client, state, now, L.MeansToAnEnd, L.MeansToAnEndOfferKey);
+
+                if (Done(player, L.MeansToAnEnd))
+                    Offer(client, state, now, L.ReactorOverload, L.ReactorOverloadOfferKey);
             }
         }
 
@@ -290,6 +356,204 @@ namespace Rasa.Managers
 
         #endregion
 
+        #region Below: the basins, the reactor, the pods
+
+        /// <summary>The basins, the reactor's pumps, the sleeping pods: what has been shot down stays down.</summary>
+        private static void WatchDepths(MapChannel map, State state)
+        {
+            for (uint n = 1; n <= state.BasinsDown.Length; n++)
+                if (!state.BasinsDown[n - 1] && Down(map, D.BasinId(n)))
+                {
+                    state.BasinsDown[n - 1] = true;
+                    Tell(map, $"A fuel basin is shut down: {state.BasinsDown.Count(down => down)} of {state.BasinsDown.Length}.");
+                }
+
+            for (uint n = 1; n <= state.PumpsDown.Length; n++)
+                if (!state.PumpsDown[n - 1] && Down(map, D.ReactorPumpId(n)))
+                {
+                    state.PumpsDown[n - 1] = true;
+                    Tell(map, $"A reactor fuel pump is destroyed: {state.PumpsDown.Count(down => down)} of {state.PumpsDown.Length}.");
+                }
+
+            for (uint n = 1; n <= D.Pods.Length; n++)
+                if (Down(map, D.PodId(n)) && n == D.LivePod && !state.PodOpened)
+                    OpenPod(map, state);
+        }
+
+        /// <summary>Whether a placed destructible is down; if it is, it is kept down for the copy.</summary>
+        private static bool Down(MapChannel map, uint id)
+        {
+            if (PlacedDestructibles.LiveOf(map, id) is not { IsDown: true } live)
+                return false;
+
+            live.RespawnAt = long.MaxValue;
+            return true;
+        }
+
+        /// <summary>The live pod open: the second Deathtribe out of it.</summary>
+        public static void OpenPod(MapChannel map, State state)
+        {
+            if (state.PodOpened)
+                return;
+
+            state.PodOpened = true;
+            WakeOnce(map, state, D.PodDeathtribePool);
+            Tell(map, "A sleeping pod breaks open: a Thrax Deathtribe Soldier climbs out!");
+        }
+
+        /// <summary>The stabilization module overdriven: the reactor goes critical.</summary>
+        public static void Overdrive(MapChannel map, State state)
+        {
+            if (state.Overdriven)
+                return;
+
+            state.Overdriven = true;
+            SetUsable(map, D.StabilizationModule, UseObjectState.TsState1);
+            Tell(map, "The stabilization module is overdriven: the reactor is going critical!");
+        }
+
+        #endregion
+
+        #region The pedestal room
+
+        /// <summary>A pedestal pressed: the next of the order, or the room's security and a fresh start.</summary>
+        private static void Press(MapChannel map, State state, uint pedestal)
+        {
+            if (state.PedestalsSolved)
+                return;
+
+            if (!state.Pressed.Contains(pedestal) && D.PedestalOrder[state.Pressed.Count] == pedestal)
+            {
+                state.Pressed.Add(pedestal);
+                SetUsable(map, D.PedestalId(pedestal), UseObjectState.TsState1);
+
+                if (state.Pressed.Count == D.PedestalOrder.Length)
+                    SolvePedestals(map, state, null);
+
+                return;
+            }
+
+            state.Pressed.Clear();
+            for (uint n = 1; n <= D.PedestalOrder.Length; n++)
+                SetUsable(map, D.PedestalId(n), UseObjectState.TsState0);
+
+            WakeOnce(map, state, D.PedestalSecurityPool);
+            Tell(map, "The pedestals go dark: Bane security is on its way.");
+        }
+
+        /// <summary>The order pressed: the field across the pedestal room's east doorway down for good in this copy.</summary>
+        public static void SolvePedestals(MapChannel map, State state, Manifestation by)
+        {
+            if (state.PedestalsSolved)
+                return;
+
+            state.PedestalsSolved = true;
+            for (uint n = 1; n <= D.PedestalOrder.Length; n++)
+                SetUsable(map, D.PedestalId(n), UseObjectState.TsState1);
+
+            if (PlacedDestructibles.LiveOf(map, D.PodField) is { } live && live.Field is { } field)
+            {
+                field.Sealed = false;
+
+                if (!field.IsDestroyed)
+                    ForceFields.Damage(field, field.Health, by?.EntityId ?? 0);
+
+                live.RespawnAt = long.MaxValue;
+            }
+
+            Tell(map, "The pedestals hum together: the force field ahead is down.");
+        }
+
+        #endregion
+
+        #region The trip wires
+
+        private static void TripWires(MapChannel map, State state, List<Client> members, long now)
+        {
+            foreach (var client in members)
+            {
+                var player = client.Player;
+                var at = player.Position;
+
+                // A step longer than any run between two looks is a teleport, a respawn or a waypoint: no crossing.
+                if (state.LastAt.TryGetValue(player.Id, out var was) && Vector3.Distance(was, at) <= LongestStep)
+                    for (var i = 0; i < D.Wires.Length; i++)
+                        if (state.Wires[i] == WirePhase.Armed && Crosses(D.Wires[i], was, at))
+                            Trip(map, state, i, now);
+
+                state.LastAt[player.Id] = at;
+            }
+        }
+
+        /// <summary>
+        /// Whether a step from one point to the next crosses one of a wire's beams: where the step meets the
+        /// beam's line, within its span and its floor's reach, and - on a floor wire a jump clears - with the
+        /// foot under the beam.
+        /// </summary>
+        public static bool Crosses(D.Wire wire, Vector3 from, Vector3 to)
+        {
+            for (var beam = 0; beam < Math.Max(wire.Lines.Length, wire.Heights.Length); beam++)
+            {
+                var line = (float)wire.Lines[Math.Min(beam, wire.Lines.Length - 1)];
+                var height = (float)wire.Heights[Math.Min(beam, wire.Heights.Length - 1)];
+                var a = wire.AlongX ? from.Z : from.X;
+                var b = wire.AlongX ? to.Z : to.X;
+
+                if ((a - line) * (b - line) > 0 || a == b)
+                    continue;
+
+                var t = (line - a) / (b - a);
+                var along = wire.AlongX ? from.X + (to.X - from.X) * t : from.Z + (to.Z - from.Z) * t;
+                var foot = from.Y + (to.Y - from.Y) * t;
+
+                if (along < wire.From - 0.5 || along > wire.To + 0.5 || foot < wire.FloorY - 1.5 || foot > wire.FloorY + 3.5)
+                    continue;
+
+                if (!wire.Jumpable || foot < height + BeamClearance)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>A wire tripped: its beams out, its Bane called.</summary>
+        public static void Trip(MapChannel map, State state, int index, long now)
+        {
+            if (state.Wires[index] != WirePhase.Armed)
+                return;
+
+            var wire = D.Wires[index];
+            state.Wires[index] = WirePhase.Tripped;
+            state.TrippedAt[index] = now;
+            Beams(map, wire, false);
+            WakeOnce(map, state, wire.AlarmPool);
+            Tell(map, "Intruder alarm: Bane security is on its way.");
+        }
+
+        /// <summary>A tripped wire set again once its time is up and what it called is dead.</summary>
+        private static void Rearm(MapChannel map, State state, long now)
+        {
+            for (var i = 0; i < D.Wires.Length; i++)
+            {
+                if (state.Wires[i] != WirePhase.Tripped || now - state.TrippedAt[i] < WireRearmMs)
+                    continue;
+
+                if (Pool(map, D.Wires[i].AlarmPool) is { } pool && (pool.AliveCreatures > 0 || pool.QueuedCreatures > 0 || state.OneShot.Contains(pool.DbId)))
+                    continue;
+
+                state.Wires[i] = WirePhase.Armed;
+                Beams(map, D.Wires[i], true);
+            }
+        }
+
+        private static void Beams(MapChannel map, D.Wire wire, bool on)
+        {
+            for (var beam = 0; beam < Math.Max(wire.Lines.Length, wire.Heights.Length); beam++)
+                SetUsable(map, D.WireBeamId(wire.Number, beam), on ? UseObjectState.TsState1 : UseObjectState.TsState0);
+        }
+
+        #endregion
+
         #region Usables
 
         /// <summary>
@@ -312,7 +576,15 @@ namespace Rasa.Managers
 
                 case P.WaypointTerminal:
                     return state.WaypointActive || Wants(player, M.OffGrid, 10) ? null : PlayerMessage.PmCannotPerformActionNow;
+
+                case D.StabilizationModule:
+                    if (state.Overdriven)
+                        return PlayerMessage.PmUseObjectNotUsable;
+                    return Wants(player, L.ReactorOverload, 2) ? null : PlayerMessage.PmCannotPerformActionNow;
             }
+
+            if (PedestalOf(live.Placement.Id) != 0)
+                return state.PedestalsSolved ? PlayerMessage.PmUseObjectNotUsable : null;
 
             return null;
         }
@@ -341,8 +613,26 @@ namespace Rasa.Managers
                         GrantWaypoint(client, P.StorageChamberWaypoint);
                     Emit(client, M.OffGrid, E.Facility, E.WaypointActivated, once: true, state);
                     break;
+
+                case D.StabilizationModule:
+                    live.ResetAt = 0;
+                    Overdrive(map, state);
+                    Emit(client, L.ReactorOverload, LE.Module, LE.Overdriven, once: true, state);
+                    break;
+
+                default:
+                    if (PedestalOf(live.Placement.Id) is var pedestal and not 0)
+                    {
+                        live.ResetAt = 0;
+                        Press(map, state, pedestal);
+                    }
+                    break;
             }
         }
+
+        /// <summary>Which pedestal (1-5) a usable is, or 0.</summary>
+        public static uint PedestalOf(uint usableId) =>
+            usableId >= D.FirstPedestal && usableId < D.FirstPedestal + D.PedestalOrder.Length ? usableId - D.FirstPedestal + 1 : 0;
 
         #endregion
 
@@ -362,6 +652,28 @@ namespace Rasa.Managers
         {
             if (Pool(map, id) is { } pool)
                 pool.Woken = true;
+        }
+
+        /// <summary>A scripted pool set going until it has put its creatures down (OneShots).</summary>
+        private static void WakeOnce(MapChannel map, State state, uint id)
+        {
+            if (Pool(map, id) is not { } pool || pool.AliveCreatures > 0 || pool.QueuedCreatures > 0)
+                return;
+
+            pool.Woken = true;
+            state.OneShot.Add(id);
+        }
+
+        private static void OneShots(MapChannel map, State state)
+        {
+            foreach (var id in state.OneShot.ToList())
+                if (Pool(map, id) is not { } pool)
+                    state.OneShot.Remove(id);
+                else if (pool.AliveCreatures > 0 || pool.QueuedCreatures > 0 || pool.DropshipQueue > 0)
+                {
+                    pool.Woken = false;
+                    state.OneShot.Remove(id);
+                }
         }
 
         private static void SetUsable(MapChannel map, uint id, UseObjectState state)
@@ -416,6 +728,12 @@ namespace Rasa.Managers
         ///   .purgas crew                - ports Taylor's crew in
         ///   .purgas waypoint            - activates the waypoint to Level 2
         ///   .purgas deathtribe &lt;n|all&gt;  - a Deathtribe, or all five, counted dead
+        ///   .purgas basins &lt;n|all&gt;      - a fuel basin, or all seven, counted shut down
+        ///   .purgas pumps &lt;n|all&gt;       - a reactor fuel pump, or all four, counted down
+        ///   .purgas pedestals           - the pedestal room solved: its field down
+        ///   .purgas pod                 - the live sleeping pod open
+        ///   .purgas overdrive           - the stabilization module overdriven
+        ///   .purgas trip &lt;n|all&gt;        - a trip wire, or all three, tripped
         /// </summary>
         public static IEnumerable<string> Command(MapChannel map, Manifestation gm, string[] parts)
         {
@@ -449,11 +767,44 @@ namespace Rasa.Managers
                         if (arg == "all" || arg == (i + 1).ToString())
                             state.DeathtribeDown[i] = true;
                     break;
+
+                case "basins":
+                    for (var i = 0; i < state.BasinsDown.Length; i++)
+                        if (arg == "all" || arg == (i + 1).ToString())
+                            state.BasinsDown[i] = true;
+                    break;
+
+                case "pumps":
+                    for (var i = 0; i < state.PumpsDown.Length; i++)
+                        if (arg == "all" || arg == (i + 1).ToString())
+                            state.PumpsDown[i] = true;
+                    break;
+
+                case "pedestals":
+                    SolvePedestals(map, state, gm);
+                    break;
+
+                case "pod":
+                    OpenPod(map, state);
+                    break;
+
+                case "overdrive":
+                    Overdrive(map, state);
+                    break;
+
+                case "trip":
+                    for (var i = 0; i < D.Wires.Length; i++)
+                        if (arg == "all" || arg == (i + 1).ToString())
+                            Trip(map, state, i, Now());
+                    break;
             }
 
             yield return $"Purgas Station {map.InstanceId}: the holding room's field {(state.Released ? "down" : "up")}, " +
                 $"Taylor's crew {(state.CrewCalled ? "in" : "not yet in")}, the waypoint {(state.WaypointActive ? "active" : "inactive")}.";
             yield return "Deathtribe: " + string.Join(", ", state.DeathtribeDown.Select((down, i) => $"{i + 1} {(down ? "dead" : "alive")}")) + ".";
+            yield return $"Fuel basins down {state.BasinsDown.Count(down => down)}/{state.BasinsDown.Length}, reactor pumps {state.PumpsDown.Count(down => down)}/{state.PumpsDown.Length}, " +
+                $"module {(state.Overdriven ? "overdriven" : "steady")}; pedestals {(state.PedestalsSolved ? "solved" : string.Join(" ", state.Pressed) + " pressed")}, the pod {(state.PodOpened ? "open" : "shut")}.";
+            yield return "Trip wires: " + string.Join(", ", D.Wires.Select((wire, i) => $"{wire.Number} {state.Wires[i]}")) + ".";
         }
 
         #endregion

@@ -50,7 +50,7 @@ namespace Rasa.Test.Missions.Wilderness
         /// Kardash Atta Colony's ten (Kardash_atta_colony), the Phanin Research Facility's seven
         /// (Phanin_research), the Brann Water Refinery's five (Brann_water_refinery), the Treeback
         /// Camp's thirteen (Treeback_camp), Tahrendra Base's three (Tahrendra_base) and Purgas Station's
-        /// three (Purgas_station_level_one).
+        /// five (Purgas_station_level_one, Purgas_station_lower_levels).
         /// </summary>
         private static readonly uint[] LaterMissions = BattlefieldMissions.Concat(OjasaHiveContent.Missions)
             .Concat(CavesOfDonnContent.Missions).Concat(DevilsDenContent.Missions).Concat(PravusResearchContent.Missions)
@@ -60,7 +60,7 @@ namespace Rasa.Test.Missions.Wilderness
             .Concat(WarnetCavernsMissions.Missions)
             .Concat(KardashAttaColonyContent.Missions).Concat(PhaninResearchContent.Missions)
             .Concat(BrannWaterRefineryContent.Missions).Concat(TreebackCampContent.Missions).Concat(TahrendraBaseContent.Missions)
-            .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.All).ToArray();
+            .Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationMissionsV1.All).Concat(Rasa.Services.Preloader.Missions.Purgas.PurgasStationDepthsMissionsV1.All).ToArray();
 
         [TestMethod]
         [DataRow(typeof(SqliteWorldContext))]
@@ -663,7 +663,7 @@ namespace Rasa.Test.Missions.Wilderness
             // (MagmaCavernsTests), Warnet Caverns' (WarnetCavernsTests), the Kardash Atta Colony's
             // (KardashAttaColonyTests), the Phanin Research Facility's (PhaninResearchTests), the Brann Water
             // Refinery's (BrannWaterRefineryTests), the Treeback Camp's (TreebackCampTests), Tahrendra Base's
-            // (TahrendraBaseTests) and Purgas Station's (PurgasStationTests).
+            // (TahrendraBaseTests) and Purgas Station's (PurgasStationTests, PurgasStationDepthsTests).
             var rows = harness.World.MissionIndicatorEntries.AsNoTracking().AsEnumerable()
                 .Where(row => row.ContentRevision != OjasaHiveContent.Revision && row.ContentRevision != CavesOfDonnContent.Revision &&
                     row.ContentRevision != DevilsDenContent.Revision && row.ContentRevision != PravusResearchContent.Revision &&

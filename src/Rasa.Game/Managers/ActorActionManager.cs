@@ -231,6 +231,13 @@ namespace Rasa.Managers
                         break;
                     }
 
+                    // The Treeback Camp's computer, gate controller, panel and harvester (TreebackCamp), whatever its arg.
+                    if (TreebackCamp.IsUseOf(mapChannel, action))
+                    {
+                        TreebackCamp.UseRecovery(mapChannel, action);
+                        break;
+                    }
+
                     // A usable of the client's .map (MapUsables), whatever its arg: no object of
                     // the server's has its id.
                     if (MapUsables.IsUseOf(action))

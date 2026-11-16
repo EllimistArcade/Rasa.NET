@@ -353,6 +353,12 @@ namespace Rasa.Managers
                 ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, brannRefusal);
                 return;
             }
+            // The Treeback Camp's computer, gate controller, panel and harvester (TreebackCamp).
+            if (TreebackCamp.Refusal(client, obj) is { } treebackRefusal)
+            {
+                ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, treebackRefusal);
+                return;
+            }
             if (obj.MissionUseAction != null &&
                 (!MissionUseAvailable(client, obj) ||
                  !(_missionManager ?? MissionApplication.Instance).Scenes.CanUseObject(client, obj, packet.ActionArgId)))

@@ -30,7 +30,8 @@ namespace Rasa.Test.Missions.Wilderness
             // (CraterLakeContent), the Energy Weapon Center's five (EnergyWeaponCenterContent), Timora Mines' six and
             // Stolen History (TimoraMinesMissionsV1), Warnet Caverns' eight (WarnetCavernsMissions), the Kardash Atta
             // Colony's ten (KardashAttaColonyContent), the Phanin Research Facility's seven (PhaninResearchContent) and the
-            // Brann Water Refinery's five (BrannWaterRefineryContent), which are instances'. And the Plateau and Valverde Pools ones.
+            // Brann Water Refinery's five (BrannWaterRefineryContent) and the Treeback Camp's thirteen (TreebackCampContent),
+            // which are instances'. And the Plateau and Valverde Pools ones.
             var battlefields = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
                 .Concat(Plateau.PlateauMissionTests.MissionIds).Concat(Pools.PoolsMissionTests.MissionIds).ToArray();
             var ojasa = Rasa.Services.Preloader.OjasaHiveContent.Missions;
@@ -46,7 +47,8 @@ namespace Rasa.Test.Missions.Wilderness
             var ewc = Rasa.Services.Preloader.EnergyWeaponCenterContent.Missions;
             var kardash = Rasa.Services.Preloader.KardashAttaColonyContent.Missions;
             var phanin = Rasa.Services.Preloader.PhaninResearchContent.Missions
-                .Concat(Rasa.Services.Preloader.BrannWaterRefineryContent.Missions).ToArray();
+                .Concat(Rasa.Services.Preloader.BrannWaterRefineryContent.Missions)
+                .Concat(Rasa.Services.Preloader.TreebackCampContent.Missions).ToArray();
             CollectionAssert.AreEquivalent(expected.Concat(WildernessMissionCases.ProtectedBootcampMissionIds)
                     .Concat(battlefields).Concat(ojasa).Concat(donn).Concat(den).Concat(pravus).Concat(minos).Concat(craterLake).Concat(ewc).Concat(kardash).Concat(phanin).ToArray(),
                 enabled.Select(entry => entry.MissionId).ToArray());

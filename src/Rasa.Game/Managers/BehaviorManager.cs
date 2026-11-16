@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Numerics;
 using System.Collections.Generic;
 using System.Linq;
@@ -363,6 +363,65 @@ namespace Rasa.Managers
         /// Called every 250 milliseconds for every creature on the map
         /// The tick parameter stores the amount of ms since the last call(should be 250 usually, but can go up on heavy load)
         /// </CreatureThink>
+        /// <summary>How far apart, across the ground, two creatures are pushed each time they are found standing in each other.</summary>
+        internal const float KeepApartPush = 0.3f;
+
+        /// <summary>
+        /// Two living creatures closer than a metre (height counting a quarter) are pushed apart, across the ground,
+        /// <see cref="KeepApartPush"/> each. Emplacements, mission escorts, base defenders and a scripted walk are
+        /// left out. A talkable NPC (a quest giver, a vendor, a trainer) is not pushed off his post: the other is
+        /// pushed both shares.
+        ///
+        /// Across the ground only, each kept on it (NavMeshManager.SnapToGround). The push took the quarter of their
+        /// difference in height too, the lower one down and the higher up - its "only along x/z" was not so. One
+        /// standing by a path that the village's wanderers walk was pushed lower at every pass and, standing, never
+        /// put back on the ground: Ranger Benos and Council Elder Moawi in Alia Das sank into it over a day.
+        /// </summary>
+        internal static void KeepApart(MapChannel mapChannel, Creature creature, Creature other)
+        {
+            if (creature == other || other.Attributes[Attributes.Health].Current <= 0
+                || Emplacements.Is(creature) || Emplacements.Is(other)
+                || IsMissionEscort(creature) || Game.Missions.World.CreatureGameplayRules.IsDefender(creature)
+                || other.Controller.CurrentAction == BehaviorActionScriptedMove
+                || IsMissionEscort(other) || Game.Missions.World.CreatureGameplayRules.IsDefender(other))
+                return;
+
+            var difX = creature.Position.X - other.Position.X;
+            var difY = (creature.Position.Y - other.Position.Y) / 4.0f; // height counts for little
+            var difZ = creature.Position.Z - other.Position.Z;
+
+            if (difX * difX + difY * difY + difZ * difZ >= 1.0f)
+                return;
+
+            var across = MathF.Sqrt(difX * difX + difZ * difZ);
+
+            if (across < 0.05f)
+                return;
+
+            var posted = creature.Npc != null;
+            var otherPosted = other.Npc != null;
+
+            if (posted && otherPosted)
+                return;
+
+            var away = new Vector3(difX / across, 0f, difZ / across) * KeepApartPush;
+            var pushed = posted ? creature.Position : Across(mapChannel, creature.Position, otherPosted ? away * 2f : away);
+            var otherPushed = otherPosted ? other.Position : Across(mapChannel, other.Position, posted ? -away * 2f : -away);
+
+            // push - but not through a force field either of them may not pass
+            // (ForceFields): a crowd held at a gate pushed its own through it.
+            if (ForceFields.Stops(mapChannel, creature, creature.Position, pushed) ||
+                ForceFields.Stops(mapChannel, other, other.Position, otherPushed))
+                return;
+
+            creature.Position = pushed;
+            other.Position = otherPushed;
+        }
+
+        /// <summary>A step across the ground: the height the ground has there, or the one it had where the ground is not near.</summary>
+        private static Vector3 Across(MapChannel mapChannel, Vector3 from, Vector3 step) =>
+            NavMeshManager.SnapToGround(mapChannel, from + step);
+
         private void CreatureThink(MapChannel mapChannel, Creature creature, long delta, out bool needDeletion, out bool needCellUpdate)
         {
             needDeletion = false; // set to true if the creature should be removed (for whatever reason)
@@ -497,59 +556,7 @@ namespace Rasa.Managers
 
             var tCell = CellManager.Instance.GetCell(mapChannel, cellX, cellZ);
             if (tCell != null && tCell.CreatureList.Count > 1)
-            {
-                var randomCreatureIndex = Random.Shared.Next(tCell.CreatureList.Count);
-                // get the creature
-                var tCreature = tCell.CreatureList[randomCreatureIndex];
-                // is it a different alive creature?
-                // An emplacement is bolted down: it neither pushes nor is pushed.
-                // Scripted actors keep their authored path and final pose.
-                if (creature != tCreature && tCreature.Attributes[Attributes.Health].Current > 0
-                    && !Emplacements.Is(creature) && !Emplacements.Is(tCreature)
-                    && !IsMissionEscort(creature) && !Game.Missions.World.CreatureGameplayRules.IsDefender(creature)
-                    && tCreature.Controller.CurrentAction != BehaviorActionScriptedMove
-                    && !IsMissionEscort(tCreature) && !Game.Missions.World.CreatureGameplayRules.IsDefender(tCreature))
-                {
-                    var difX = creature.Position.X - tCreature.Position.X;
-                    var difY = creature.Position.Y - tCreature.Position.Y;
-                    var difZ = creature.Position.Z - tCreature.Position.Z;
-                    difY /= 4.0f; // y position has low importance
-                    var tDist = difX * difX + difY * difY + difZ * difZ;
-                    if (tDist < 1.0f)
-                    {
-                        // creatures are too close together
-                        // push them apart! (But only along x/z axis)
-                        // get direction vector
-                        var tLength = Math.Sqrt(difX * difX + difZ * difZ);
-                        if (tLength >= 0.05f)
-                        {
-                            difX /= (float)tLength;
-                            difZ /= (float)tLength;
-                            // decrease strength of push vector
-                            difX *= 0.3f;
-                            difZ *= 0.3f;
-
-                            var creatureX = creature.Position.X + difX;
-                            var creatureY = creature.Position.Y + difY;
-                            var creatureZ = creature.Position.Z + difZ;
-                            var tCreatureX = tCreature.Position.X - difX;
-                            var tCreatureY = tCreature.Position.Y - difY;
-                            var tCreatureZ = tCreature.Position.Z - difZ;
-                            var pushed = new Vector3(creatureX, creatureY, creatureZ);
-                            var tPushed = new Vector3(tCreatureX, tCreatureY, tCreatureZ);
-
-                            // push - but not through a force field either of them may not pass
-                            // (ForceFields): a crowd held at a gate pushed its own through it.
-                            if (!ForceFields.Stops(mapChannel, creature, creature.Position, pushed) &&
-                                !ForceFields.Stops(mapChannel, tCreature, tCreature.Position, tPushed))
-                            {
-                                creature.Position = pushed;
-                                tCreature.Position = tPushed;
-                            }
-                        }
-                    }
-                }
-            }
+                KeepApart(mapChannel, creature, tCell.CreatureList[Random.Shared.Next(tCell.CreatureList.Count)]);
 
             // do we need to check for updated cell position?
             if (CellChanged(creature, delta))

@@ -55,7 +55,15 @@ namespace Rasa.Test.World
             ["adv_foreas_concordia_wilderness_clrf"] = new Vector3[]
                 { new(8.5f, 140.24f, 158.3f), new(67.6f, 127.05f, -136.8f) },
             ["adv_arieki_ligo_ashendesert_indracaverns"] = new Vector3[]
-                { new(-40.7f, 9.18f, -421.6f), new(-320.7f, 128.98f, -22.6f), new(-85.8f, 65.23f, -117.7f) }
+                { new(-40.7f, 9.18f, -421.6f), new(-320.7f, 128.98f, -22.6f), new(-85.8f, 65.23f, -117.7f) },
+            // Tahrendra Base: the arrival, the Guard Lounge, the barracks' doors, the three security stations, the
+            // AFS teleporter, the wormhole room's mark and a balcony (TahrendraBaseContent).
+            ["adv_arieki_torden_mires_tahrendrabase"] = new Vector3[]
+            {
+                new(196f, 120.6f, 10.5f), new(28f, 120.6f, -75f), new(15f, 120.6f, 52f), new(31f, 120.6f, -28f), new(-76f, 120.2f, 48.6f),
+                new(-89f, 120.2f, 61f), new(-2f, 80.3f, 72f), new(-46f, 80.6f, 70f), new(-134f, 144.4f, -64f), new(-150f, 112.2f, 12f),
+                new(-166f, 120.6f, -16f)
+            }
         };
 
         // Private instances the heightmap cut apart where it runs over a tunnel's mouth or ramp (MapNavFixes'
@@ -230,8 +238,9 @@ namespace Rasa.Test.World
         }
 
         /// <summary>
-        /// Caves of Donn, Devil's Den, Purgas Station, Rivasa Atta Colony, the Crater Lake Research Facility and Indra
-        /// Caverns: from the arrival, each part that held pools is on the arrival's walkable region now, and back.
+        /// Caves of Donn, Devil's Den, Purgas Station, Rivasa Atta Colony, the Crater Lake Research Facility, Indra
+        /// Caverns and Tahrendra Base: from the arrival, each part that held pools is on the arrival's walkable region
+        /// now, and back.
         /// </summary>
         [TestMethod]
         [DataRow("adv_foreas_concordia_wilderness_cavesofdonn02")]
@@ -240,6 +249,7 @@ namespace Rasa.Test.World
         [DataRow("adv_arieki_ligo_thunderhead_rivasaattacolony")]
         [DataRow("adv_foreas_concordia_wilderness_clrf")]
         [DataRow("adv_arieki_ligo_ashendesert_indracaverns")]
+        [DataRow("adv_arieki_torden_mires_tahrendrabase")]
         public void TheFineGridJoinsTheInstancesRooms(string map)
         {
             var nav = Query(map);

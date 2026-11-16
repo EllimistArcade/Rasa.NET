@@ -359,6 +359,12 @@ namespace Rasa.Managers
                 ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, treebackRefusal);
                 return;
             }
+            // Tahrendra Base's crates, AFS teleporter and red light (TahrendraBase).
+            if (TahrendraBase.Refusal(client, obj) is { } tahrendraRefusal)
+            {
+                ActorManager.RefuseRequest(client, packet.ActionId, packet.ActionArgId, tahrendraRefusal);
+                return;
+            }
             if (obj.MissionUseAction != null &&
                 (!MissionUseAvailable(client, obj) ||
                  !(_missionManager ?? MissionApplication.Instance).Scenes.CanUseObject(client, obj, packet.ActionArgId)))

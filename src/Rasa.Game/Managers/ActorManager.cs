@@ -367,6 +367,13 @@ namespace Rasa.Managers
             if (AmbientCreatures.Spares(source, target))
                 return 0;
 
+            // A Tahrendra Base Warden Bot shot by a member with the Bot Virus is theirs, and takes nothing (TahrendraBase).
+            if (!isPeriodic && TahrendraBase.Turns(mapChannel, source, target))
+            {
+                outcome = new DamageOutcome { Immune = true };
+                return 0;
+            }
+
             if (source is Creature companion &&
                 (companion.SpawnPool?.FollowOwnerCharacterId > 0 || Game.Missions.World.CreatureGameplayRules.IsDefender(companion)) &&
                 target is Creature enemy && !CreatureManager.IsHostileTarget(mapChannel, companion, enemy))

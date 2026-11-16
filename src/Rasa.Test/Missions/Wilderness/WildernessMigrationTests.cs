@@ -58,7 +58,7 @@ namespace Rasa.Test.Missions.Wilderness
             .Concat(MagmaCavernsContent.Missions)
             .Concat(WarnetCavernsMissions.Missions)
             .Concat(KardashAttaColonyContent.Missions).Concat(PhaninResearchContent.Missions)
-            .Concat(BrannWaterRefineryContent.Missions).Concat(TreebackCampContent.Missions).ToArray();
+            .Concat(BrannWaterRefineryContent.Missions).Concat(TreebackCampContent.Missions).Concat(TahrendraBaseContent.Missions).ToArray();
 
         [TestMethod]
         [DataRow(typeof(SqliteWorldContext))]
@@ -634,6 +634,7 @@ namespace Rasa.Test.Missions.Wilderness
                     entry.ContentRevision != PhaninResearchContent.Revision &&
                     entry.ContentRevision != BrannWaterRefineryContent.Revision &&
                     entry.ContentRevision != TreebackCampContent.Revision &&
+                    entry.ContentRevision != TahrendraBaseContent.Revision &&
                     entry.ContentRevision != PlateauMissionDataV1.Revision &&
                     entry.ContentRevision != Rasa.Services.Preloader.Missions.Pools.PoolsMissionDataV1.Revision)
                 // Wilderness_reward_consumables and Wilderness_reward_modules, dated after the
@@ -658,7 +659,8 @@ namespace Rasa.Test.Missions.Wilderness
             // Weapon Center's (EnergyWeaponCenterTests), Timora Mines' (TimoraMinesTests), Magma Caverns'
             // (MagmaCavernsTests), Warnet Caverns' (WarnetCavernsTests), the Kardash Atta Colony's
             // (KardashAttaColonyTests), the Phanin Research Facility's (PhaninResearchTests), the Brann Water
-            // Refinery's (BrannWaterRefineryTests) and the Treeback Camp's (TreebackCampTests).
+            // Refinery's (BrannWaterRefineryTests), the Treeback Camp's (TreebackCampTests) and Tahrendra Base's
+            // (TahrendraBaseTests).
             var rows = harness.World.MissionIndicatorEntries.AsNoTracking().AsEnumerable()
                 .Where(row => row.ContentRevision != OjasaHiveContent.Revision && row.ContentRevision != CavesOfDonnContent.Revision &&
                     row.ContentRevision != DevilsDenContent.Revision && row.ContentRevision != PravusResearchContent.Revision &&
@@ -671,7 +673,8 @@ namespace Rasa.Test.Missions.Wilderness
                     row.ContentRevision != KardashAttaColonyContent.Revision &&
                     row.ContentRevision != PhaninResearchContent.Revision &&
                     row.ContentRevision != BrannWaterRefineryContent.Revision &&
-                    row.ContentRevision != TreebackCampContent.Revision).ToArray();
+                    row.ContentRevision != TreebackCampContent.Revision &&
+                    row.ContentRevision != TahrendraBaseContent.Revision).ToArray();
             var bootcamp = rows.Where(row => row.ContentRevision == "deployment_11").ToArray();
             var wilderness = rows.Where(row => row.ContentRevision == WildernessMissionDataV1.Revision).ToArray();
             var plateau = rows.Where(row => row.ContentRevision == PlateauMissionDataV1.Revision).ToArray();

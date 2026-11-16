@@ -493,6 +493,9 @@ namespace Rasa.Managers
                     // The Treeback Camp's computer, Bagby, gate, leaders, conduits, Markinson and harvester, in each copy of it.
                     Guard("TreebackCamp.Worker", mapChannel, () => TreebackCamp.Worker(mapChannel));
 
+                    // Tahrendra Base's barracks, crates, teleporters, Warden Bots, Donnaway and the wormhole, in each copy of it.
+                    Guard("TahrendraBase.Worker", mapChannel, () => TahrendraBase.Worker(mapChannel));
+
                     // The Caves of Donn's story, in each copy of them.
                     Guard("CavesOfDonn.Worker", mapChannel, () => CavesOfDonn.Worker(mapChannel));
 

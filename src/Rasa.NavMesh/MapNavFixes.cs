@@ -168,6 +168,15 @@ namespace Rasa.NavMesh
                 Map = "adv_arieki_torden_plains_attacolony",
                 TerrainCuts = new[] { (new Vector3(396.5f, 195f, 276f), new Vector3(404f, 197.5f, 289f)) }
             },
+            // Tahrendra Base (2125). On the 0.4 m grid the Security Check Point's upper ring, the Guard Barracks,
+            // the Guard Lounge and Wormhole Security (the 120 m level, two parts of 4 667 and 3 463 m²) are cut off
+            // from the rest: the catwalk stairs up from the corridor at (-86, 120, 13) and the ring's ways round
+            // leave seams. The fine grid joins them; all 14 pools on one part.
+            new MapNavFixes
+            {
+                Map = "adv_arieki_torden_mires_tahrendrabase",
+                Fine = true
+            },
             // Velon Hollow (2136). Escort seams the 0.4 m cells leave open: across x = 102.4 and x = 0 and on the
             // hospital's ramp (the first seven, which the velon-hollow-seams-v2 profile rebuilt over the shipped
             // file), and seam G5 at (361.8, 34.6, 52.6) on the edge z = 51.2, which cut the hospital off from the

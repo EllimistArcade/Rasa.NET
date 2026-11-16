@@ -238,6 +238,13 @@ namespace Rasa.Managers
                         break;
                     }
 
+                    // One of Tahrendra Base's crates, its AFS teleporter or the red light (TahrendraBase), whatever its arg.
+                    if (TahrendraBase.IsUseOf(mapChannel, action))
+                    {
+                        TahrendraBase.UseRecovery(mapChannel, action);
+                        break;
+                    }
+
                     // A usable of the client's .map (MapUsables), whatever its arg: no object of
                     // the server's has its id.
                     if (MapUsables.IsUseOf(action))

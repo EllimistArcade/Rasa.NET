@@ -90,6 +90,84 @@ namespace Rasa.NavMesh
                 Map = "adv_arieki_ligo_ashendesert_indracaverns",
                 Fine = true
             },
+            // Timora Mines (1348). The heightmap runs over the mouth of the Bane entrance
+            // (ArchBaneIndustrialEntranceV01 at (242, 202, -181)): faces of 49-59 degrees rising to 205.9 over the
+            // client's floor at 203.5 between x = 252 and 254, where the floor runs on flat with full headroom. The
+            // building and 15 of the mine's 55 pools were a part of their own; all 55 are on the arrival's now.
+            new MapNavFixes
+            {
+                Map = "adv_foreas_concordia_divide_timoramines",
+                TerrainCuts = new[] { (new Vector3(252f, 202f, -189f), new Vector3(254f, 207f, -170f)) }
+            },
+            // Pravus Research (1430). The Bane complex's spiral ramp (ArchBaneIndustrialTunnelRamp32mV01 at
+            // (208, 8, -8)) climbs from 9.7 to the ground at 40.3, its last 7 m under the flat heightmap at 40.27 with
+            // less than 2 m of headroom (floor 38.3-39.9): the complex and its 10 pools were a part of their own. The
+            // fine grid over the tiles round five pools left on pockets of 12-417 m² puts them on the arrival's part.
+            // The Thrax pool at (5, 33.68, -15) stands on the 2.4 m wide top of the outpost wall, 1.5 m over the
+            // ground at x = 0.2; a link takes its creatures down. 45 of 48 pools on the arrival's part: the turret on
+            // its platform, the Forean Machina's rock pocket and a corridor walled off at z = -27.5 and z = 28.5
+            // stay apart.
+            new MapNavFixes
+            {
+                Map = "adv_foreas_concordia_wilderness_pravusresearch",
+                FineTiles = new[] { (11, 14), (11, 15), (13, 9), (13, 10), (13, 11), (10, 12), (11, 12), (15, 13) },
+                TerrainCuts = new[] { (new Vector3(183f, 39f, -24f), new Vector3(194f, 41.5f, -11f)) },
+                OffMeshLinks = new[] { (new Vector3(2.6f, 33.6f, -15.5f), new Vector3(0.2f, 32.2f, -15.5f)) }
+            },
+            // Bane Conscription Facility (1988). The ramp from the facility (128) up to the yard runs under the flat
+            // heightmap at 135.94, its top at 135.1 at (20.6, -373.8): the map link's arrival and 5 pools were a part
+            // of 14 000 m² of their own. The loading dock at (22.6, 136.9, -433.4) stands 0.6-1.1 m over the yard
+            // with no step the 0.9 m climb takes; a link over its sloped edge at x = 76. All 20 pools on one part.
+            new MapNavFixes
+            {
+                Map = "adv_arieki_ligo_ashendesert_baneconscriptfacility",
+                TerrainCuts = new[] { (new Vector3(13f, 134f, -376f), new Vector3(22f, 137f, -363f)) },
+                OffMeshLinks = new[] { (new Vector3(76.2f, 137.5f, -429.2f), new Vector3(74.6f, 136.8f, -430.2f)) }
+            },
+            // Quasso Station (2105). The heightmap runs over the mouth of the Bane entrance
+            // (ArchBaneIndustrialEntranceV01 at (-7, 15, 100)): faces of 22-58 degrees, 17.7-21 over the client's
+            // floor at 16.6. The map link's arrival and 4 pools were a part of 26 000 m² of their own; 11 of the 13
+            // pools are on the arrival's part now, the other two 2 m under pockets of 21 and 57 m².
+            new MapNavFixes
+            {
+                Map = "adv_arieki_ligo_thunderhead_quassostation",
+                TerrainCuts = new[] { (new Vector3(-13f, 16f, 100f), new Vector3(-1f, 21.5f, 104f)) }
+            },
+            // Cuthah Base (2162). The tunnel ramp (ArchBaneIndustrialTunnelRamp32mV01 at (5, 180, -552)) climbs to
+            // the yard under the flat heightmap at 211.75, its floor 209.3-211.2 between z = -537 and -531: the map
+            // link's arrival and 4 pools (73 000 m²) were cut off from the base. 9 of 13 pools on one part; the rest
+            // stand on platforms 2.4 m up or on the surface over the base.
+            new MapNavFixes
+            {
+                Map = "adv_foreas_howlingmaw_cuthahbase",
+                TerrainCuts = new[] { (new Vector3(-11f, 210f, -540f), new Vector3(2.5f, 213f, -529.5f)) }
+            },
+            // Ojasa Atta Hive (1865). The fine grid joins the hive's tunnels but on tile (5, 19), where it would
+            // stand a polygon's bounds over the Gatherers' point on the queen's mound (-279.5, 135.6, -17.1) and put
+            // it on the mesh; there a link runs down the steep ramp from (-250.5, 128.2, -32), 5.5 m in 6 m, that
+            // joins the map link's arrival to the western tunnels. The heightmap's bank rises 1-5 m through the
+            // hive's floor at 97 between x = -458 and -453, z = -354 and -334, and cut those off from the hive's
+            // middle; and a 492 m² ledge drops 1.6 m to the floor over 2.2 m at (6.8, 60.3, -13.2), steeper than the
+            // agent's slope: a link. 15 pools on the arrival's part, 5 before.
+            new MapNavFixes
+            {
+                Map = "adv_arieki_torden_incline_ojasaattahive",
+                FineTiles = Block(0, 21, 0, 29).Where(tile => tile != (5, 19)).ToArray(),
+                TerrainCuts = new[] { (new Vector3(-458f, 95f, -354f), new Vector3(-452.5f, 106f, -334f)) },
+                OffMeshLinks = new[]
+                {
+                    (new Vector3(-250.5f, 128.2f, -32f), new Vector3(-256.4f, 122.7f, -32f)),
+                    (new Vector3(6.8f, 60.3f, -13.2f), new Vector3(4.6f, 58.5f, -13.3f))
+                }
+            },
+            // Plains Atta Colony (1773). The Brann corridor's ramp (ArchBrannCorridorRamp01V01 at (396, 196, 282))
+            // goes down from 196.5 to the dome at 188.6 under the heightmap at 196.1: the dome's four pools (781223 to
+            // 781226) were a 697 m² part of their own. They are on the arrival's part now.
+            new MapNavFixes
+            {
+                Map = "adv_arieki_torden_plains_attacolony",
+                TerrainCuts = new[] { (new Vector3(396.5f, 195f, 276f), new Vector3(404f, 197.5f, 289f)) }
+            },
             // Velon Hollow (2136). Escort seams the 0.4 m cells leave open: across x = 102.4 and x = 0 and on the
             // hospital's ramp (the first seven, which the velon-hollow-seams-v2 profile rebuilt over the shipped
             // file), and seam G5 at (361.8, 34.6, 52.6) on the edge z = 51.2, which cut the hospital off from the

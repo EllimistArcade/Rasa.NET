@@ -18,7 +18,8 @@ namespace Rasa.Test.World
     /// The navmeshes Rasa.NavMesh's MapNavFixes rebuilt, against the shipped files: the parts of a map
     /// that no path joined before - which an escort, a guard or a creature after a player could not cross -
     /// are joined, both ways, and a creature walks the Retread Caves' and the Brann Water Refinery's off-mesh links;
-    /// and six private instances the 0.4 m grid cut apart between their rooms are one walkable region each.
+    /// six private instances the 0.4 m grid cut apart between their rooms, and seven the heightmap cut apart over a
+    /// tunnel's mouth, are one walkable region each; and a creature walks the links added on three of those.
     /// </summary>
     [TestClass, DoNotParallelize]
     public class NavMeshJoinsTests
@@ -55,6 +56,43 @@ namespace Rasa.Test.World
                 { new(8.5f, 140.24f, 158.3f), new(67.6f, 127.05f, -136.8f) },
             ["adv_arieki_ligo_ashendesert_indracaverns"] = new Vector3[]
                 { new(-40.7f, 9.18f, -421.6f), new(-320.7f, 128.98f, -22.6f), new(-85.8f, 65.23f, -117.7f) }
+        };
+
+        // Private instances the heightmap cut apart where it runs over a tunnel's mouth or ramp (MapNavFixes'
+        // terrain cuts): the map link's arrival, then one pool from each part that held pools on the shipped mesh.
+        private static readonly Dictionary<string, Vector3[]> MouthsJoined = new()
+        {
+            ["adv_foreas_concordia_divide_timoramines"] = new Vector3[]
+                { new(-120.0f, 205.75f, 546.9f), new(-128.8f, 205.74f, 517.6f), new(308.4f, 205.11f, -250.7f) },
+            ["adv_foreas_concordia_wilderness_pravusresearch"] = new Vector3[]
+            {
+                new(-193.5f, 10.39f, -257.4f), new(-237.9f, 6.94f, -125.2f), new(144.2f, 10.42f, 151.4f), new(-145.4f, 30.72f, 17.9f),
+                new(-71.2f, 39.34f, -188.0f), new(-41.5f, 41.34f, -242.6f), new(-185.0f, 5.14f, -123.0f), new(3.4f, 33.42f, -15.0f),
+                new(35.0f, 46.01f, -60.0f)
+            },
+            ["adv_arieki_ligo_ashendesert_baneconscriptfacility"] = new Vector3[]
+                { new(7.2f, 153.67f, -669.6f), new(7.3f, 153.47f, -636.7f), new(-233.5f, 96.76f, -145.2f), new(22.6f, 136.87f, -433.4f) },
+            ["adv_arieki_ligo_thunderhead_quassostation"] = new Vector3[]
+                { new(9.9f, 46.37f, -197.1f), new(8.3f, 46.17f, -177.1f), new(-102.5f, 15.6f, 356.5f) },
+            ["adv_foreas_howlingmaw_cuthahbase"] = new Vector3[]
+                { new(-25.5f, 211.51f, -460.1f), new(64.0f, 204.93f, -531.5f), new(23.0f, 165.71f, -511.5f) },
+            ["adv_arieki_torden_incline_ojasaattahive"] = new Vector3[]
+            {
+                new(553.7f, 88.54f, 146.5f), new(439.2f, 72.73f, 126.3f), new(185.7f, 126.28f, -273.0f), new(-326.5f, 128.38f, -30.4f),
+                new(-95.6f, 120.29f, -390.6f), new(22.6f, 65.8f, -30.2f), new(-528.8f, 105.22f, -231.7f)
+            },
+            ["adv_arieki_torden_plains_attacolony"] = new Vector3[]
+                { new(-25.7f, 312.46f, 184.0f), new(-12.9f, 313.73f, 181.3f), new(428.0f, 188.63f, 290.0f) }
+        };
+
+        // The links MapNavFixes adds there, each a point a few metres back on either side: down off the Pravus outpost
+        // wall, up onto the Conscription Facility's loading dock, down off the Ojasa hive's ledge and its steep ramp.
+        private static readonly (string Map, uint Context, Vector3 Up, Vector3 Down)[] MouthsLinks =
+        {
+            ("adv_foreas_concordia_wilderness_pravusresearch", 1430, new(2.6f, 34.6f, -18.5f), new(-2.0f, 32.1f, -15.5f)),
+            ("adv_arieki_ligo_ashendesert_baneconscriptfacility", 1988, new(76.2f, 137.5f, -427.0f), new(73.0f, 136.8f, -431.5f)),
+            ("adv_arieki_torden_incline_ojasaattahive", 1865, new(8.8f, 60.5f, -13.2f), new(2.6f, 56.2f, -13.3f)),
+            ("adv_arieki_torden_incline_ojasaattahive", 1865, new(-248.0f, 128.4f, -32f), new(-258.5f, 121.5f, -32f))
         };
 
         private static readonly (Vector3 East, Vector3 West)[] RefineryLinks =
@@ -219,6 +257,51 @@ namespace Rasa.Test.World
                 Assert.AreEqual(true, nav.Reachable(arrival.Value, at.Value), $"{map}: the arrival reaches {place}");
                 Assert.AreEqual(true, nav.Reachable(at.Value, arrival.Value), $"{map}: {place} reaches the arrival");
             }
+        }
+
+        /// <summary>
+        /// Timora Mines, Pravus Research, the Bane Conscription Facility, Quasso Station, Cuthah Base, the Ojasa Atta Hive
+        /// and the Plains Atta Colony: from the arrival, each part that held pools is on the arrival's walkable region
+        /// now, and back.
+        /// </summary>
+        [TestMethod]
+        [DataRow("adv_foreas_concordia_divide_timoramines")]
+        [DataRow("adv_foreas_concordia_wilderness_pravusresearch")]
+        [DataRow("adv_arieki_ligo_ashendesert_baneconscriptfacility")]
+        [DataRow("adv_arieki_ligo_thunderhead_quassostation")]
+        [DataRow("adv_foreas_howlingmaw_cuthahbase")]
+        [DataRow("adv_arieki_torden_incline_ojasaattahive")]
+        [DataRow("adv_arieki_torden_plains_attacolony")]
+        public void TheTunnelMouthsJoinTheInstancesRooms(string map)
+        {
+            var nav = Query(map);
+            var places = MouthsJoined[map];
+            var arrival = nav.NearestInColumn(places[0], 4f);
+
+            Assert.IsNotNull(arrival, $"{map}: the arrival is on the mesh");
+
+            foreach (var place in places.Skip(1))
+            {
+                var at = nav.NearestInColumn(place, 4f);
+
+                Assert.IsNotNull(at, $"{map}: {place} is on the mesh");
+                Assert.AreEqual(true, nav.Reachable(arrival.Value, at.Value), $"{map}: the arrival reaches {place}");
+                Assert.AreEqual(true, nav.Reachable(at.Value, arrival.Value), $"{map}: {place} reaches the arrival");
+            }
+        }
+
+        /// <summary>A creature walks each of those links, both ways.</summary>
+        [TestMethod]
+        [DataRow(0, false)] [DataRow(0, true)]
+        [DataRow(1, false)] [DataRow(1, true)]
+        [DataRow(2, false)] [DataRow(2, true)]
+        [DataRow(3, false)] [DataRow(3, true)]
+        public void ACreatureWalksEachTunnelMouthMapsLink(int link, bool back)
+        {
+            var (map, context, up, down) = MouthsLinks[link];
+            var nav = Query(map);
+
+            AssertWalks(nav, context, map, nav.Nearest(back ? down : up).Value, nav.Nearest(back ? up : down).Value);
         }
 
         /// <summary>A creature walks the refinery's two links: into the first hacking module's walk, and off the skybridge.</summary>

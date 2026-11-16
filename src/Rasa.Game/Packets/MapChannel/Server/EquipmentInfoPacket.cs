@@ -10,7 +10,6 @@ namespace Rasa.Packets.MapChannel.Server
         public override GameOpcode Opcode { get; } = GameOpcode.EquipmentInfo;
 
         public List<ulong> EquipmentInfo { get; set; }
-        public Dictionary<uint, ulong> ActualEquipment = new Dictionary<uint, ulong>();
 
         /// <summary>
         /// The player's fists, in the HANDTOHAND slot (10000001), which the slot list cannot hold:
@@ -23,39 +22,36 @@ namespace Rasa.Packets.MapChannel.Server
             EquipmentInfo = equipmentInfo;
         }
 
+        /// <summary>
+        /// The equipped slots that hold something, by slot, then the fists. Built afresh on every
+        /// write: a packet is written again when it does not fit in what is left of a send block
+        /// (LengthedSocket.TryWriteFrame), and the slots kept from the first write were reported as
+        /// duplicates of themselves on the second ("duplicate equipment slot", with the same item).
+        /// </summary>
         public override void Write(PythonWriter pw)
         {
-            uint count = 0;
+            var equipment = new List<(uint Slot, ulong Item)>();
+            uint slot = 0;
 
             foreach (var entry in EquipmentInfo)
             {
                 if (entry != 0)
-                {
-                    if (ActualEquipment.ContainsKey(count))
-                    {
-                        Logger.WriteLog(
-                            LogType.Error,
-                            $"EquipmentInfoPacket duplicate equipment slot {count}: " +
-                            $"existing={ActualEquipment[count]}, new={entry}. Overwriting existing value.");
-                    }
+                    equipment.Add((slot, entry));
 
-                    ActualEquipment[count] = entry;
-                }
-
-                count++;
+                slot++;
             }
 
             if (HandToHand != 0)
-                ActualEquipment[(uint)EquipmentData.HandToHand] = HandToHand;
+                equipment.Add(((uint)EquipmentData.HandToHand, HandToHand));
 
             pw.WriteTuple(1);
-            pw.WriteList(ActualEquipment.Count);
+            pw.WriteList(equipment.Count);
 
-            foreach (var entry in ActualEquipment)
+            foreach (var (equipped, item) in equipment)
             {
                 pw.WriteTuple(2);
-                pw.WriteUInt(entry.Key);
-                pw.WriteULong(entry.Value);
+                pw.WriteUInt(equipped);
+                pw.WriteULong(item);
             }
         }
     }

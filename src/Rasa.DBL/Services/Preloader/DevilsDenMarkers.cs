@@ -94,9 +94,16 @@ namespace Rasa.Services.Preloader
             }
         }
 
+        /// <summary>
+        /// A scene Mission_marker_maps, which comes before, gives these very maps: where it ran first this put nothing in,
+        /// and where this ran first that put nothing in, so its Down is the one that takes them off.
+        /// </summary>
+        private static bool MappedTheSameBefore(uint missionId) =>
+            MissionMarkerMaps.Scenes().Contains((missionId, D.Revision)) && MissionMarkerMaps.Property(missionId) == Key + MapsJson(missionId);
+
         public static IEnumerable<string> Down()
         {
-            foreach (var missionId in Missions)
+            foreach (var missionId in Missions.Where(missionId => !MappedTheSameBefore(missionId)))
                 yield return $"UPDATE mission_scene_binding SET bindings = REPLACE(bindings, {Quote(Suffix(missionId))}, '}}') " +
                     $"WHERE mission_id = {missionId} AND content_revision = '{D.Revision}' AND bindings LIKE {Quote("%" + Suffix(missionId))};";
 

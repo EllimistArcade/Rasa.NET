@@ -131,9 +131,18 @@ namespace Rasa.Services.Preloader
             }
         }
 
+        /// <summary>
+        /// A scene Mission_marker_maps, which comes before, gives these very maps, or puts in as this scene: where it ran
+        /// first this put nothing in, and where this ran first that put nothing in, so its Down is the one that takes them off.
+        /// </summary>
+        private static bool MappedTheSameBefore(uint missionId, string revision) =>
+            NewScenes.Contains(missionId)
+                ? MissionMarkerMaps.InsertedScenes().Contains((missionId, revision)) && MissionMarkerMaps.NewScene(missionId) == NewSceneJson(missionId)
+                : MissionMarkerMaps.AppendedScenes().Contains((missionId, revision)) && MissionMarkerMaps.Property(missionId) == Key + MapsJson(missionId);
+
         public static IEnumerable<string> Down()
         {
-            foreach (var missionId in NewScenes)
+            foreach (var missionId in NewScenes.Where(missionId => !MappedTheSameBefore(missionId, RevisionOf(missionId))))
                 yield return $"DELETE FROM mission_scene_binding WHERE mission_id = {missionId} AND content_revision = {Q(RevisionOf(missionId))} " +
                     $"AND bindings = {Q(NewSceneJson(missionId))};";
 
@@ -141,7 +150,7 @@ namespace Rasa.Services.Preloader
                 $"WHERE mission_id = {CraterLakeContent.ReclaimingWhatsOurs} AND content_revision = {Q(CraterLakeContent.Revision)} " +
                 $"AND bindings LIKE {Q("%" + ReclaimingEntryWithGenerator + "%")};";
 
-            foreach (var (missionId, revision) in Appended())
+            foreach (var (missionId, revision) in Appended().Where(scene => !MappedTheSameBefore(scene.MissionId, scene.Revision)))
                 yield return $"UPDATE mission_scene_binding SET bindings = REPLACE(bindings, {Q(Suffix(missionId))}, '}}') " +
                     $"WHERE mission_id = {missionId} AND content_revision = {Q(revision)} AND bindings LIKE {Q("%" + Suffix(missionId))};";
         }

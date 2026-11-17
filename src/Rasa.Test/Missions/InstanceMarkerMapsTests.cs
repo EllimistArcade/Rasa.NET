@@ -93,12 +93,14 @@ namespace Rasa.Test.Missions
 
             migrator.Migrate(Previous);
             var before = Scenes();
+            // Mission_marker_maps, before it, puts in the same two scenes; where it has, this puts in none.
             foreach (var missionId in M.NewScenes)
-                Assert.IsFalse(before.Keys.Any(k => k.Item1 == missionId), $"{missionId} had no scene");
+                Assert.AreEqual(Rasa.Services.Preloader.MissionMarkerMaps.NewScenes.Contains(missionId), before.Keys.Any(k => k.Item1 == missionId),
+                    $"{missionId}'s scene");
 
             migrator.Migrate(Migration);
             var after = Scenes();
-            Assert.AreEqual(before.Count + M.NewScenes.Length, after.Count);
+            Assert.AreEqual(before.Count + M.NewScenes.Count(missionId => !before.Keys.Any(k => k.Item1 == missionId)), after.Count);
             foreach (var missionId in missions)
                 StringAssert.Contains(after.Single(k => k.Key.Item1 == missionId).Value, M.Key, $"{missionId}");
             StringAssert.Contains(after.Single(k => k.Key.Item1 == 1056).Value, M.ReclaimingEntryWithGenerator);

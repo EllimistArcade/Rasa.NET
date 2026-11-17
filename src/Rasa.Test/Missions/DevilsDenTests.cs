@@ -269,7 +269,8 @@ namespace Rasa.Test.Missions
         {
             using var database = new Rasa.Test.Database.OrdinaryLootTestDatabase();
             var migrator = database.Context.GetService<IMigrator>();
-            const string Markers = "20271112000000_Devils_den_markers", Before = "20271111000000_Stalker_and_juggernaut_kits";
+            // Mission_marker_maps, before them, maps five of these scenes on its own; Marker_maps_merged gives each every map.
+            const string Markers = "20271201000000_Marker_maps_merged", Before = "20271111000000_Stalker_and_juggernaut_kits";
             int Marked() => database.Context.MissionIndicatorEntries.AsNoTracking()
                 .Count(entry => entry.MissionId == D.SeverTheHead && entry.ContentRevision == D.Revision && entry.ObjectiveId == 3);
             Dictionary<uint, string> Scenes() => database.Context.Set<MissionSceneBindingEntry>().AsNoTracking()

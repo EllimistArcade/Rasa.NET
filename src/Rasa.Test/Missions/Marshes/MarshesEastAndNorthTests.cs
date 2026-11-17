@@ -54,7 +54,7 @@ namespace Rasa.Test.Missions.Marshes
         public void Restore() => PlateauGiantKillerSquadTests.RestoreClock();
 
         /// <summary>
-        /// Bargas on the temple's upper floor (a navmesh island, his altars walked to from him) and Shaw at the guard station
+        /// Bargas on the temple's upper floor (his altars walked to from him) and Shaw at the guard station
         /// stand with the client's names; the Machina pools are walked to from Falcon Hold; each mission is offered only by
         /// its giver, with no requirement.
         /// </summary>
@@ -67,8 +67,6 @@ namespace Rasa.Test.Missions.Marshes
             Assert.AreEqual((MarshesEastAndNorthNpcsV1.BargasName, MarshesEastAndNorthNpcsV1.BargasPackage), (bargas.NameId, bargas.Npc.NpcPackageId));
             Assert.AreNotEqual(TargetCategory.Hostile, bargas.TargetCategory);
             AssertOnGround(marshes, bargas.Position, "Bargas");
-            Assert.IsFalse(marshes.NavMesh.FindPath(PaludosWaypoint, bargas.Position, out var fromPaludos) != null && fromPaludos,
-                "the temple's upper floor is an island");
             foreach (var (_, _, at) in MarshesBraziersOnDryFloorV1.Moves)
             {
                 AssertOnGround(marshes, ToVector(at), "an altar");

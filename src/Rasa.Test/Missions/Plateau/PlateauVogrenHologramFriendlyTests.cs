@@ -54,9 +54,10 @@ namespace Rasa.Test.Missions.Plateau
         public void NoNpcAPlayerMayKillIsBackWithinAMinute()
         {
             // An NPC with a conversation that a player may attack - HOSTILE or NEUTRAL - and is put back by its pool in
-            // seconds is experience on tap, as the hologram was. Every other one waits five minutes or more.
+            // seconds is experience on tap, as the hologram was. Every other one waits five minutes or more. The whole
+            // migrated world: the Marshes' Conscript Kaav came with a two-second pool (Marshes_kaav_respawn).
             using var database = new OrdinaryLootTestDatabase();
-            database.Context.GetService<IMigrator>().Migrate(Migration);
+            database.Context.GetService<IMigrator>().Migrate();
 
             var quick = database.Context.Database.SqlQueryRaw<string>(
                 "SELECT s.id || ' ' || c.comment AS Value FROM spawnpool s JOIN creature c ON c.id IN " +

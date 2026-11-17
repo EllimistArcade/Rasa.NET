@@ -100,7 +100,8 @@ namespace Rasa.Test.Missions.Content
             // three, Purgas Station's five, Guardian Prominence's four, the Plateau missions and the Valverde Pools missions.
             var targets = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
                 .Concat(Rasa.Test.Missions.Plateau.PlateauMissionTests.MissionIds)
-                .Concat(Rasa.Test.Missions.Pools.PoolsMissionTests.MissionIds).ToArray();
+                .Concat(Rasa.Test.Missions.Pools.PoolsMissionTests.MissionIds)
+                .Concat(Rasa.Test.Missions.Marshes.MarshesMissionTests.MissionIds).ToArray();
             var expected = WildernessMissionCases.ProtectedBootcampMissionIds.Concat(
                 WildernessMissionCases.All.Where(entry => entry.Disposition == WildernessDisposition.OutdoorRelease)
                     .Select(entry => entry.MissionId)).ToArray();

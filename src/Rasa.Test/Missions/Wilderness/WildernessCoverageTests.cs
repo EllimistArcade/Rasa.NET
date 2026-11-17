@@ -35,7 +35,8 @@ namespace Rasa.Test.Missions.Wilderness
             // PurgasStationDepthsMissionsV1) and Guardian Prominence's four (GuardianProminenceContent),
             // which are instances'. And the Plateau and Valverde Pools ones.
             var battlefields = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
-                .Concat(Plateau.PlateauMissionTests.MissionIds).Concat(Pools.PoolsMissionTests.MissionIds).ToArray();
+                .Concat(Plateau.PlateauMissionTests.MissionIds).Concat(Pools.PoolsMissionTests.MissionIds)
+                .Concat(Marshes.MarshesMissionTests.MissionIds).ToArray();
             var ojasa = Rasa.Services.Preloader.OjasaHiveContent.Missions;
             var donn = Rasa.Services.Preloader.CavesOfDonnContent.Missions;
             var den = Rasa.Services.Preloader.DevilsDenContent.Missions;

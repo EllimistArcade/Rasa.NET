@@ -72,9 +72,10 @@ namespace Rasa.Test.Missions.Pools
         /// one, Mox Clearing's five, Mox Shouldn't Smoke's two, A Mox On Both Our Houses' two, Deadly Moxins' four, Miasma
         /// Mutations' four, Miasma Testing's eleven, Total Slaughter's two, The Mad Bomber's one. Turpis Refinery: Things
         /// That Blow Up's six, Hard Core's six, Chemistry 101's fourteen, The Bad Doctor's one, Cost of Doing Business'
-        /// 22; Turpis Transport's one, at the door on the Pools.
+        /// 22; Turpis Transport's one, at the door on the Pools. Looking For Logos?' second for objective 3, on the Far
+        /// Logos' shrine inside the refinery (Mission_marker_maps).
         /// </summary>
-        internal const int Indicators = 271;
+        internal const int Indicators = 272;
 
         private const string Before = "20270926000000_Plateau_retreads_to_retreads";
         private const string SnakePit = "20270927000000_Pools_snake_pit";

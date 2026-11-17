@@ -7,7 +7,7 @@ using Rasa.Services.Preloader;
 
 namespace Rasa.Test.Database
 {
-    // Self Preservation's yellow and red switches in front of their walls (Maligo_switch_walls).
+    // Self Preservation's red switch in front of its wall (Maligo_switch_walls); the yellow one is Plateau_self_preservation_charges'.
     [TestClass]
     public class MaligoSwitchWallsTests
     {
@@ -55,7 +55,7 @@ namespace Rasa.Test.Database
 
             migrator.Migrate(Migration);
             Assert.AreEqual(-40.0, Double(database, "SELECT pos_x AS Value " + Marker(2)));
-            Assert.AreEqual(MaligoSwitchWalls.Now(1).X, Double(database, "SELECT pos_x AS Value " + Marker(1)), 1e-3, "the other moved");
+            StringAssert.Contains(Json(database), MaligoSwitchWalls.Json(MaligoSwitchWalls.Now(2), MaligoSwitchWalls.NowFacing(2)), "the switch moved");
 
             migrator.Migrate(previous);
             Assert.AreEqual(-40.0, Double(database, "SELECT pos_x AS Value " + Marker(2)));

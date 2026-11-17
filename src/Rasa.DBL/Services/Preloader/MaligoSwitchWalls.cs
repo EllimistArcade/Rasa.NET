@@ -19,16 +19,19 @@ namespace Rasa.Services.Preloader
     /// The scene is the stored Self Preservation scene (mission_scene_binding.bindings, camelCase as MissionContentCodec
     /// writes it): each switch's place and turn, <c>{"x":..,"y":..,"z":..},"orientation":..</c>, is replaced whole. Plain
     /// SQL for both providers (REPLACE is both's). Guarded: what is not as this found it is left as it is, both ways.
+    ///
+    /// Only the red one now: Plateau_self_preservation_charges (PlateauSelfPreservationV2), which comes before this, puts
+    /// Self Preservation in again with the yellow one on the floor of its turn, 2.8 m south of where it stood, and in sight
+    /// from the corridor (PlateauMaligoBaseTests).
     /// </summary>
     public static class MaligoSwitchWalls
     {
         public const uint Mission = S.MissionId, Objective = S.Destroy;
         public const string Revision = PlateauMissionDataV1.Revision;
 
-        /// <summary>The two switches: index in S.Switches, where it was and which way it faced, and its marker (PlateauMissionDataV1.Indicator 4 + index).</summary>
+        /// <summary>The switch moved: index in S.Switches, where it was and which way it faced, and its marker (PlateauMissionDataV1.Indicator 4 + index).</summary>
         public static readonly (int Index, ScenePosition Was, double WasFacing)[] Moved =
         {
-            (1, new ScenePosition(-27, -130.88f, 331.3f), 3.1416),
             (2, new ScenePosition(-49.3f, -130.88f, 292), 1.5708),
         };
 

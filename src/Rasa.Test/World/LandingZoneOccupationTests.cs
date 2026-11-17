@@ -187,7 +187,8 @@ namespace Rasa.Test.World
             Worker();
             var turrets = EntityManager.Instance.Creatures.Values.Where(c =>
                 c.DbId == 551001 && CreatureManager.IsLivingOnMap(_world.Map, c)).ToArray();
-            Assert.AreEqual(6, turrets.Length);
+            // Two on the gate bases, three on the wall tops (Landing_zone_fence_turret took the end cap's).
+            Assert.AreEqual(5, turrets.Length);
             Worker(300000); Ships();
             foreach (var creature in Living) Kill(creature);
             Assert.IsFalse(ControlPoints.Instance.MayCapture(_world.Map, Point), "The existing Bane turrets also defend the control point.");

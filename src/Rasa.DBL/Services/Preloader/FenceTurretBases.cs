@@ -248,7 +248,7 @@ namespace Rasa.Services.Preloader
             yield return (t.BanePool, t.BaneCreature, t.Bane, 1, ControlPointLinkEntry.KindBanePool);
         }
 
-        private static IEnumerable<string> Remove(Turret t)
+        internal static IEnumerable<string> Remove(Turret t)
         {
             foreach (var (pool, creature, at, _, kind) in Pools(t))
             {
@@ -258,7 +258,7 @@ namespace Rasa.Services.Preloader
             }
         }
 
-        private static IEnumerable<string> Insert(Turret t)
+        internal static IEnumerable<string> Insert(Turret t)
         {
             foreach (var (pool, creature, at, mode, kind) in Pools(t))
             {

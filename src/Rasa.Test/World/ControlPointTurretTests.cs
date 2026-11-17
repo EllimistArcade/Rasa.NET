@@ -89,6 +89,9 @@ namespace Rasa.Test.World
             // Fence_turret_bases takes off the turrets with no base to stand on and gives the empty bases theirs.
             var fenceBases = world.Database.GetAppliedMigrations().Contains("20271002000000_Fence_turret_bases");
             var removed = fenceBases ? FenceTurretBases.Removed.Select(t => t.AfsPool).ToHashSet() : new HashSet<uint>();
+            // Landing_zone_fence_turret takes off the Landing Zone's pair on the east wall's end cap.
+            if (world.Database.GetAppliedMigrations().Contains("20271201000000_Landing_zone_fence_turret"))
+                removed.Add(LandingZoneFenceTurret.AfsPool);
             var added = fenceBases ? FenceTurretBases.Added : Array.Empty<FenceTurretBases.Turret>();
             var spots = ControlPointTurrets.Spots.Where(spot => (!wreckGone || spot.AfsPool != LightningFieldsWreckTurret.AfsPool) && !removed.Contains(spot.AfsPool)).ToArray();
 

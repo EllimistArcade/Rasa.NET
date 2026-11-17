@@ -33,7 +33,7 @@ namespace Rasa.Test.Missions.Wilderness
             // Brann Water Refinery's five (BrannWaterRefineryContent), the Treeback Camp's thirteen (TreebackCampContent),
             // Tahrendra Base's three (TahrendraBaseContent), Purgas Station's five (PurgasStationMissionsV1,
             // PurgasStationDepthsMissionsV1) and Guardian Prominence's four (GuardianProminenceContent),
-            // which are instances'. And the Plateau and Valverde Pools ones.
+            // which are instances'. And the Plateau, Valverde Pools and Valverde Marshes ones.
             var battlefields = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
                 .Concat(Plateau.PlateauMissionTests.MissionIds).Concat(Pools.PoolsMissionTests.MissionIds)
                 .Concat(Marshes.MarshesMissionTests.MissionIds).ToArray();

@@ -97,7 +97,8 @@ namespace Rasa.Test.Missions.Content
             // eight, Pravus Research's six, Torcastra Prison's five, Minos Caverns' four, Crater Lake's ten, the Energy Weapon Center's five,
             // Timora Mines' six and Stolen History, Magma Caverns' five, Warnet Caverns' eight, the Kardash Atta Colony's ten, the
             // Phanin Research Facility's seven, the Brann Water Refinery's five, the Treeback Camp's thirteen, Tahrendra Base's
-            // three, Purgas Station's five, Guardian Prominence's four, the Plateau missions and the Valverde Pools missions.
+            // three, Purgas Station's five, Guardian Prominence's four, the Plateau missions, the Valverde Pools missions and the
+            // Valverde Marshes missions.
             var targets = Rasa.Services.Preloader.TargetsOfOpportunitySeed.Zones.Select(zone => zone.MissionId)
                 .Concat(Rasa.Test.Missions.Plateau.PlateauMissionTests.MissionIds)
                 .Concat(Rasa.Test.Missions.Pools.PoolsMissionTests.MissionIds)

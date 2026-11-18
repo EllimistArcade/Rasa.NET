@@ -201,7 +201,9 @@ namespace Rasa.Test.Missions
             LootDispenserManager.Instance.RequestLootAllFromCorpse(harness.Client, new RequestLootAllFromCorpsePacket { EntityId = loot.EntityId });
             harness.Drain();
             Assert.AreEqual(1L, Held(harness, C.DogtagsTemplate));
-            Assert.AreEqual(MissionObjectiveState.Completed, log.Objectives[C.ReturnDogtags].State);
+            Assert.AreEqual(MissionObjectiveState.Completed, log.Objectives[CraterLakeMarkers.DogtagsHeld].State);
+            Assert.AreEqual(MissionObjectiveState.Incomplete, log.Objectives[C.ReturnDogtags].State, "open until Franja takes them");
+            Assert.IsTrue(log.Completeable);
 
             var franja = Put(harness, C.Franja, harness.Client.Player.Position + new Vector3(2, 0, 0));
             Reward(harness, franja, C.GhostInTheMachine, null, null, 8000, 1500);

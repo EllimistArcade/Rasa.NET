@@ -173,8 +173,10 @@ namespace Rasa.Services.Preloader
         /// The data terminals: the research HQ's upper floor (the walkthrough's first), the
         /// greenhouse with the lab counters (its second), the housing on the ridge with its
         /// microscope and computer (its third). The Bane equipment by the fortification platform's consoles.
+        /// The Biological Lab's stands outside the greenhouse's north wall: inside, at the
+        /// walkthrough's (102.3, -89.6), it was on a patch of floor no route reaches (Crater_lake_markers).
         /// </summary>
-        public static readonly Vector3 ProcessingTerminal = new(124.3f, 103.91f, -27.3f), BiologicalTerminal = new(102.3f, 118.94f, -89.6f),
+        public static readonly Vector3 ProcessingTerminal = new(124.3f, 103.91f, -27.3f), BiologicalTerminal = new(100.3f, 118.93f, -83.6f),
             ObservationTerminal = new(-113f, 154.04f, -170f), BaneData = new(-270.5f, 169.04f, -66f);
 
         /// <summary>The panel on the courtyard's catwalk, by its terminal.</summary>
@@ -188,10 +190,14 @@ namespace Rasa.Services.Preloader
         /// </summary>
         public static readonly Vector3[] Caches = { new(-277f, 169.04f, -50f), new(-277f, 169.04f, -58f) };
 
-        /// <summary>The storage crates in the destroyed buildings.</summary>
+        /// <summary>
+        /// The storage crates in the destroyed buildings. The fourth stands south-west of the
+        /// greenhouses: at (90, -118), inside the second, it was on floor no route reaches
+        /// (Crater_lake_markers).
+        /// </summary>
         public static readonly Vector3[] Crates =
         {
-            new(118f, 99.58f, -40f), new(126f, 104.46f, -33f), new(100f, 120.29f, -110f), new(90f, 118.93f, -118f),
+            new(118f, 99.58f, -40f), new(126f, 104.46f, -33f), new(100f, 120.29f, -110f), new(82.5f, 119.23f, -126f),
             new(8f, 119.09f, -160f), new(20f, 119.22f, -145f), new(-125f, 154.04f, -185f)
         };
 
@@ -428,7 +434,7 @@ namespace Rasa.Services.Preloader
         public const uint EclipseLaserRifle = 17337, PulsarReflectiveGloves = 35645;
         public const uint PulsarHazmatVest = 20856, LaserChaingun = 42440;
 
-        private static InstanceMissionSql.RewardItem Item(uint template, uint quantity = 1, uint module = 0) => new(template, quantity, module);
+        internal static InstanceMissionSql.RewardItem Item(uint template, uint quantity = 1, uint module = 0) => new(template, quantity, module);
 
         /// <summary>Franja's: Casper is missing; Velns at the staging post looks him up.</summary>
         private static void TheDeadLiveRows(List<string> sql)
@@ -528,7 +534,7 @@ namespace Rasa.Services.Preloader
         };
 
         /// <summary>HQ's, by radio after We Be Jammin': Casper, found a Machina, and his dogtags to Franja.</summary>
-        private static void GhostInTheMachineRows(List<string> sql)
+        internal static void GhostInTheMachineRows(List<string> sql)
         {
             var mission = new InstanceMissionSql(sql, Revision, GhostInTheMachine, "Ghost in the Machine", 5944, null, Franja, 10, Category);
             mission.Reward(8000, 1500);
@@ -769,7 +775,7 @@ namespace Rasa.Services.Preloader
         /// has a scenario, which a mission has only with a script; the data sequence with no
         /// sequences is one that does nothing.
         /// </summary>
-        private static MissionSceneDefinition Scene(bool events = false) => new()
+        internal static MissionSceneDefinition Scene(bool events = false) => new()
         {
             Requirement = new CustomRequirement("character.starting-experience-completed"),
             Script = events ? "data.sequence" : null
@@ -779,7 +785,7 @@ namespace Rasa.Services.Preloader
             new(key, template, MissionItemScope.AssignmentIssued, 1,
                 MissionItemCleanupDisposition.Remove, MissionItemCleanupDisposition.Remove, MissionItemCleanupDisposition.Remove);
 
-        private static void Evidence(InstanceMissionSql mission, string reconstruction)
+        internal static void Evidence(InstanceMissionSql mission, string reconstruction)
         {
             mission.Evidence(1, MissionEvidenceSourceKind.Client, "trpython:data/generated/client/missionobjective.pyo_dis",
                 "Client1.16.5 mission, objective, text and conversation identities.");

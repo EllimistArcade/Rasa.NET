@@ -12,6 +12,7 @@ using Rasa.Packets.LootDispenser.Client;
 using Rasa.Packets.MapChannel.Client;
 using Rasa.Packets.MapChannel.Server;
 using Rasa.Packets.Mission.Server;
+using Rasa.Services.Preloader;
 using Rasa.Services.Preloader.Missions.Wilderness;
 using Rasa.Structures;
 using Rasa.Structures.Char;
@@ -558,6 +559,81 @@ namespace Rasa.Test.Missions.Wilderness
             Assert.AreEqual(MissionState.Completed, harness.Client.Player.Missions[776].State);
             Assert.AreEqual(0U, HeldQuantity(harness, 2524));
         }
+
+        /// <summary>
+        /// Lightbender Glands: a Light Bender Sniper's corpse holds a gland as a camp Lightbender's does, one a
+        /// corpse, until four are held (Lightbender_gland_snipers). Without the mission, a sniper holds none.
+        /// </summary>
+        [TestMethod]
+        public void LightbenderGlandsDropFromTheSnipersAsWellAsTheCamp()
+        {
+            using var harness = WildernessRuntimeTestHarness.Create();
+            Assert.IsFalse(Kill(harness, LightbenderGlandSnipers.Sniper, 630051).LootItems.Any(item => item.ItemTemplateId == Gland),
+                "no mission, no gland");
+            CompleteHistory(harness, 776);
+            Accept(harness, 188, LightbenderGlandSnipers.MissionId);
+            var sources = new (uint Creature, uint Spawn)[]
+            {
+                (LightbenderGlandSnipers.Sniper, 630046), (LightbenderGlandSnipers.Sniper, 630047),
+                (LightbenderGlandSnipers.Camp, 630071), (LightbenderGlandSnipers.Sniper, 630048)
+            };
+            for (var count = 0U; count < sources.Length; count++)
+            {
+                var loot = Kill(harness, sources[count].Creature, sources[count].Spawn);
+                Assert.AreEqual(1U, loot.LootItems.Single(item => item.ItemTemplateId == Gland).ItemQuantity, $"{sources[count]}");
+                Take(harness, loot);
+                Assert.AreEqual(count + 1, GlandCounter(harness));
+            }
+            Assert.IsTrue(harness.Client.Player.Missions[LightbenderGlandSnipers.MissionId].Completeable);
+            Assert.IsFalse(Kill(harness, LightbenderGlandSnipers.Sniper, 630049).LootItems.Any(item => item.ItemTemplateId == Gland),
+                "not past four");
+        }
+
+        /// <summary>
+        /// Lightbender Glands abandoned and taken again: the glands kept count at the new accept, and the
+        /// Lightbenders drop the rest, up to four and no more.
+        /// </summary>
+        [TestMethod]
+        [DataRow(0U)]
+        [DataRow(2U)]
+        [DataRow(4U)]
+        public void LightbenderGlandsDropAgainAfterAnAbandonAndARetake(uint retained)
+        {
+            using var harness = WildernessRuntimeTestHarness.Create();
+            CompleteHistory(harness, 776);
+            var ojy = Accept(harness, 188, LightbenderGlandSnipers.MissionId);
+            for (var count = 0U; count < retained; count++)
+                Take(harness, Kill(harness, LightbenderGlandSnipers.Camp, 630071 + count));
+            var npcs = new NpcManager(harness, harness.Manager);
+            npcs.AbandonMission(harness.Client, new AbandonMissionPacket { MissionId = LightbenderGlandSnipers.MissionId });
+            harness.Drain();
+            Assert.IsFalse(harness.Client.Player.Missions.ContainsKey(LightbenderGlandSnipers.MissionId));
+            Assert.AreEqual(retained, HeldQuantity(harness, Gland), "the glands stay");
+
+            harness.MoveTo(ojy.Position);
+            npcs.RequestNpcConverse(harness.Client, new RequestNPCConversePacket { EntityId = ojy.EntityId });
+            npcs.AssignNPCMission(harness.Client,
+                new AssignNPCMissionPacket { NpcEntityId = ojy.EntityId, MissionId = LightbenderGlandSnipers.MissionId });
+            Assert.AreEqual(MissionState.Active, harness.Client.Player.Missions[LightbenderGlandSnipers.MissionId].State);
+            Assert.AreEqual(retained, GlandCounter(harness), "the kept glands count at the accept");
+
+            for (var count = retained; count < 4; count++)
+            {
+                var loot = Kill(harness, LightbenderGlandSnipers.Sniper, 630046 + count);
+                Assert.AreEqual(1U, loot.LootItems.Single(item => item.ItemTemplateId == Gland).ItemQuantity);
+                Take(harness, loot);
+                Assert.AreEqual(count + 1, GlandCounter(harness));
+            }
+            Assert.AreEqual(4U, HeldQuantity(harness, Gland));
+            Assert.IsTrue(harness.Client.Player.Missions[LightbenderGlandSnipers.MissionId].Completeable);
+            Assert.IsFalse(Kill(harness, LightbenderGlandSnipers.Sniper, 630050).LootItems.Any(item => item.ItemTemplateId == Gland),
+                "not past four");
+        }
+
+        private const uint Gland = 2557, GlandClass = 11317;
+
+        private static uint GlandCounter(WildernessRuntimeTestHarness harness) =>
+            harness.Client.Player.Missions[LightbenderGlandSnipers.MissionId].Objectives[LightbenderGlandSnipers.Objective].ItemCounters[GlandClass];
 
         [TestMethod]
         public void BloodTemplateAliasDoesNotSubstituteForTheAuthoredCollectionOrCost()

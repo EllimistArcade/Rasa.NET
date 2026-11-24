@@ -145,7 +145,9 @@ namespace Rasa.Test.Database
         // (its missions, NPCs and pools); at 20271003000000 Torcastra_keymaster_computer (one
         // Torcastra mission's indicator and scene binding) and Pools_spy_chain (its missions and
         // NPCs); at 20271004000000 Devils_den_teleporters (Devil's Den's local teleporter links)
-        // and Pools_lamna_armory (its missions and NPCs). EF runs a pending one whatever
+        // and Pools_lamna_armory (its missions and NPCs); at 20271201000000 Landing_zone_fence_turret
+        // (two turret pools off the Landing Zone's east wall) and Marker_maps_merged (four mission
+        // scenes' indicatorMaps), both on development before the pair was seen. EF runs a pending one whatever
         // its id's place, so a World that has one of a pair gets the other, in either order.
         // A new pair is a mistake: EF runs both, ordered by the rest of the id, whatever was meant.
         [TestMethod]
@@ -154,7 +156,8 @@ namespace Rasa.Test.Database
             var known = new[] { "20260927000000", "20260930000000", "20261012000000", "20261104000000", "20261111000000", "20261203000000",
                 "20261230000000", "20261231000000", "20270109000000", "20270111000000", "20270114000000", "20270115000000", "20270116000000", "20270117000000", "20270120000000", "20270125000000", "20270923000000", "20270924000000",
                 "20270919000000", "20270921000000", "20270922000000", "20270925000000", "20270926000000", "20270927000000",
-                "20270928000000", "20270929000000", "20270930000000", "20271001000000", "20271002000000", "20271003000000", "20271004000000" };
+                "20270928000000", "20270929000000", "20270930000000", "20271001000000", "20271002000000", "20271003000000", "20271004000000",
+                "20271201000000" };
 
             using var database = new OrdinaryLootTestDatabase();
             var ids = database.Context.Database.GetMigrations().ToArray();
@@ -179,7 +182,8 @@ namespace Rasa.Test.Database
                 ["World"] = new[] { "20260927000000", "20260930000000", "20261012000000", "20261104000000", "20261111000000", "20261203000000",
                     "20261230000000", "20261231000000", "20270109000000", "20270111000000", "20270114000000", "20270115000000", "20270116000000", "20270117000000", "20270120000000", "20270125000000", "20270923000000", "20270924000000",
                 "20270919000000", "20270921000000", "20270922000000", "20270925000000", "20270926000000", "20270927000000",
-                "20270928000000", "20270929000000", "20270930000000", "20271001000000", "20271002000000", "20271003000000", "20271004000000" },
+                "20270928000000", "20270929000000", "20270930000000", "20271001000000", "20271002000000", "20271003000000", "20271004000000",
+                "20271201000000" },
                 ["Char"] = new[] { "20261110000000", "20261215000000" },
                 ["Auth"] = new string[0]
             };

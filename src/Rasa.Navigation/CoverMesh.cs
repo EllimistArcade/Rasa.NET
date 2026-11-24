@@ -202,6 +202,38 @@ namespace Rasa.Navigation
             return float.IsNaN(h) ? (float?)null : h;
         }
 
+        /// <summary>
+        /// The terrain's surface under a point: the grid's heights joined up bilinearly, as the client draws the ground
+        /// between them; <see cref="TerrainHeight"/> is the height of the grid point at or before it. Null off the grid
+        /// or where a corner has no height.
+        /// </summary>
+        public float? TerrainSurface(float x, float z)
+        {
+            if (_terrain.Length == 0)
+                return null;
+
+            var fx = (x - _terrainOriginX) / _terrainSpacing;
+            var fz = (z - _terrainOriginZ) / _terrainSpacing;
+            var c = (int)MathF.Floor(fx);
+            var r = (int)MathF.Floor(fz);
+
+            if (c < 0 || r < 0 || c + 1 >= _terrainColumns || r + 1 >= _terrainRows)
+                return TerrainHeight(x, z);
+
+            var h00 = _terrain[r * _terrainColumns + c];
+            var h10 = _terrain[r * _terrainColumns + c + 1];
+            var h01 = _terrain[(r + 1) * _terrainColumns + c];
+            var h11 = _terrain[(r + 1) * _terrainColumns + c + 1];
+
+            if (float.IsNaN(h00) || float.IsNaN(h10) || float.IsNaN(h01) || float.IsNaN(h11))
+                return null;
+
+            var tx = fx - c;
+            var tz = fz - r;
+
+            return h00 * (1 - tx) * (1 - tz) + h10 * tx * (1 - tz) + h01 * (1 - tx) * tz + h11 * tx * tz;
+        }
+
         /// <summary>Whether anything - an entity's collision or the ground - lies on the segment between the two points.</summary>
         public bool Blocked(Vector3 from, Vector3 to)
         {

@@ -1037,6 +1037,50 @@ namespace Rasa.Managers
             return spread;
         }
 
+        /// <summary>How far a spot may be above or below the terrain's surface and still stand on it (IsOpenGround).</summary>
+        public const float OpenGroundTerrainGap = 1f;
+
+        /// <summary>How high over a spot (IsOpenGround) no collision may be: a pillbox's or a bunker's roof, an overhang.</summary>
+        public const float OpenGroundSky = 30f;
+
+        /// <summary>
+        /// Whether a spot is out in the open: on the terrain (within <see cref="OpenGroundTerrainGap"/>
+        /// of its surface) with no collision over it up to <see cref="OpenGroundSky"/>. True on a map
+        /// with no cover or no terrain (an instance), where there is nothing to tell.
+        ///
+        /// The navmesh is walkable wherever an agent fits, inside a building and on its roof alike,
+        /// and a pool's draw (NavMeshQuery.RandomPointAround) is any of it in the disc. The Thrax
+        /// at the pillbox of the Bane fort in western Valverde Pools (531678, a Bane Investigation
+        /// camp) came out one in three inside the pillbox, on its roof or on the wall tops around
+        /// it, where players could neither see nor reach them and their bodies could not be looted:
+        /// its point is the middle of the fort's props, on top of a trench.
+        /// </summary>
+        internal static bool IsOpenGround(MapChannel mapChannel, Vector3 spot)
+        {
+            var cover = mapChannel?.Cover;
+
+            if (cover == null || !cover.HasTerrain)
+                return true;
+
+            if (cover.TerrainSurface(spot.X, spot.Z) is not float ground)
+                return true;
+
+            if (Math.Abs(spot.Y - ground) > OpenGroundTerrainGap)
+                return false;
+
+            return !cover.GeometryBlocks(spot + new Vector3(0f, 0.3f, 0f), spot + new Vector3(0f, OpenGroundSky, 0f));
+        }
+
+        /// <summary>
+        /// Whether an area round <paramref name="centre"/> is out in the open: the walkable ground
+        /// nearest it is open ground (<see cref="IsOpenGround"/>). A mined pool's point is the middle
+        /// of its props and its height their average, metres over the ground; the ground under it is
+        /// what tells. An area whose ground is under a roof - a camp in a building, an instance -
+        /// keeps its creatures wherever the navmesh puts them.
+        /// </summary>
+        internal static bool IsOutdoors(MapChannel mapChannel, Vector3 centre) =>
+            IsOpenGround(mapChannel, mapChannel?.NavMesh?.Nearest(centre) ?? centre);
+
         /// <summary>
         /// Whether an automatic pool with an area has walkable ground to put its creatures on.
         /// One that has none is marked (SpawnPool.NoWalkableGround) and logged, once: what it
@@ -1112,7 +1156,8 @@ namespace Rasa.Managers
 
             if (pool.Radius > 0)
             {
-                Vector3? first = null, firstInside = null;
+                Vector3? first = null, firstInside = null, firstOpen = null;
+                var outdoors = IsOutdoors(mapChannel, SpreadCentre(mapChannel, pool));
 
                 for (var draw = 0; draw < SpawnDraws; draw++)
                 {
@@ -1143,11 +1188,18 @@ namespace Rasa.Managers
 
                     firstInside ??= walkable;
 
+                    // An area out in the open keeps its creatures out there: not in a pillbox, on
+                    // its roof or along the top of a wall the navmesh runs over (IsOpenGround).
+                    if (outdoors && !IsOpenGround(mapChannel, walkable.Value))
+                        continue;
+
+                    firstOpen ??= walkable;
+
                     if (Spacing.IsClear(walkable.Value, taken))
                         return walkable.Value;
                 }
 
-                if ((firstInside ?? first) is Vector3 drawn)
+                if ((firstOpen ?? firstInside ?? first) is Vector3 drawn)
                     return drawn;
 
                 pos += InDisc(pool.Radius);

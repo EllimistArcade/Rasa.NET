@@ -1535,12 +1535,16 @@ namespace Rasa.Managers
             var (centre, radius) = WanderZoneOf(creature);
             var taken = SpotsTakenAround(mapChannel, creature);
 
+            // A zone out in the open is strolled in the open: not into a pillbox or onto its roof (SpawnPoolManager.IsOpenGround).
+            var outdoors = SpawnPoolManager.IsOutdoors(mapChannel, centre);
+
             for (var attempt = 0; attempt < WanderAttempts; attempt++)
             {
                 var candidate = NavMeshManager.RandomPointAround(mapChannel, creature.Position, WanderStepDistance)
                                 ?? NavMeshManager.SnapToGround(mapChannel, creature.Position + SpawnPoolManager.InDisc(WanderStepDistance));
 
-                if (IsGoodStroll(candidate, creature.Position, centre, radius, taken))
+                if (IsGoodStroll(candidate, creature.Position, centre, radius, taken) &&
+                    (!outdoors || SpawnPoolManager.IsOpenGround(mapChannel, candidate)))
                     return candidate;
             }
 

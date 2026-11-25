@@ -42,7 +42,13 @@ namespace Rasa.Managers
     ///  - hit points (<see cref="DefaultHealth"/> unless the GM gives some), the states at more
     ///    than 75%, more than 25% and above none, and no repair but a GM's;
     ///  - whoever it stops can hurt it; Landing Zone assault troops must first defeat the frontline;
-    ///  - creatures cannot cross an intact enemy field, and may attack one selected as a combat target.
+    ///  - creatures cannot cross an intact enemy field, and may attack one selected as a combat target;
+    ///  - a team's field (<see cref="Field.IsTeamField"/>, a battleground's control point's,
+    ///    Battlegrounds) is a team's or nobody's: it lets that team's players through and stops
+    ///    everyone else's, and nobody's stops every player. Who it stops is told to each player
+    ///    alone (Recv_BlockInfo, Recv_TargetCategory), and an ownable one is hued for its team
+    ///    (<see cref="HueOf(Field)"/>). For creatures it is the AFS's while a team holds it and the
+    ///    Bane's while nobody does.
     /// </summary>
     public static class ForceFields
     {
@@ -126,6 +132,24 @@ namespace Rasa.Managers
         /// <summary>The ownable field's hue for each side, 0-255 red, green, blue, alpha: ours.</summary>
         public static (byte R, byte G, byte B, byte A) HueOf(Side side) => side == Side.A ? ((byte)64, (byte)128, (byte)255, (byte)96) : ((byte)255, (byte)64, (byte)48, (byte)96);
 
+        /// <summary>
+        /// A field's hue: a team's field red for Red Team, blue for Blue Team and violet for
+        /// nobody's (the Simulated Bane's), so that nobody's is neither team's colour; any other by
+        /// its side. Ours.
+        /// </summary>
+        public static (byte R, byte G, byte B, byte A) HueOf(Field field)
+        {
+            if (field?.IsTeamField != true)
+                return HueOf(field?.Side ?? Side.B);
+
+            return field.Team switch
+            {
+                Battlegrounds.Red => ((byte)255, (byte)48, (byte)32, (byte)96),
+                Battlegrounds.Blue => ((byte)48, (byte)96, (byte)255, (byte)96),
+                _ => ((byte)160, (byte)64, (byte)255, (byte)96)
+            };
+        }
+
         public sealed class Field
         {
             public int Id { get; set; }
@@ -142,6 +166,12 @@ namespace Rasa.Managers
             /// Prison's, which its gate key opens (TorcastraPrison).
             /// </summary>
             public bool Sealed { get; set; }
+
+            /// <summary>A team's field: it stops players by their team, not by its side (<see cref="StopsPlayer(Field, Manifestation)"/>).</summary>
+            public bool IsTeamField { get; set; }
+
+            /// <summary>The team whose players a team's field lets through; 0 for nobody, when it stops every player.</summary>
+            public uint Team { get; set; }
 
             public bool IsDestroyed => Health <= 0;
             public Vector3 Position => Object.Position;
@@ -294,7 +324,27 @@ namespace Rasa.Managers
         public static bool StopsCreature(Field field, TargetCategory category) =>
             !field.IsDestroyed && (field.Class.Kind == Kind.Door || StopsCategory(field.Side, category));
 
-        public static bool StopsPlayer(Field field) => !field.IsDestroyed && StopsPlayers(field.Side);
+        /// <summary>
+        /// Whether an intact field stops players: one of a side by its side, and a team's field
+        /// anyone it may stop - every player while it is nobody's, and the other team's while it
+        /// is a team's. <see cref="StopsPlayer(Field, Manifestation)"/> for one player.
+        /// </summary>
+        public static bool StopsPlayer(Field field) => StopsPlayer(field, null);
+
+        /// <summary>
+        /// Whether an intact field stops this player: a team's field stops everyone not on its
+        /// team (Battlegrounds.TeamOf), and with no player named, someone; any other by its side.
+        /// </summary>
+        public static bool StopsPlayer(Field field, Manifestation player)
+        {
+            if (field == null || field.IsDestroyed)
+                return false;
+
+            if (field.IsTeamField)
+                return field.Team == 0 || player == null || Battlegrounds.Instance.TeamOf(player) != field.Team;
+
+            return StopsPlayers(field.Side);
+        }
 
         #endregion
 
@@ -375,14 +425,46 @@ namespace Rasa.Managers
                 return;
 
             client.CallMethod(obj.EntityId, new UsableDamageInfoPacket(true, false, field.MaxHealth, field.Health));
-            client.CallMethod(obj.EntityId, new BlockInfoPacket(client.Player.EntityId, StopsPlayer(field)));
+            client.CallMethod(obj.EntityId, new BlockInfoPacket(client.Player.EntityId, StopsPlayer(field, client.Player)));
 
             if (field.Class.Kind == Kind.Ownable)
             {
-                var (r, g, b, a) = HueOf(field.Side);
+                var (r, g, b, a) = HueOf(field);
 
-                client.CallMethod(obj.EntityId, new TargetCategoryPacket(field.Object.TargetCategory));
+                client.CallMethod(obj.EntityId, new TargetCategoryPacket(CategoryFor(field, client.Player)));
                 client.CallMethod(obj.EntityId, new SetHuePacket(r, g, b, a));
+            }
+        }
+
+        /// <summary>How a field is to be shown to a player: a team's field HOSTILE to those it stops, any other by its side.</summary>
+        public static TargetCategory CategoryFor(Field field, Manifestation viewer)
+        {
+            if (field?.IsTeamField == true)
+                return StopsPlayer(field, viewer) ? TargetCategory.Hostile : TargetCategory.Friendly;
+
+            return field?.Object?.TargetCategory ?? TargetCategory.Hostile;
+        }
+
+        /// <summary>
+        /// A player's team has changed (Battlegrounds): each team's field on their map that they
+        /// can see, told to them again - whether it stops them, and how it is shown.
+        /// </summary>
+        public static void ShowTeamFieldsTo(Client client)
+        {
+            var map = client?.Player?.MapChannel;
+
+            if (map == null)
+                return;
+
+            foreach (var field in OnMap(map).Where(f => f.IsTeamField && f.Class.Kind != Kind.Door))
+            {
+                if (!ClientsAround(field).Contains(client))
+                    continue;
+
+                client.CallMethod(field.Object.EntityId, new BlockInfoPacket(client.Player.EntityId, StopsPlayer(field, client.Player)));
+
+                if (field.Class.Kind == Kind.Ownable)
+                    client.CallMethod(field.Object.EntityId, new TargetCategoryPacket(CategoryFor(field, client.Player)));
             }
         }
 
@@ -394,7 +476,7 @@ namespace Rasa.Managers
 
             foreach (var client in ClientsAround(field))
                 if (client.Player != null)
-                    client.CallMethod(field.Object.EntityId, new BlockInfoPacket(client.Player.EntityId, StopsPlayer(field)));
+                    client.CallMethod(field.Object.EntityId, new BlockInfoPacket(client.Player.EntityId, StopsPlayer(field, client.Player)));
         }
 
         private static IEnumerable<Client> ClientsAround(Field field)
@@ -417,6 +499,24 @@ namespace Rasa.Managers
 
             // Its category and hue are part of its introduction: put it back so everyone meets it again.
             Move(field, field.Position, field.Yaw);
+        }
+
+        /// <summary>
+        /// Makes a field a team's and gives it to a team, or to nobody (0): the AFS's side for
+        /// creatures while a team holds it, the Bane's while nobody does, and put back so everyone
+        /// meets it again with who it stops and its hue. False if it was that team's team field already.
+        /// </summary>
+        public static bool SetTeam(Field field, uint team)
+        {
+            if (field == null || field.IsTeamField && field.Team == team)
+                return false;
+
+            field.IsTeamField = true;
+            field.Team = team;
+            field.Side = team == 0 ? Side.B : Side.A;
+
+            Move(field, field.Position, field.Yaw);
+            return true;
         }
 
         #endregion
@@ -483,7 +583,7 @@ namespace Rasa.Managers
 
             return shooter switch
             {
-                Manifestation => StopsPlayers(field.Side),
+                Manifestation player => StopsPlayer(field, player),
                 Creature creature => StopsCategory(field.Side, creature.TargetCategory) && LandingZoneBreach.AllowsHit(field, creature),
                 _ => false
             };
@@ -585,10 +685,13 @@ namespace Rasa.Managers
         /// the client flies them through on the server's word. Their own steps are checked as
         /// they are reported (MovementChecks.CrossedField).
         /// </summary>
-        public static bool StopsPlayer(MapChannel mapChannel, Vector3 from, Vector3 to)
+        public static bool StopsPlayer(MapChannel mapChannel, Vector3 from, Vector3 to) => StopsPlayer(mapChannel, null, from, to);
+
+        /// <summary>The same for one player: a team's field stops them by their team (<see cref="StopsPlayer(Field, Manifestation)"/>).</summary>
+        public static bool StopsPlayer(MapChannel mapChannel, Manifestation player, Vector3 from, Vector3 to)
         {
             foreach (var field in OnMap(mapChannel))
-                if (StopsPlayer(field) && Crosses(field.Class, field.Position, field.Yaw, from, to))
+                if (StopsPlayer(field, player) && Crosses(field.Class, field.Position, field.Yaw, from, to))
                     return true;
 
             return false;

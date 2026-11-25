@@ -43,6 +43,11 @@ namespace Rasa.Managers
     /// is shown HOSTILE to them and attackable by them, and its hits on a player count as its
     /// master's - halved, stopped by PvP Safety, and a defeat credited to the master.
     ///
+    /// What belongs to a team fights for it the same way: a battleground point's turret, while
+    /// a team holds the point (Battlegrounds.TeamOf), may attack the other team's players and
+    /// their creatures, and is shown HOSTILE to them and attackable by them. Its hits are its
+    /// own, a creature's, not a player's: not halved, and no kill of anyone's.
+    ///
     /// The debuffs a player puts on an enemy player last PVP_EFFECT_DURATION_MODIFIER less
     /// (GameEffectManager.Attach); stuns and knockbacks are scaled where they are made
     /// (<see cref="ScaleDuration"/>).
@@ -138,11 +143,20 @@ namespace Rasa.Managers
             return null;
         }
 
-        /// <summary>Whether the creature belongs to an enemy of this player: theirs to shoot, and shown to them HOSTILE.</summary>
+        /// <summary>
+        /// Whether the creature belongs to an enemy of this player - their player's or their
+        /// team's (Battlegrounds.IsEnemyTeamCreature): theirs to shoot, and shown to them HOSTILE.
+        /// </summary>
         public static bool IsEnemySummon(Manifestation player, Creature creature)
         {
-            return creature != null && creature.MasterEntityId != 0 && creature.MasterEntityId != player?.EntityId
-                   && AreEnemies(player, Controller(creature));
+            if (creature == null)
+                return false;
+
+            // A team's: a battleground point's turret, to the other team's players.
+            if (creature.MasterEntityId == 0)
+                return Battlegrounds.Instance.IsEnemyTeamCreature(player, creature);
+
+            return creature.MasterEntityId != player?.EntityId && AreEnemies(player, Controller(creature));
         }
 
         /// <summary>How a creature is to be shown to a player: HOSTILE if it belongs to an enemy of theirs, its own category otherwise.</summary>
@@ -152,14 +166,27 @@ namespace Rasa.Managers
         }
 
         /// <summary>
-        /// Whether a player's creature may fight this entity because of a wargame: an enemy of its
+        /// Whether a player's or a team's creature may fight this entity because of a wargame: an enemy of its
         /// master, or a creature that belongs to one (BehaviorManager.MayFight).
         /// </summary>
         public static bool SummonMayFight(Creature creature, ulong entityId)
         {
+            if (creature is null)
+                return false;
+
+            // A team's creature: the other team's players, and the creatures of theirs.
+            if (creature.MasterEntityId == 0)
+            {
+                if (EntityManager.Instance.Players.TryGetValue(entityId, out var enemy))
+                    return Battlegrounds.Instance.IsEnemyTeamCreature(enemy, creature);
+
+                return EntityManager.Instance.Creatures.TryGetValue(entityId, out var theirs) && theirs.MasterEntityId != 0
+                       && Controller(theirs) is Manifestation owner && Battlegrounds.Instance.IsEnemyTeamCreature(owner, creature);
+            }
+
             var master = Controller(creature);
 
-            if (master == null || creature is null || creature.MasterEntityId == 0)
+            if (master == null)
                 return false;
 
             if (EntityManager.Instance.Players.TryGetValue(entityId, out var player))

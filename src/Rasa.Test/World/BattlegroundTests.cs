@@ -1315,6 +1315,192 @@ namespace Rasa.Test.World
 
         #endregion
 
+        #region A point's defences
+
+        /// <summary>The ownable force field (OWNABLEFORCEFIELD), as Edmund_range_defenses puts one in each gate.</summary>
+        private const EntityClasses OwnableField = (EntityClasses)10000083;
+
+        /// <summary>One of the point's turret pools, on the fixture's map, with a turret of it standing.</summary>
+        private static (SpawnPool Pool, Creature Turret) Turret(Fixture f, uint point, uint poolId)
+        {
+            var pool = new SpawnPool
+            {
+                DbId = poolId,
+                Mode = SpawnPoolManager.ModeControlPoint,
+                RespawnTime = 180_000,
+                MapContextId = MapId,
+                RuntimeMapChannel = f.World.Map,
+                Position = f.Point(point).Source.Position,
+                SpawnSlot = new List<SpawnPoolSlot>()
+            };
+
+            f.World.Map.SpawnPools.Add(pool);
+            f.Point(point).Source.AfsPools.Add(poolId);
+
+            var turret = new Creature { SpawnPool = pool, RuntimeMapChannel = f.World.Map, TargetCategory = TargetCategory.Friendly };
+
+            return (pool, turret);
+        }
+
+        /// <summary>A gate's field of the point: a world_destructible row of the ownable field, put down on the fixture's map.</summary>
+        private static PlacedDestructibles.Live Gate(Fixture f, uint point, uint rowId)
+        {
+            var classes = EntityClassManager.Instance.LoadedEntityClasses;
+
+            if (!classes.ContainsKey(OwnableField))
+                classes[OwnableField] = new EntityClass((uint)OwnableField, "UsableOwnableForceFieldHumOutpostV01", 0, 1,
+                    new List<AugmentationType> { AugmentationType.OwnableForceField }, true);
+
+            PlacedDestructibles.Load(new[]
+            {
+                new WorldDestructibleEntry
+                {
+                    Id = rowId, MapContextId = MapId, ClassId = (uint)OwnableField, PosX = -100, PosY = 100, PosZ = 30,
+                    Side = WorldDestructibleEntry.SideBane, Comment = "fixture gate"
+                }
+            });
+            PlacedDestructibles.Place(f.World.Map);
+            f.Point(point).Source.Fields.Add(rowId);
+
+            return PlacedDestructibles.LiveOf(f.World.Map, rowId);
+        }
+
+        private static void ForgetGates(Fixture f)
+        {
+            PlacedDestructibles.Forget(f.World.Map);
+            PlacedDestructibles.Load(null);
+            PlacedDestructibles.Reset();
+        }
+
+        [TestMethod]
+        public void APointsTurretsStandForItsHolderAndFightTheOtherTeam()
+        {
+            using var f = new Fixture();
+            var red = f.Join(Battlegrounds.Red);
+            var blue = f.Join(Battlegrounds.Blue);
+            var stray = f.Player();
+            var (pool, turret) = Turret(f, Whiskey, 9301);
+
+            f.Begin();
+            Assert.AreEqual(0u, f.Grounds.TeamOf(turret), "nobody holds it");
+            Assert.IsFalse(Pvp.IsEnemySummon(blue.Player, turret));
+
+            f.Grounds.SetOwner(f.Match, f.Point(Whiskey), Battlegrounds.Red);
+            Assert.IsTrue(pool.IsGarrison, "set down for Red Team");
+            Assert.IsFalse(pool.Suspended);
+            Assert.IsFalse(pool.HasSpawned);
+            Assert.AreEqual(pool.RespawnTime, pool.UpdateTimer, "at once, not a respawn time later");
+
+            Assert.AreEqual(Battlegrounds.Red, f.Grounds.TeamOf(turret));
+            Assert.IsTrue(Pvp.IsEnemySummon(blue.Player, turret), "Blue Team's to shoot");
+            Assert.IsFalse(Pvp.IsEnemySummon(red.Player, turret), "not its own team's");
+            Assert.IsFalse(Pvp.IsEnemySummon(stray.Player, turret), "nor anyone on no team");
+            Assert.AreEqual(TargetCategory.Hostile, Pvp.CategoryFor(turret, blue.Player));
+            Assert.AreEqual(TargetCategory.Friendly, Pvp.CategoryFor(turret, red.Player));
+            Assert.IsTrue(Pvp.SummonMayFight(turret, blue.Player.EntityId), "it goes for Blue Team");
+            Assert.IsFalse(Pvp.SummonMayFight(turret, red.Player.EntityId));
+            Assert.IsFalse(Pvp.SummonMayFight(turret, stray.Player.EntityId));
+
+            // Taken by Blue Team: Red's turret goes, and Blue's is set down at once.
+            pool.HasSpawned = true;
+            pool.UpdateTimer = 0;
+            f.Grounds.SetOwner(f.Match, f.Point(Whiskey), Battlegrounds.Blue);
+            Assert.IsFalse(pool.HasSpawned);
+            Assert.AreEqual(pool.RespawnTime, pool.UpdateTimer);
+            Assert.AreEqual(Battlegrounds.Blue, f.Grounds.TeamOf(turret));
+            Assert.IsTrue(Pvp.SummonMayFight(turret, red.Player.EntityId));
+            Assert.IsFalse(Pvp.SummonMayFight(turret, blue.Player.EntityId));
+
+            // The match over: nobody's, and no turret stands.
+            f.Grounds.End(f.Match, Battlegrounds.Blue);
+            Assert.AreEqual(0u, f.Grounds.TeamOf(turret));
+            Assert.IsTrue(pool.Suspended);
+            Assert.IsFalse(pool.IsGarrison);
+            Assert.IsFalse(Pvp.SummonMayFight(turret, red.Player.EntityId));
+        }
+
+        [TestMethod]
+        public void APointsFieldsStopEveryoneUntilATeamHoldsItAndThenTheOtherTeam()
+        {
+            using var f = new Fixture();
+            var now = PlacedDestructibles.Now;
+            PlacedDestructibles.Now = () => f.Now;
+
+            try
+            {
+                var red = f.Join(Battlegrounds.Red);
+                var blue = f.Join(Battlegrounds.Blue);
+                var stray = f.Player();
+                var gate = Gate(f, Whiskey, 9401);
+                var field = gate.Field;
+
+                Assert.IsNotNull(field);
+                f.Tick(1000);
+                field = gate.Field;
+                Assert.IsTrue(field.IsTeamField, "the match makes a point's field a team's");
+                Assert.AreEqual(0u, field.Team);
+                Assert.AreEqual(ForceFields.Side.B, field.Side, "the Bane's to creatures");
+                foreach (var client in new[] { red, blue, stray })
+                {
+                    Assert.IsTrue(ForceFields.StopsPlayer(field, client.Player), "nobody's stops every player");
+                    Assert.IsTrue(ForceFields.MayShoot(field, client.Player));
+                }
+
+                f.Begin();
+                f.Grounds.SetOwner(f.Match, f.Point(Whiskey), Battlegrounds.Red);
+                field = gate.Field;
+                Assert.AreEqual(Battlegrounds.Red, field.Team);
+                Assert.AreEqual(ForceFields.Side.A, field.Side);
+                Assert.IsFalse(ForceFields.StopsPlayer(field, red.Player), "Red Team walks through");
+                Assert.IsFalse(ForceFields.MayShoot(field, red.Player));
+                Assert.IsTrue(ForceFields.StopsPlayer(field, blue.Player), "Blue Team is stopped");
+                Assert.IsTrue(ForceFields.MayShoot(field, blue.Player), "and may shoot it down");
+                Assert.IsTrue(ForceFields.StopsPlayer(field, stray.Player));
+                Assert.AreEqual(TargetCategory.Friendly, ForceFields.CategoryFor(field, red.Player));
+                Assert.AreEqual(TargetCategory.Hostile, ForceFields.CategoryFor(field, blue.Player));
+                Assert.AreEqual(((byte)255, (byte)48, (byte)32, (byte)96), ForceFields.HueOf(field), "red");
+
+                // Stepping through it is Red Team's alone (MovementChecks).
+                var outside = field.Position + new Vector3(0, 2, -2);
+                var inside = field.Position + new Vector3(0, 2, 2);
+                Assert.IsNull(MovementChecks.CrossedField(new[] { field }, outside, inside, red.Player));
+                Assert.AreSame(field, MovementChecks.CrossedField(new[] { field }, outside, inside, blue.Player));
+
+                // Shot down by Blue Team, it is back the match's time later while Red holds the point.
+                Assert.IsTrue(PlacedDestructibles.Destroy(gate, blue.Player));
+                Assert.IsFalse(ForceFields.StopsPlayer(field, blue.Player), "down");
+                PlacedDestructibles.Worker(f.World.Map);
+                Assert.AreEqual(f.Now + f.Grounds.FieldRespawnMs, gate.RespawnAt);
+                Assert.AreEqual(180_000L, f.Grounds.FieldRespawnMs, "three minutes");
+                f.Now += f.Grounds.FieldRespawnMs;
+                PlacedDestructibles.Worker(f.World.Map);
+                Assert.IsFalse(gate.IsDown, "back up");
+
+                // Down again and the point taken: up at once, and Blue Team's.
+                Assert.IsTrue(PlacedDestructibles.Destroy(gate, blue.Player));
+                f.Grounds.SetOwner(f.Match, f.Point(Whiskey), Battlegrounds.Blue);
+                field = gate.Field;
+                Assert.IsFalse(gate.IsDown, "the new holder's at once");
+                Assert.AreEqual(Battlegrounds.Blue, field.Team);
+                Assert.IsTrue(ForceFields.StopsPlayer(field, red.Player));
+                Assert.IsFalse(ForceFields.StopsPlayer(field, blue.Player));
+                Assert.AreEqual(((byte)48, (byte)96, (byte)255, (byte)96), ForceFields.HueOf(field), "blue");
+
+                // The match over: nobody's again.
+                f.Grounds.End(f.Match, Battlegrounds.Blue);
+                field = gate.Field;
+                Assert.AreEqual(0u, field.Team);
+                Assert.IsTrue(ForceFields.StopsPlayer(field, blue.Player));
+            }
+            finally
+            {
+                PlacedDestructibles.Now = now;
+                ForgetGates(f);
+            }
+        }
+
+        #endregion
+
         #region Fighting
 
         [TestMethod]
@@ -2445,7 +2631,9 @@ namespace Rasa.Test.World
 
                 CollectionAssert.AreEqual(new[] { "101|Whiskey|10000071|134419591466262", "102|Charlie|10000071|134419591466263", "103|Echo|10000071|134419591466264" },
                     Rows("select id, name, class_id, marker_entity_id from control_point where map_context_id = 2374 order by id"));
-                Assert.AreEqual("11", Rows("select count(*) from control_point_link where control_point_id between 101 and 103").Single());
+                // The seed's eleven, and the turrets' and fields' of Edmund_range_defenses.
+                Assert.AreEqual((11 + 2 * EdmundRangeDefenses.Spots.Length + EdmundRangeDefenses.Gates.Length).ToString(),
+                    Rows("select count(*) from control_point_link where control_point_id between 101 and 103").Single());
 
                 CollectionAssert.AreEqual(new[] { "9003|2|2374", "9004|3|2374", "9005|4|2374", "9006|4|2374" },
                     Rows("select id, kind, dest_map_context_id from map_link where id between 9003 and 9006 order by id"));

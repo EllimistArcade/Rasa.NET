@@ -765,6 +765,20 @@ namespace Rasa.Managers
         }
 
         /// <summary>
+        /// A placed force field made a team's and given to a team, or to nobody
+        /// (ForceFields.SetTeam), and the placement keeps the object it is now. False if it is no
+        /// field or is that team's team field already.
+        /// </summary>
+        public static bool SetTeam(Live live, uint team)
+        {
+            if (live?.Field == null || !ForceFields.SetTeam(live.Field, team))
+                return false;
+
+            live.Object = live.Field.Object;
+            return true;
+        }
+
+        /// <summary>
         /// A map channel going away (MapChannelManager.CleanupPrivateMapChannel): everything placed
         /// on it out of the world, its force fields out of ForceFields, and the channel forgotten.
         /// Returns how many went.
@@ -926,11 +940,17 @@ namespace Rasa.Managers
             return now + Math.Clamp(Roll(RespawnMinMs, RespawnMaxMs), RespawnMinMs, RespawnMaxMs);
         }
 
-        /// <summary>When a force field taken down now is back: <see cref="FieldRespawnMs"/> on, or a squad instance's own respawn.</summary>
+        /// <summary>
+        /// When a force field taken down now is back: <see cref="FieldRespawnMs"/> on, a squad
+        /// instance's own respawn, or on a battleground the match's (Battlegrounds.FieldRespawnMs).
+        /// </summary>
         public static long FieldRespawnAtFor(MapChannel map, long now)
         {
             if (map?.SquadState != null)
                 return RespawnAtFor(map, now);
+
+            if (map?.MapInfo != null && Battlegrounds.Instance.IsBattleground(map.MapInfo.MapContextId))
+                return now + Battlegrounds.Instance.FieldRespawnMs;
 
             return now + FieldRespawnMs;
         }

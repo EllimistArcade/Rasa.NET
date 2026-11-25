@@ -37,6 +37,13 @@ namespace Rasa.Config
         /// </summary>
         public int LeaverLockoutMinutes { get; set; } = 15;
 
+        /// <summary>
+        /// How long a control point's force field that has been shot down stays down, in seconds,
+        /// while its point stays with the same team; a point changing hands puts its fields back
+        /// up at once. Its turrets' own time is their spawn pools' (respown_time).
+        /// </summary>
+        public int FieldRespawnSeconds { get; set; } = 180;
+
         /// <summary>Prestige for capturing a control point.</summary>
         public int CapturePrestige { get; set; } = 50;
 

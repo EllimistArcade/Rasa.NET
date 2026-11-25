@@ -216,7 +216,7 @@ namespace Rasa.Managers
         /// </summary>
         public static Vector3 BeforeFields(MapChannel mapChannel, Manifestation player, Vector3 from, Vector3 to)
         {
-            return player == null ? to : Before(mapChannel, from, to, (at, next) => ForceFields.StopsPlayer(mapChannel, at, next));
+            return player == null ? to : Before(mapChannel, from, to, (at, next) => ForceFields.StopsPlayer(mapChannel, player, at, next));
         }
 
         private static Vector3 Before(MapChannel mapChannel, Vector3 from, Vector3 to, Func<Vector3, Vector3, bool> stops)

@@ -108,6 +108,17 @@ namespace Rasa.Managers
     ///    which the upper floor has a set of too. A player who is dead when it ends is taken
     ///    off their team and left to revive.
     ///  - The control points' waypoints are closed, and the two depots stand for nothing yet.
+    ///  - A point's defences are its holder's (Edmund_range_defenses): its turrets, the spawn pools
+    ///    linked to it as the AFS's (control_point_link kind 2), stand only while a team holds it
+    ///    and fight for that team - its enemies' players and their creatures, shown HOSTILE to
+    ///    them (<see cref="TeamOf(Creature)"/>, Pvp) - and are back their pools' respawn time
+    ///    after they are destroyed; the Bane's turrets are part of its Simulated Bane, which must
+    ///    be dead before it can be taken. Its force fields (kind 8) are team fields
+    ///    (ForceFields.SetTeam): nobody's, which stop every player, while the Bane hold it, and the
+    ///    holder's, which let their own through, once a team does; shot down they are back
+    ///    <see cref="BattlegroundConfig.FieldRespawnSeconds"/> later. A point changing hands takes
+    ///    its turrets off and sets down the new holder's at once, and puts its fields up again in
+    ///    the new holder's colour (<see cref="Defences"/>).
     /// </summary>
     public class Battlegrounds
     {
@@ -440,6 +451,46 @@ namespace Rasa.Managers
         /// <summary>The team a player is on; 0 for none.</summary>
         public uint TeamOf(Manifestation player) => MatchOf(player)?.Find(player)?.Team ?? 0;
 
+        /// <summary>How long a point's field that has been shot down stays down (<see cref="BattlegroundConfig.FieldRespawnSeconds"/>).</summary>
+        public long FieldRespawnMs => Math.Max(1, Config.FieldRespawnSeconds) * 1000L;
+
+        /// <summary>
+        /// The team a creature fights for: a turret of a point's defences (its pool linked as the
+        /// AFS's), the team that holds the point; 0 for any other creature, and while nobody does.
+        /// </summary>
+        public uint TeamOf(Creature creature)
+        {
+            var pool = creature?.SpawnPool;
+
+            if (pool == null || _matches.Count == 0)
+                return 0;
+
+            var map = creature.RuntimeMapChannel ?? pool.RuntimeMapChannel;
+
+            if (map == null || !_matches.TryGetValue(map, out var match))
+                return 0;
+
+            return match.Points.FirstOrDefault(p => p.Source.AfsPools.Contains(pool.DbId))?.Owner ?? 0;
+        }
+
+        /// <summary>
+        /// Whether a creature fights for the team a player is the enemy of: a point's turret, and
+        /// the player on the other team of the same match, while it runs.
+        /// </summary>
+        public bool IsEnemyTeamCreature(Manifestation player, Creature creature)
+        {
+            var team = TeamOf(creature);
+
+            if (team == 0 || player == null)
+                return false;
+
+            var match = MatchOf(player);
+            var member = match?.Find(player);
+
+            return member != null && match.Phase == Phase.Running && member.Team != team
+                   && ReferenceEquals(match.Map, creature.RuntimeMapChannel ?? creature.SpawnPool?.RuntimeMapChannel);
+        }
+
         /// <summary>The team a character deserted and has yet to finish a match on; 0 for none.</summary>
         public uint DesertedTeamOf(uint characterId) => _deserters.TryGetValue(characterId, out var team) ? team : 0;
 
@@ -723,11 +774,54 @@ namespace Rasa.Managers
                     if (match.Map.Teleporters.TryGetValue(id, out var teleporter) && teleporter.ObjectData is WaypointInfo info)
                         info.Contested = true;
 
+                Defences(match, point);
                 ShowOwner(match, point, announce);
             }
 
             if (announce)
                 SendGameScore(match);
+        }
+
+        /// <summary>The spawn pools of a point's turrets: those linked to it as the AFS's.</summary>
+        private static List<SpawnPool> TurretPoolsOf(MapChannel map, Point point)
+        {
+            if (map?.SpawnPools == null || point.Source.AfsPools.Count == 0)
+                return new List<SpawnPool>();
+
+            return map.SpawnPools.Where(p => p != null && point.Source.AfsPools.Contains(p.DbId)).ToList();
+        }
+
+        /// <summary>
+        /// A point's defences as its holder has them: its turrets taken off, and set down again at
+        /// once for a team that holds it - nobody's stand none - and its force fields up and the
+        /// holder's (ForceFields.SetTeam).
+        /// </summary>
+        private void Defences(Match match, Point point)
+        {
+            var pools = TurretPoolsOf(match.Map, point);
+
+            ControlPoints.TakeOffLiving(match.Map, pools);
+
+            foreach (var pool in pools)
+            {
+                pool.IsGarrison = point.Owner != 0;
+                pool.Suspended = point.Owner == 0;
+                pool.HasSpawned = false;
+                pool.UpdateTimer = pool.RespawnTime;
+            }
+
+            foreach (var id in point.Source.Fields)
+            {
+                var live = PlacedDestructibles.LiveOf(match.Map, id);
+
+                if (live?.Field == null)
+                    continue;
+
+                PlacedDestructibles.SetTeam(live, point.Owner);
+
+                if (live.IsDown)
+                    PlacedDestructibles.Respawn(live);
+            }
         }
 
         private static List<SpawnPool> PoolsOf(MapChannel map, Point point)
@@ -914,6 +1008,9 @@ namespace Rasa.Managers
 
             ShowHospitals(match, client);
 
+            // The points' fields in sight, told again whether they stop them (ForceFields.SetTeam).
+            ForceFields.ShowTeamFieldsTo(client);
+
             return true;
         }
 
@@ -975,6 +1072,8 @@ namespace Rasa.Managers
                     // No longer anybody's enemy.
                     if (match.Phase == Phase.Running)
                         Wargames.Show(client);
+
+                    ForceFields.ShowTeamFieldsTo(client);
                 }
             }
         }
@@ -1274,6 +1373,7 @@ namespace Rasa.Managers
             Logger.WriteLog(LogType.Debug, $"Battleground {match.Map.MapInfo.MapContextId}/{match.Map.InstanceId}: {point.Name} is {TeamName(team)}'s.");
 
             ShowOwner(match, point, announce: true);
+            Defences(match, point);
 
             if (team != 0)
             {
@@ -1737,6 +1837,11 @@ namespace Rasa.Managers
                 foreach (var pool in PoolsOf(match.Map, point))
                     if (pool.HasSpawned)
                         pool.Suspended = true;
+
+                // A field the map put down after the match was made is made the holder's now.
+                foreach (var id in point.Source.Fields)
+                    if (PlacedDestructibles.LiveOf(match.Map, id) is { Field: { IsTeamField: false } } live)
+                        PlacedDestructibles.SetTeam(live, point.Owner);
 
                 var open = match.Phase == Phase.Running && GarrisonOf(match.Map, point.Source) != ControlPoints.Garrison.Standing;
 

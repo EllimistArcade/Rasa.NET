@@ -100,7 +100,7 @@ namespace Rasa.Managers
 
             if (Mode(config.ForceFields) != MovementChecksConfig.Off)
             {
-                var field = CrossedField(ForceFields.OnMap(mapChannel), from, to);
+                var field = CrossedField(ForceFields.OnMap(mapChannel), from, to, player);
 
                 if (field != null)
                     return new Finding(Check.ForceField, $"through force field {field.Id} ({field.Class.Key}) at {field.Position}",
@@ -131,14 +131,17 @@ namespace Rasa.Managers
             return null;
         }
 
-        /// <summary>The intact, player-stopping field whose sheet the step crosses, or null.</summary>
-        public static ForceFields.Field CrossedField(IEnumerable<ForceFields.Field> fields, Vector3 from, Vector3 to)
+        /// <summary>
+        /// The intact field whose sheet the step crosses and which stops the player, or null; with
+        /// no player, one that stops players (ForceFields.StopsPlayer).
+        /// </summary>
+        public static ForceFields.Field CrossedField(IEnumerable<ForceFields.Field> fields, Vector3 from, Vector3 to, Manifestation player = null)
         {
             if (fields == null || Vector3.DistanceSquared(from, to) < MinStep * MinStep)
                 return null;
 
             foreach (var field in fields)
-                if (ForceFields.StopsPlayer(field) && ForceFields.Crosses(field.Class, field.Position, field.Yaw, from, to))
+                if (ForceFields.StopsPlayer(field, player) && ForceFields.Crosses(field.Class, field.Position, field.Yaw, from, to))
                     return field;
 
             return null;

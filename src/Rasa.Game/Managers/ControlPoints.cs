@@ -374,7 +374,7 @@ namespace Rasa.Managers
                 }
 
                 // A battleground's point has its links and is found by none of them: its pools,
-                // hospital and waypoint are its match's to run (Battlegrounds).
+                // hospital, waypoint and force fields are its match's to run (Battlegrounds).
                 if (point.IsBattleground)
                 {
                     switch (link.Kind)
@@ -384,6 +384,7 @@ namespace Rasa.Managers
                         case ControlPointLinkEntry.KindHospital: point.Hospitals.Add(link.ObjectId); break;
                         case ControlPointLinkEntry.KindWaypoint: point.Waypoints.Add(link.ObjectId); break;
                         case ControlPointLinkEntry.KindBoss: point.Bosses.Add(link.ObjectId); break;
+                        case ControlPointLinkEntry.KindForceField: point.Fields.Add(link.ObjectId); break;
                     }
 
                     continue;

@@ -217,6 +217,9 @@ namespace Rasa.Managers
             /// <summary>The Bane garrison has been let back and has yet to arrive: its pools are not held.</summary>
             public bool Returning { get; set; }
 
+            /// <summary>Who was inside the point's alert radius on the last pass (<see cref="Alerts"/>).</summary>
+            internal HashSet<ulong> Inside { get; } = new HashSet<ulong>();
+
             /// <summary>
             /// On a map that has a match (Battlegrounds): its teams fight over it there, on every
             /// channel of the map, and nothing here touches it but its row.
@@ -710,6 +713,9 @@ namespace Rasa.Managers
                 // Whatever of the other side's has arrived since the point changed hands: a
                 // dropship that was already on its way.
                 TakeOffLiving(mapChannel, PoolsOn(mapChannel, point.PoolsOf(point.HeldByAfs ? Bane : Afs)));
+
+                // The holder's defenders set on whoever of their enemies has come in.
+                Alerts(mapChannel, point);
 
                 if (point.HeldByAfs)
                 {

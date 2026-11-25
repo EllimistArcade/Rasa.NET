@@ -475,7 +475,10 @@ namespace Rasa.Managers
                             Battlegrounds.Instance.Claiming(client, teamPoint);
 
                         if (point != null)
+                        {
                             ControlPoints.Instance.Claiming(client.Player.MapChannel, point, client);
+                            ControlPoints.Instance.CaptureAlarm(client.Player.MapChannel, point, client.Player);
+                        }
                         client.Player.MapChannel.PerformRecovery.Add(controlAction);
 
                         if (!obj.TriggeredByPlayers.Contains(client))

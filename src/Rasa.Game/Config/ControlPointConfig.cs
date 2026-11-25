@@ -17,6 +17,18 @@ namespace Rasa.Config
         /// <summary>Uninterrupted boss claim duration after the AFS combat garrison falls.</summary>
         public int LandingZoneAssaultCaptureSeconds { get; set; } = 10;
 
+        /// <summary>
+        /// How near a point's object, in metres, an enemy of its holder sets the point's defenders
+        /// on them as they come in (ControlPoints.Alerts). 0 or less: nobody is alerted.
+        /// </summary>
+        public float DefenderAlertRadius { get; set; } = 40f;
+
+        /// <summary>The hate each defender in reach takes for an enemy coming into the point's alert radius.</summary>
+        public int DefenderAlertHate { get; set; } = 500;
+
+        /// <summary>The hate each defender in reach takes for a player who begins the use that captures the point.</summary>
+        public int CaptureAlarmHate { get; set; } = 2500;
+
         /// <summary>Metres from a point within which friendly service NPC pools belong to it. 0 disables proximity matching; explicit links still apply.</summary>
         public float ServiceNpcRadius { get; set; } = 130f;
 

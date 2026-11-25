@@ -94,14 +94,36 @@ namespace Rasa.Managers
             if (victim.Controller?.CurrentAction == BehaviorManager.BehaviorActionScriptedMove && victim.Controller.ScriptedMove?.FightsBack == true)
                 victim.HomePos.Position = victim.Position;
 
+            TurnOn(victim, attacker);
+        }
+
+        /// <summary>
+        /// A control point's defender is told of an enemy (ControlPoints.Alert): it hates them by
+        /// <paramref name="hate"/>, and turns on them if it was not fighting, as a hit would have
+        /// it do. One already fighting keeps its target unless this puts the newcomer
+        /// <see cref="TakeoverPercent"/> above it.
+        /// </summary>
+        public static void Alerted(Creature defender, Actor enemy, double hate)
+        {
+            if (defender == null || enemy == null || enemy == defender || hate <= 0)
+                return;
+
+            defender.Hate.Add(enemy.EntityId, hate);
+
+            TurnOn(defender, enemy);
+        }
+
+        /// <summary>A creature that was not fighting turns on <paramref name="enemy"/>: from wandering, a patrol, a path, its squad or a walk that fights back.</summary>
+        private static void TurnOn(Creature creature, Actor enemy)
+        {
             // One making for a control point to claim it keeps going (LandingZoneAssaults).
-            if (victim.Controller != null && !victim.OnClaimDuty
-                && (victim.Controller.CurrentAction == BehaviorManager.BehaviorActionWander
-                    || victim.Controller.CurrentAction == BehaviorManager.BehaviorActionPatrol
-                    || victim.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath
-                    || victim.Controller.CurrentAction == BehaviorManager.BehaviorActionSquad
-                    || victim.Controller.CurrentAction == BehaviorManager.BehaviorActionScriptedMove && victim.Controller.ScriptedMove?.FightsBack == true))
-                BehaviorManager.Instance.SetActionFighting(victim, attacker.EntityId);
+            if (creature.Controller != null && !creature.OnClaimDuty
+                && (creature.Controller.CurrentAction == BehaviorManager.BehaviorActionWander
+                    || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionPatrol
+                    || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionFollowingPath
+                    || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionSquad
+                    || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionScriptedMove && creature.Controller.ScriptedMove?.FightsBack == true))
+                BehaviorManager.Instance.SetActionFighting(creature, enemy.EntityId);
         }
 
         /// <summary>The aggro scan picked somebody out: they are on the table.</summary>

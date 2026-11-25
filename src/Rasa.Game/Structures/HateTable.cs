@@ -16,13 +16,19 @@ namespace Rasa.Structures
         private readonly Dictionary<ulong, double> _hate = new Dictionary<ulong, double>();
         private readonly object _lock = new object();
 
+        /// <summary>How long each entry has gone without gaining hate, in milliseconds (Fade).</summary>
+        private readonly Dictionary<ulong, long> _quiet = new Dictionary<ulong, long>();
+
         public void Add(ulong entityId, double amount)
         {
             if (entityId == 0 || amount <= 0 || double.IsNaN(amount))
                 return;
 
             lock (_lock)
+            {
                 _hate[entityId] = (_hate.TryGetValue(entityId, out var hate) ? hate : 0) + amount;
+                _quiet[entityId] = 0;
+            }
         }
 
         /// <summary>
@@ -43,6 +49,7 @@ namespace Rasa.Structures
 
                 _hate[from] = held - moved;
                 _hate[to] = (_hate.TryGetValue(to, out var hate) ? hate : 0) + moved;
+                _quiet[to] = 0;
             }
         }
 
@@ -54,7 +61,10 @@ namespace Rasa.Structures
 
             lock (_lock)
                 if (!_hate.TryGetValue(entityId, out var hate) || hate < atLeast)
+                {
                     _hate[entityId] = atLeast;
+                    _quiet[entityId] = 0;
+                }
         }
 
         public double Of(ulong entityId)
@@ -72,13 +82,19 @@ namespace Rasa.Structures
         public void Remove(ulong entityId)
         {
             lock (_lock)
+            {
                 _hate.Remove(entityId);
+                _quiet.Remove(entityId);
+            }
         }
 
         public void Clear()
         {
             lock (_lock)
+            {
                 _hate.Clear();
+                _quiet.Clear();
+            }
         }
 
         public int Count
@@ -134,7 +150,66 @@ namespace Rasa.Structures
 
                 if (drop != null)
                     foreach (var id in drop)
+                    {
                         _hate.Remove(id);
+                        _quiet.Remove(id);
+                    }
+            }
+        }
+
+        /// <summary>How long an entry has gone without gaining hate, in milliseconds; 0 for one not on the table.</summary>
+        public long QuietMs(ulong entityId)
+        {
+            lock (_lock)
+                return _quiet.TryGetValue(entityId, out var quiet) ? quiet : 0;
+        }
+
+        /// <summary>
+        /// <paramref name="elapsedMs"/> more of the table's life: an entry that has gained no hate for
+        /// <paramref name="after"/> ms loses <paramref name="perSecond"/> of what it holds for each second
+        /// past that, and one that falls below <paramref name="floor"/> comes off the table - except
+        /// <paramref name="keep"/> (the creature's target), which keeps the floor. A gain (Add, Ensure
+        /// raising it, Move onto it) starts an entry's quiet over.
+        /// </summary>
+        public void Fade(long elapsedMs, long after, double perSecond, double floor, ulong keep)
+        {
+            if (elapsedMs <= 0)
+                return;
+
+            List<ulong> drop = null;
+
+            lock (_lock)
+            {
+                foreach (var id in _hate.Keys.ToList())
+                {
+                    var quiet = (_quiet.TryGetValue(id, out var was) ? was : 0) + elapsedMs;
+                    _quiet[id] = quiet;
+
+                    var fadingMs = Math.Min(elapsedMs, quiet - after);
+
+                    if (fadingMs <= 0)
+                        continue;
+
+                    var held = _hate[id];
+                    var hate = held * Math.Pow(1 - perSecond, fadingMs / 1000.0);
+
+                    if (id == keep)
+                        hate = Math.Max(hate, Math.Min(held, floor));
+                    else if (hate < floor)
+                    {
+                        (drop ??= new List<ulong>()).Add(id);
+                        continue;
+                    }
+
+                    _hate[id] = hate;
+                }
+
+                if (drop != null)
+                    foreach (var id in drop)
+                    {
+                        _hate.Remove(id);
+                        _quiet.Remove(id);
+                    }
             }
         }
 

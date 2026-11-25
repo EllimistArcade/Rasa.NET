@@ -89,6 +89,12 @@ namespace Rasa.Structures
 
         /// <summary>Who it hates and how much; what it fights is read off this (Managers.Threat).</summary>
         public HateTable Hate { get; } = new HateTable();
+
+        /// <summary>Whether it has called its side round it into this fight (Threat.CallForHelp); cleared when its table is empty.</summary>
+        internal bool CalledForHelp { get; set; }
+
+        /// <summary>Milliseconds of fighting since its last hate pulse (Threat.Pulse).</summary>
+        internal long HatePulseMs { get; set; }
         public long AggressionTime = 5000; // ToDo
 
         public float WalkSpeed { get; set; }

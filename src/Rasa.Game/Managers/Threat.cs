@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 
 namespace Rasa.Managers
 {
@@ -31,6 +33,24 @@ namespace Rasa.Managers
     /// (dead, gone, off the map, cloaked); a cloak (Detection) and Tactical Evasion's mag flash
     /// ("Clear Enemy Hate") take entries off on purpose; and a creature that gives up the fight -
     /// leashed home, or nobody left it can reach - forgets the lot.
+    ///
+    /// And three more, as the threat design has them:
+    ///  - the pulse: every <see cref="PulseIntervalMs"/> a creature that is fighting hates each enemy
+    ///    within <see cref="PulseRadius"/> of it <see cref="PulseHate"/> more (at their perceived-threat
+    ///    modifier), so whoever stands close keeps its attention - a player in melee holds it. It
+    ///    starts no fight: the enemies are those it would seek (players, the other side) and anyone
+    ///    already on its table;
+    ///  - the call for help: the first time a creature is hurt in a fight it calls the creatures of
+    ///    its side within <see cref="CallForHelpRadius"/> that are not fighting into it, each with the
+    ///    attacker on its table at the token <see cref="NoticedThreat"/> - what they see and what hurts
+    ///    them decides their target from there. Once a fight: it calls again only after its table has
+    ///    emptied;
+    ///  - the fade: an entry that has gained no hate for <see cref="FadeAfterMs"/> loses
+    ///    <see cref="FadePerSecond"/> of its value each second after, and comes off the table below
+    ///    <see cref="NoticedThreat"/> - except the creature's target, which keeps that much, so a
+    ///    fight is not dropped while the one it is with does nothing to it.
+    /// Emplacements and minions neither pulse nor call nor answer a call. A mission scene's actors do
+    /// none of the three, and their tables do not fade: their scene directs their fights.
     /// </summary>
     public static class Threat
     {
@@ -46,6 +66,24 @@ namespace Rasa.Managers
 
         /// <summary>How much more a rival has to be hated to take the creature off its current target.</summary>
         public const int TakeoverPercent = 110;
+
+        /// <summary>What the pulse adds to each enemy near a fighting creature.</summary>
+        public const double PulseHate = 100;
+
+        /// <summary>How often a fighting creature pulses.</summary>
+        public const long PulseIntervalMs = 2000;
+
+        /// <summary>How near a fighting creature an enemy has to be for its pulse.</summary>
+        public const float PulseRadius = 20f;
+
+        /// <summary>How far a creature's call for help reaches.</summary>
+        public const float CallForHelpRadius = 60f;
+
+        /// <summary>How long an entry goes without gaining hate before it fades.</summary>
+        public const long FadeAfterMs = 5000;
+
+        /// <summary>The share of an entry's hate a second of fading takes off.</summary>
+        public const double FadePerSecond = 0.10;
 
         /// <summary>
         /// The attacker's perceived threat, in percent: 100 plus the THREAT_MODIFIER_PERCENT on
@@ -94,6 +132,13 @@ namespace Rasa.Managers
             if (victim.Controller?.CurrentAction == BehaviorManager.BehaviorActionScriptedMove && victim.Controller.ScriptedMove?.FightsBack == true)
                 victim.HomePos.Position = victim.Position;
 
+            // The first hurt of a fight calls its side round it in.
+            if (!victim.CalledForHelp)
+            {
+                victim.CalledForHelp = true;
+                CallForHelp(victim.RuntimeMapChannel ?? MapChannelManager.Instance.FindByContextId(victim.MapContextId), victim, attacker);
+            }
+
             TurnOn(victim, attacker);
         }
 
@@ -124,6 +169,121 @@ namespace Rasa.Managers
                     || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionSquad
                     || creature.Controller.CurrentAction == BehaviorManager.BehaviorActionScriptedMove && creature.Controller.ScriptedMove?.FightsBack == true))
                 BehaviorManager.Instance.SetActionFighting(creature, enemy.EntityId);
+        }
+
+        /// <summary>
+        /// A think of the creature's: its table fades, and a creature that is fighting pulses
+        /// every <see cref="PulseIntervalMs"/>. One whose table has emptied may call for help again.
+        /// </summary>
+        public static void Tick(MapChannel mapChannel, Creature creature, long delta)
+        {
+            if (creature == null || delta <= 0)
+                return;
+
+            var fighting = creature.Controller?.CurrentAction == BehaviorManager.BehaviorActionFighting;
+
+            if (creature.Hate.Count > 0 && !IsSceneActor(creature))
+                creature.Hate.Fade(delta, FadeAfterMs, FadePerSecond, NoticedThreat, fighting ? creature.Controller.ActionFighting.TargetEntityId : 0);
+
+            if (creature.Hate.Count == 0 && !fighting)
+                creature.CalledForHelp = false;
+
+            if (!fighting || !TakesPart(creature))
+            {
+                creature.HatePulseMs = 0;
+                return;
+            }
+
+            creature.HatePulseMs += delta;
+
+            if (creature.HatePulseMs < PulseIntervalMs)
+                return;
+
+            creature.HatePulseMs -= PulseIntervalMs;
+            Pulse(mapChannel, creature);
+        }
+
+        /// <summary>
+        /// Whether a creature pulses, calls for help and answers a call: not an emplacement, nor a minion,
+        /// nor a mission scene's actor.
+        /// </summary>
+        private static bool TakesPart(Creature creature) =>
+            creature.MasterEntityId == 0 && !Emplacements.Is(creature) && !IsSceneActor(creature)
+            && Game.Missions.World.CreatureGameplayRules.CanParticipateInCombat(creature);
+
+        /// <summary>
+        /// A mission scene's actor (SpawnPool.SceneActorRole): a wave sent at the player, an escort, a
+        /// strike force. Its scene says whom it fights and holds that on its table (SceneWorldAdapter), so
+        /// its table neither fades nor is pulsed, and it neither calls nor answers a call.
+        /// </summary>
+        public static bool IsSceneActor(Creature creature) => creature.SpawnPool?.SceneActorRole != null;
+
+        /// <summary>
+        /// <see cref="PulseHate"/> on each enemy within <see cref="PulseRadius"/> of the creature that it
+        /// can fight: a player or creature of the side it seeks, as its aggro scan would notice them, or
+        /// anyone on its table already.
+        /// </summary>
+        public static void Pulse(MapChannel mapChannel, Creature creature)
+        {
+            if (mapChannel == null)
+                return;
+
+            var near = new Dictionary<ulong, (Vector3 Position, Actor Actor)>();
+
+            foreach (var cell in CellManager.CellsIn(mapChannel, creature.Cells))
+            {
+                // A player it would notice in its scan - of the side it seeks, no GM set always
+                // friendly, close enough for their Stealth Armor - or one it already hates.
+                foreach (var client in cell.ClientList)
+                    if (client?.Player is Manifestation player && (creature.Hate.Contains(player.EntityId)
+                        || TargetCategories.Seeks(creature.TargetCategory, player.CombatCategory) && !player.GmFlagAlwaysFriendly
+                        && Vector3.Distance(player.Position, creature.Position) <= PulseRadius * player.DetectionRangePercent / 100f))
+                        near[player.EntityId] = (player.Position, player);
+
+                foreach (var other in cell.CreatureList)
+                    if (other != creature && (TargetCategories.Seeks(creature.TargetCategory, other.TargetCategory) || creature.Hate.Contains(other.EntityId)))
+                        near[other.EntityId] = (other.Position, other);
+
+                // A Hortimonculus, a Personal Waypoint, a force field it is already fighting: near
+                // it, it is pulsed on as a player beside it is, or that player takes it away.
+                foreach (var obj in cell.DynamicObjectList)
+                    if (creature.Hate.Contains(obj.EntityId))
+                        near[obj.EntityId] = (obj.Position, null);
+            }
+
+            foreach (var (id, (position, actor)) in near)
+                if (Vector3.Distance(position, creature.Position) <= PulseRadius && CanFight(creature, id))
+                    creature.Hate.Add(id, PulseHate * ThreatModifierOf(actor) / 100.0);
+        }
+
+        /// <summary>
+        /// The creature's side within <see cref="CallForHelpRadius"/> that is free to fight - idle, wandering,
+        /// on a beat or path, in a squad - takes the attacker on: on its table at the token
+        /// <see cref="NoticedThreat"/>, and fighting them. Not a talking NPC, nor one with no attack, nor an
+        /// escort, a defender, one on a claim or one a scene holds out of fights.
+        /// </summary>
+        public static void CallForHelp(MapChannel mapChannel, Creature victim, Actor attacker)
+        {
+            if (mapChannel == null || victim == null || attacker == null || !TakesPart(victim))
+                return;
+
+            foreach (var ally in CreatureBuffs.AlliesWithin(mapChannel, victim, victim.Position, CallForHelpRadius))
+            {
+                var action = ally.Controller?.CurrentAction;
+
+                if (action != BehaviorManager.BehaviorActionIdle && action != BehaviorManager.BehaviorActionWander
+                    && action != BehaviorManager.BehaviorActionPatrol && action != BehaviorManager.BehaviorActionFollowingPath
+                    && action != BehaviorManager.BehaviorActionSquad)
+                    continue;
+
+                if (!TakesPart(ally) || ally.Npc != null || ally.Actions.Count == 0 || ally.OnClaimDuty || ally.ScriptedCombatGate != null
+                    || BehaviorManager.IsMissionEscort(ally) || Game.Missions.World.CreatureGameplayRules.IsDefender(ally)
+                    || !CanFight(ally, attacker.EntityId) || !BehaviorManager.CanSetActionFighting(ally, attacker.EntityId))
+                    continue;
+
+                ally.Hate.Ensure(attacker.EntityId, NoticedThreat);
+                BehaviorManager.Instance.SetActionFighting(ally, attacker.EntityId);
+            }
         }
 
         /// <summary>The aggro scan picked somebody out: they are on the table.</summary>

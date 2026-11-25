@@ -473,6 +473,9 @@ namespace Rasa.Managers
                 return;
             }
 
+            // Its hate table fades, and in a fight it pulses on the enemies near it (Threat.Tick).
+            Threat.Tick(mapChannel, creature, delta);
+
             // What it shouts about how it stands now against the think before: a fight begun or
             // over, a wound, a halt on its beat (Battlecries).
             Battlecries.Observe(mapChannel, creature);
